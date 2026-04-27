@@ -134,20 +134,25 @@ if ($currentPath -notlike "*${scriptsDir}*") {
 # Verify judecode works
 $found = $false
 try {
-    # Find exact executable path
-    $judecodeExe = Get-Command judecode -ErrorAction SilentlyContinue
-    if (-not $judecodeExe) {
-        # Fallback: look in scripts dir
-        $judecodeExe = Get-ChildItem -Path $scriptsDir -Filter "judecode*" -ErrorAction SilentlyContinue | Select-Object -First 1
-    }
-    if ($judecodeExe) {
-        Write-Success "judecode command found at: $($judecodeExe.Source)"
+    $judecodeVersion = judecode --version 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Success "judecode command works!"
         $found = $true
     }
 } catch {}
 
 if (-not $found) {
-    Write-Warn "judecode executable not found in `$scriptsDir`"
+    Write-Warn "judecode not found in PATH. Adding it now..."
+    if ($env:Path -notlike "*${scriptsDir}*") {
+        $env:Path = "$env:Path;$scriptsDir"
+    }
+    # Save back to registry
+    $target = if ($Global) { "Machine" } else { "User" }
+    $currentPath = [Environment]::GetEnvironmentVariable("Path", $target)
+    if ($currentPath -notlike "*${scriptsDir}*") {
+        [Environment]::SetEnvironmentVariable("Path", "$currentPath;$scriptsDir", $target)
+    }
+    Write-Success "PATH updated"
 } else {
     Write-Success "judecode is ready to use!"
 }
