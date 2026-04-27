@@ -5,6 +5,7 @@ from typing import Any
 
 from judecode.api.client import ApiClient
 from judecode.agent.tools import TOOL_DEFINITIONS, execute_tool
+from judecode.ui.console import console
 
 
 class AgentEngine:
@@ -21,9 +22,12 @@ class AgentEngine:
         """Send a user message and handle streaming + tool calls."""
         self.messages.append({"role": "user", "content": user_message})
 
+        turn = 0
         while True:
+            turn += 1
             full_content = ""
             tool_calls: list[dict[str, Any]] = []
+            has_started_output = False
 
             # Stream the response
             async for chunk in self.api.chat_completion(
@@ -37,7 +41,10 @@ class AgentEngine:
                 content_piece = delta.get("content")
                 if content_piece:
                     full_content += content_piece
-                    print(content_piece, end="", flush=True)
+                    if not has_started_output:
+                        console.print()
+                        has_started_output = True
+                    console.print(content_piece, end="")
 
                 # Handle tool calls
                 tool_call_pieces = delta.get("tool_calls", [])
@@ -56,7 +63,8 @@ class AgentEngine:
                                 tool_calls[index]["arguments"] = ""
                             tool_calls[index]["arguments"] += fn["arguments"]
 
-            print()  # newline after streaming
+            if has_started_output:
+                console.print()  # newline after streaming
 
             # If there were no tool calls, just store the assistant message and return
             if not any("name" in tc for tc in tool_calls):
@@ -83,7 +91,10 @@ class AgentEngine:
                 ],
             })
 
-            # Execute each tool
+            if turn == 1 and not has_started_output:
+                console.print()  # ensure newline before tool calls if no content was streamed
+
+            # Execute each tool with visible output
             for tc in tool_calls:
                 if "name" not in tc:
                     continue
@@ -94,10 +105,32 @@ class AgentEngine:
                 except json.JSONDecodeError:
                     args = {}
 
-                print(f"  > [tool: {tool_name}]")
+                # Show tool call with parameters
+                console.print()
+                if args:
+                    args_preview = json.dumps(args, ensure_ascii=False, indent=2)
+                    # Limit preview length
+                    if len(args_preview) > 200:
+                        args_preview = args_preview[:197] + "..."
+                    console.print(
+                        f"  [bold yellow]\u26a1[/bold yellow] Using tool [bold white]{tool_name}[/bold white]"
+                    )
+                    console.print(
+                        f"     [dim]Parameters:[/dim] [bright_white]{args_preview}[/bright_white]"
+                    )
+                else:
+                    console.print(
+                        f"  [bold yellow]\u26a1[/bold yellow] Using tool [bold white]{tool_name}[/bold white]"
+                    )
+
                 result = execute_tool(tool_name, args)
                 self.messages.append({
                     "role": "tool",
                     "tool_call_id": tc.get("id", ""),
                     "content": result,
                 })
+                # Show result snippet
+                result_preview = result[:300] + "..." if len(result) > 300 else result
+                console.print(
+                    f"     [dim green]Result:[/dim green] [dim]{result_preview}[/dim]"
+                )

@@ -3,18 +3,17 @@
 import asyncio
 import sys
 
-from rich.console import Console
 from rich.panel import Panel
 from rich.markdown import Markdown
 from rich.text import Text
 from rich.align import Align
+from rich.rule import Rule
 from rich.box import DOUBLE_EDGE, HEAVY_EDGE
 
 from judecode.config import SYSTEM_PROMPT, MODEL, BASE_URL
 from judecode.api.client import ApiClient
 from judecode.agent.engine import AgentEngine
-
-console = Console(force_terminal=True, force_interactive=True)
+from judecode.ui.console import console
 
 
 def print_greeting() -> None:
@@ -96,7 +95,7 @@ def print_goodbye() -> None:
 
 def print_thinking() -> None:
     """Print a thinking indicator."""
-    console.print("\n  [dim]⚡ Thinking...[/dim]\n", end="", flush=True)
+    console.print("\n  [dim]⚡ Thinking...[/dim]\n", end="")
 
 
 def print_tool_call(tool_name: str) -> None:
