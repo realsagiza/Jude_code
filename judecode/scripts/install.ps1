@@ -128,9 +128,9 @@ $pyBase = Split-Path (Get-Command $Python).Source -Parent
 $knownDirs += (Join-Path $pyBase "Scripts")
 
 # 4. pip show location -> derive Scripts
-$pipShow = & $Python -m pip show judecode 2>$null | Select-String "Location:"
+$pipShow = & $Python -m pip show judecode 2>$null | Select-String "^Location:"
 if ($pipShow) {
-    $loc = ($pipShow.Line -replace "Location:\s*", "").Trim()
+    $loc = ($pipShow.Line -replace "^Location:\s*", "").Trim()
     # site-packages -> parent dir -> Scripts
     $parent = Split-Path $loc -Parent
     $knownDirs += (Join-Path $parent "Scripts")
