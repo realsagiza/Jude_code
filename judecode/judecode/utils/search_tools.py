@@ -4,8 +4,14 @@ import fnmatch
 import json
 import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Optional
+
+
+def _has_ripgrep() -> bool:
+    return shutil.which("rg") is not None
 
 
 def glob_search(pattern: str, root: str = ".") -> str:
@@ -30,41 +36,44 @@ def grep_search(
     """
     root = Path(path)
 
-    try:
-        cmd = ["rg", "--json", "-n", pattern]
-        if glob:
-            cmd.extend(["--glob", glob])
-        cmd.append(str(root))
+    if _has_ripgrep():
+        try:
+            cmd = ["rg", "--json", "-n", pattern]
+            if glob:
+                cmd.extend(["--glob", glob])
+            cmd.append(str(root))
 
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if proc.returncode in (0, 1):
-            lines_out = []
-            for line in proc.stdout.strip().split("\n"):
-                if not line:
-                    continue
-                try:
-                    parsed = json.loads(line)
-                    if parsed.get("type") == "match":
-                        data = parsed.get("data", {})
-                        file_path = data.get("path", {}).get("text", "")
-                        line_no = data.get("line_number", 0)
-                        submatches = data.get("submatches", [])
-                        matched_text = ""
-                        if submatches:
-                            match_data = submatches[0]
-                            matched_text = match_data.get("match", {}).get("text", "")
-                        lines_out.append(f"{file_path}:{line_no}:{matched_text}")
-                except json.JSONDecodeError:
-                    continue
-            return "\n".join(lines_out) if lines_out else "No matches found."
-        return f"rg error: {proc.stderr}"
-    except FileNotFoundError:
-        pass
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                encoding="utf-8",
+                errors="replace",
+            )
+            if proc.returncode in (0, 1):
+                lines_out = []
+                for line in proc.stdout.strip().split("\n"):
+                    if not line:
+                        continue
+                    try:
+                        parsed = json.loads(line)
+                        if parsed.get("type") == "match":
+                            data = parsed.get("data", {})
+                            file_path = data.get("path", {}).get("text", "")
+                            line_no = data.get("line_number", 0)
+                            submatches = data.get("submatches", [])
+                            matched_text = ""
+                            if submatches:
+                                match_data = submatches[0]
+                                matched_text = match_data.get("match", {}).get("text", "")
+                            lines_out.append(f"{file_path}:{line_no}:{matched_text}")
+                    except json.JSONDecodeError:
+                        continue
+                return "\n".join(lines_out) if lines_out else "No matches found."
+            return f"rg error: {proc.stderr}"
+        except (FileNotFoundError, OSError):
+            pass
 
     # Fallback to Python regex
     return _grep_fallback(pattern, root, glob, output_mode)
