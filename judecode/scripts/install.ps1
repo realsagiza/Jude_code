@@ -109,39 +109,45 @@ Write-Success "judecode installed"
 
 # ─── 8. Verify judecode is in PATH ────────────────────────────
 Write-Header "Verifying installation..."
-$judecodePath = & $Python -c "import judecode, pathlib, sys; print(pathlib.Path(sys.executable).parent / 'Scripts' if sys.platform == 'win32' else pathlib.Path(sys.executable).parent)" 2>$null
 
+# Find Python Scripts dir (where console_scripts are installed)
+$scriptsDir = & $Python -c "import sysconfig,sys; d=sysconfig.get_path('scripts'); print(d)" 2>$null
+if (-not $scriptsDir) {
+    $pyBase = Split-Path (Get-Command $Python).Source -Parent
+    $scriptsDir = Join-Path $pyBase "Scripts"
+}
+
+# Force-reload current session PATH from registry + scripts dir
+$env:Path = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
+if ($env:Path -notlike "*${scriptsDir}*") {
+    $env:Path = "$env:Path;$scriptsDir"
+}
+
+# Also add to persistent PATH if missing
+$target = if ($Global) { "Machine" } else { "User" }
+$currentPath = [Environment]::GetEnvironmentVariable("Path", $target)
+if ($currentPath -notlike "*${scriptsDir}*") {
+    [Environment]::SetEnvironmentVariable("Path", "$currentPath;$scriptsDir", $target)
+    Write-Success "Added Scripts directory to persistent PATH"
+}
+
+# Verify judecode works
 $found = $false
 try {
-    $judecodeVersion = judecode --version 2>$null
-    if ($LASTEXITCODE -eq 0) {
+    # Find exact executable path
+    $judecodeExe = Get-Command judecode -ErrorAction SilentlyContinue
+    if (-not $judecodeExe) {
+        # Fallback: look in scripts dir
+        $judecodeExe = Get-ChildItem -Path $scriptsDir -Filter "judecode*" -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+    if ($judecodeExe) {
+        Write-Success "judecode command found at: $($judecodeExe.Source)"
         $found = $true
-        Write-Success "judecode command works!"
     }
 } catch {}
 
 if (-not $found) {
-    Write-Warn "judecode not found in PATH. Adding it now..."
-
-    # Find Scripts directory
-    $pyScripts = (Split-Path (Get-Command $Python).Source) + "\Scripts"
-    if (-not (Test-Path $pyScripts)) {
-        $pyScripts = (Split-Path (Get-Command $Python).Source)
-    }
-
-    $target = if ($Global) { "Machine" } else { "User" }
-    $currentPath = [Environment]::GetEnvironmentVariable("Path", $target)
-    if ($currentPath -notlike "*$pyScripts*") {
-        [Environment]::SetEnvironmentVariable(
-            "Path",
-            "$currentPath;$pyScripts",
-            $target
-        )
-        Write-Success "Added to PATH for $target"
-        Write-Host "`n  Please restart your terminal (or run 'refreshenv') for changes to take effect." -ForegroundColor Yellow
-    } else {
-        Write-Success "Already in PATH"
-    }
+    Write-Warn "judecode executable not found in `$scriptsDir`"
 } else {
     Write-Success "judecode is ready to use!"
 }
