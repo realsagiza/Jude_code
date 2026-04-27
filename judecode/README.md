@@ -8,17 +8,38 @@ Jude Code is a terminal-based CLI application that provides an agentic coding ex
 
 ## Installation
 
+### macOS / Linux
+
 ```bash
 # Clone the repository
 git clone <repo-url>
 cd judecode
 
-# Install dependencies and the CLI
-pip3 install -e .
+# Run the install script
+chmod +x scripts/install.sh
+./scripts/install.sh
 
-# Or with your own virtual environment
+# Or install manually
+pip3 install -e .
+```
+
+### Windows
+
+```powershell
+# Clone the repository
+git clone <repo-url>
+cd judecode
+
+# Run the install script
+.\scripts\install.bat        # User install (no admin needed)
+.\scripts\install.bat /global # System-wide install (requires admin)
+```
+
+### Manual (virtual environment)
+
+```bash
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate   # On Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
