@@ -110,14 +110,53 @@ Write-Success "judecode installed"
 # ─── 8. Verify judecode is in PATH ────────────────────────────
 Write-Header "Verifying installation..."
 
-# Find Python Scripts dir (where console_scripts are installed)
-$scriptsDir = & $Python -c "import sysconfig,sys; d=sysconfig.get_path('scripts'); print(d)" 2>$null
-if (-not $scriptsDir) {
-    $pyBase = Split-Path (Get-Command $Python).Source -Parent
-    $scriptsDir = Join-Path $pyBase "Scripts"
+# Discover the real Scripts directories pip uses on this machine.
+# pip may install into sysconfig scripts OR into user-base scripts
+# (e.g.  C:\Users\xxx\AppData\Roaming\Python\Python313\Scripts).
+$knownDirs = @()
+
+# 1. sysconfig scripts
+$d1 = & $Python -c "import sysconfig; print(sysconfig.get_path('scripts'))" 2>$null
+if ($d1) { $knownDirs += $d1 }
+
+# 2. user-base scripts (Roaming)
+$d2 = & $Python -c "import site, sys, os; base=site.getusersitepackages(); print(os.path.join(os.path.dirname(base), 'Scripts'))" 2>$null
+if ($d2) { $knownDirs += $d2 }
+
+# 3. fallback next to python.exe
+$pyBase = Split-Path (Get-Command $Python).Source -Parent
+$knownDirs += (Join-Path $pyBase "Scripts")
+
+# 4. pip show location -> derive Scripts
+$pipShow = & $Python -m pip show judecode 2>$null | Select-String "Location:"
+if ($pipShow) {
+    $loc = ($pipShow.Line -replace "Location:\s*", "").Trim()
+    # site-packages -> parent dir -> Scripts
+    $parent = Split-Path $loc -Parent
+    $knownDirs += (Join-Path $parent "Scripts")
 }
 
-# Force-reload current session PATH from registry + scripts dir
+# Find which directory actually contains judecode.exe
+$scriptsDir = $null
+foreach ($dir in ($knownDirs | Select-Object -Unique)) {
+    if (Test-Path $dir) {
+        $exe = Join-Path $dir "judecode.exe"
+        if (Test-Path $exe) {
+            $scriptsDir = $dir
+            break
+        }
+    }
+}
+if (-not $scriptsDir) {
+    # Last resort: take first known dir that exists
+    $scriptsDir = ($knownDirs | Where-Object { Test-Path $_ } | Select-Object -First 1)
+}
+if (-not $scriptsDir) {
+    $scriptsDir = $knownDirs[0]
+}
+Write-Success "Scripts directory: $scriptsDir"
+
+# Force-reload current session PATH from registry + add scripts dir
 $env:Path = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
 if ($env:Path -notlike "*${scriptsDir}*") {
     $env:Path = "$env:Path;$scriptsDir"
@@ -146,7 +185,6 @@ if (-not $found) {
     if ($env:Path -notlike "*${scriptsDir}*") {
         $env:Path = "$env:Path;$scriptsDir"
     }
-    # Save back to registry
     $target = if ($Global) { "Machine" } else { "User" }
     $currentPath = [Environment]::GetEnvironmentVariable("Path", $target)
     if ($currentPath -notlike "*${scriptsDir}*") {
