@@ -16,13 +16,20 @@ def web_fetch(url: str, timeout: int = 30) -> str:
             "Chrome/124.0.0.0 Safari/537.36"
         ),
     }
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        content_type = response.headers.get("Content-Type", "")
-        charset = "utf-8"
-        if "charset=" in content_type:
-            charset = content_type.split("charset=")[1].split(";")[0].strip()
-        return response.read().decode(charset, errors="replace")
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            content_type = response.headers.get("Content-Type", "")
+            charset = "utf-8"
+            if "charset=" in content_type:
+                charset = content_type.split("charset=")[1].split(";")[0].strip()
+            return response.read().decode(charset, errors="replace")
+    except urllib.error.HTTPError as e:
+        return f"Error: HTTP {e.code} - {e.reason} for URL {url}"
+    except urllib.error.URLError as e:
+        return f"Error: Connection failed - {e.reason} for URL {url}"
+    except Exception as e:
+        return f"Error fetching {url}: {type(e).__name__}: {e}"
 
 
 def web_search(query: str, num_results: int = 5) -> str:

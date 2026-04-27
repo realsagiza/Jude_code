@@ -22,6 +22,7 @@ class AgentEngine:
         """Send a user message and handle streaming + tool calls."""
         self.messages.append({"role": "user", "content": user_message})
 
+        MAX_TURNS = 10
         turn = 0
         while True:
             turn += 1
@@ -29,39 +30,53 @@ class AgentEngine:
             tool_calls: list[dict[str, Any]] = []
             has_started_output = False
 
+            if turn > MAX_TURNS:
+                console.print(
+                    f"\n  [bold yellow]Reached max conversation turns ({MAX_TURNS}). "
+                    "Stopping to prevent infinite loop.[/bold yellow]\n"
+                )
+                return
+
             # Stream the response
-            async for chunk in self.api.chat_completion(
-                self.messages, tools=TOOL_DEFINITIONS
-            ):
-                choices = chunk.get("choices", [])
-                if not choices:
-                    continue
+            try:
+                async for chunk in self.api.chat_completion(
+                    self.messages, tools=TOOL_DEFINITIONS
+                ):
+                    choices = chunk.get("choices", [])
+                    if not choices:
+                        continue
 
-                delta = choices[0].get("delta", {})
-                content_piece = delta.get("content")
-                if content_piece:
-                    full_content += content_piece
-                    if not has_started_output:
-                        console.print()
-                        has_started_output = True
-                    console.print(content_piece, end="")
+                    delta = choices[0].get("delta", {})
+                    content_piece = delta.get("content")
+                    if content_piece:
+                        full_content += content_piece
+                        if not has_started_output:
+                            console.print()
+                            has_started_output = True
+                        console.print(content_piece, end="")
 
-                # Handle tool calls
-                tool_call_pieces = delta.get("tool_calls", [])
-                for tc in tool_call_pieces:
-                    index = tc.get("index", 0)
-                    if index >= len(tool_calls):
-                        tool_calls.extend([{} for _ in range(index - len(tool_calls) + 1)])
-                    if "id" in tc:
-                        tool_calls[index]["id"] = tc["id"]
-                    if "function" in tc:
-                        fn = tc["function"]
-                        if "name" in fn:
-                            tool_calls[index]["name"] = fn["name"]
-                        if "arguments" in fn:
-                            if "arguments" not in tool_calls[index]:
-                                tool_calls[index]["arguments"] = ""
-                            tool_calls[index]["arguments"] += fn["arguments"]
+                    # Handle tool calls
+                    tool_call_pieces = delta.get("tool_calls", [])
+                    for tc in tool_call_pieces:
+                        index = tc.get("index", 0)
+                        if index >= len(tool_calls):
+                            tool_calls.extend([{} for _ in range(index - len(tool_calls) + 1)])
+                        if "id" in tc:
+                            tool_calls[index]["id"] = tc["id"]
+                        if "function" in tc:
+                            fn = tc["function"]
+                            if "name" in fn:
+                                tool_calls[index]["name"] = fn["name"]
+                            if "arguments" in fn:
+                                if "arguments" not in tool_calls[index]:
+                                    tool_calls[index]["arguments"] = ""
+                                tool_calls[index]["arguments"] += fn["arguments"]
+
+            except Exception as e:
+                console.print(
+                    f"\n  [bold red]Stream error:[/bold red] {type(e).__name__}: {e}\n"
+                )
+                return
 
             if has_started_output:
                 console.print()  # newline after streaming
@@ -113,17 +128,24 @@ class AgentEngine:
                     if len(args_preview) > 200:
                         args_preview = args_preview[:197] + "..."
                     console.print(
-                        f"  [bold yellow]\u26a1[/bold yellow] Using tool [bold white]{tool_name}[/bold white]"
+                        f"  [bold yellow]⚡[/bold yellow] Using tool [bold white]{tool_name}[/bold white]"
                     )
                     console.print(
                         f"     [dim]Parameters:[/dim] [bright_white]{args_preview}[/bright_white]"
                     )
                 else:
                     console.print(
-                        f"  [bold yellow]\u26a1[/bold yellow] Using tool [bold white]{tool_name}[/bold white]"
+                        f"  [bold yellow]⚡[/bold yellow] Using tool [bold white]{tool_name}[/bold white]"
                     )
 
-                result = execute_tool(tool_name, args)
+                try:
+                    result = execute_tool(tool_name, args)
+                except TypeError as e:
+                    result = (
+                        f"Error executing tool '{tool_name}': "
+                        f"TypeError ({type(e).__name__}: {e}). "
+                        "This usually means a required parameter was missing."
+                    )
                 self.messages.append({
                     "role": "tool",
                     "tool_call_id": tc.get("id", ""),

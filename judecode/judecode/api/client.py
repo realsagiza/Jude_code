@@ -117,8 +117,22 @@ class ApiClient:
                         f"Please check your network connection and try again."
                     )
                     return
-            except RuntimeError:
-                raise  # Don't retry unrecoverable server errors
+            except RuntimeError as e:
+                yield self._error_chunk(
+                    f"API request failed.\n"
+                    f"Error: {type(e).__name__}: {e}\n"
+                    f"Please check API endpoint, model, and network settings."
+                )
+                return
+            except httpx.HTTPError as e:
+                last_error = e
+                if attempt == self.max_retries:
+                    yield self._error_chunk(
+                        f"HTTP error after {self.max_retries} attempts.\n"
+                        f"Error: {type(e).__name__}: {e}\n"
+                        f"Please check your network connection and try again."
+                    )
+                    return
         # Should not reach here, but guard just in case
         if last_error:
             yield self._error_chunk(str(last_error))

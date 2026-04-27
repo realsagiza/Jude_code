@@ -21,7 +21,7 @@ You have access to these tools:
 - web_fetch: Fetch content from URLs
 - web_search: Search the web
 - think: Use this to reason through complex problems step by step
-- list_dir: List directory contents
+- ls: List directory contents
 
 Guidelines:
 1. Always think through problems step by step before acting
