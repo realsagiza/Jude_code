@@ -2,7 +2,7 @@
 
 BASE_URL = "http://127.0.0.1:11434/v1"
 API_KEY = "ollama"
-MODEL = "kimi-k2.6:cloud"
+MODEL = "deepseek-v4-flash:cloud"
 MAX_TOKENS = 8192
 TEMPERATURE = 0.7
 
