@@ -134,7 +134,8 @@ async def run_agent_interactive() -> None:
         while True:
             # Print prompt
             try:
-                user_input = console.input("\n\u254b[bold cyan]\u256d[/bold cyan] ")
+                console.print("\n\u254b[bold cyan]\u256d[/bold cyan] ", end="")
+                user_input = input()
             except (EOFError, KeyboardInterrupt):
                 print_goodbye()
                 break

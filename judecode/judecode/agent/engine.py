@@ -22,7 +22,7 @@ class AgentEngine:
         """Send a user message and handle streaming + tool calls."""
         self.messages.append({"role": "user", "content": user_message})
 
-        MAX_TURNS = 10
+        MAX_TURNS = 100
         turn = 0
         while True:
             turn += 1
