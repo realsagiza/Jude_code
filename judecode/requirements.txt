@@ -1,3 +1,10 @@
 httpx>=0.27.0
 rich>=13.7.0
 pyperclip>=1.8.2
+
+# Cowork-style tools (optional - install as needed)
+# openpyxl>=3.1.0       # Excel read/write
+# xlsxwriter>=3.1.0     # Excel write
+# PyPDF2>=3.0.0         # PDF text extraction
+# pdfplumber>=0.10.0    # PDF with table extraction (better)
+# PyMuPDF>=1.23.0       # Alternative PDF extraction

@@ -3,6 +3,7 @@
 BASE_URL = "http://127.0.0.1:11434/v1"
 API_KEY = "ollama"
 MODEL = "deepseek-v4-flash:cloud"
+VISION_MODEL = "qwen3.5:397b-cloud"
 MAX_TOKENS = 8192
 TEMPERATURE = 0.7
 
@@ -49,4 +50,17 @@ Guidelines:
 9. Use the Knowledge Vault to store important findings, decisions, or documentation. Use #tags and [[Wiki Links]] in notes to build connections.
 10. Before starting complex tasks, check the vault for relevant existing notes using vault_search.
 11. After completing significant work, consider saving a summary to the vault for future reference.
+
+Computer Use (Vision + Desktop Control):
+You have vision capabilities via the 'screenshot' tool with a vision_model parameter.
+When the user asks you to interact with the desktop, browser, or applications:
+1. First call screenshot(vision_model="qwen3.5:397b-cloud") to see what's on screen
+2. The vision model will describe the screen contents in detail
+3. Use mouse_move + mouse_click to interact with UI elements
+4. Use keyboard_type to fill text fields
+5. Use keyboard_hotkey for shortcuts
+6. Use open_app to launch applications
+
+The vision model (Qwen 3.5) runs separately from your main model. It only analyzes images.
+You use the description it returns to decide what actions to take.
 """
