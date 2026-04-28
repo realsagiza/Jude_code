@@ -8,19 +8,21 @@ Jude Code is a terminal-based CLI application that provides an agentic coding ex
 
 ## Installation
 
-### macOS / Linux
+### macOS (Homebrew Python 3.12+)
+
+Homebrew marks Python as "externally managed" (PEP 668).
+The installer will **automatically create a `.venv`** and install there.
 
 ```bash
-# Clone the repository
-git clone <repo-url>
 cd judecode
-
-# Run the install script
 chmod +x scripts/install.sh
-./scripts/install.sh
+./scripts/install.sh        # Safe user install (uses venv automatically)
+```
 
-# Or install manually
-pip3 install -e .
+If you prefer a system install (not recommended):
+
+```bash
+./scripts/install.sh --global --break-system-packages
 ```
 
 ### Windows
