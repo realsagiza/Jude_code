@@ -187,6 +187,27 @@ The agent can use tools like shell, read, write, edit, grep, web_search, etc.
 
 def main_cli() -> None:
     """Entry point for `judecode` command."""
+    import sys
+
+    # Handle --version and --help flags
+    if len(sys.argv) > 1:
+        arg = sys.argv[1]
+        if arg in ("--version", "-v"):
+            from judecode import __version__
+            print(f"judecode v{__version__}")
+            return
+        if arg in ("--help", "-h"):
+            print("Jude Code - Your terminal AI coding assistant")
+            print()
+            print("Usage: judecode [OPTIONS]")
+            print()
+            print("Options:")
+            print("  --version, -v   Show version and exit")
+            print("  --help, -h      Show this help message and exit")
+            print()
+            print("Without arguments, starts the interactive chat session.")
+            return
+
     asyncio.run(run_agent_interactive())
 
 

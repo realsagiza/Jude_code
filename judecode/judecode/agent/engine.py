@@ -59,8 +59,11 @@ class AgentEngine:
         while True:
             turn += 1
             full_content = ""
+            full_reasoning = ""
             tool_calls: list[dict[str, Any]] = []
             has_started_output = False
+            has_shown_reasoning = False
+            reasoning_completed = False
 
             if turn > MAX_TURNS:
                 console.print(
@@ -82,10 +85,36 @@ class AgentEngine:
                         continue
 
                     delta = choices[0].get("delta", {})
+
+                    # ── Extract reasoning/thinking content ──
+                    reasoning_piece = self.api._extract_reasoning(chunk)
+                    if reasoning_piece:
+                        full_reasoning += reasoning_piece
+                        if not reasoning_completed and not has_started_output:
+                            if not has_shown_reasoning:
+                                # Clear the "Thinking..." line and show reasoning header
+                                console.print()
+                                console.print(
+                                    "  [dim]───────────────────── Reasoning ─────────────────────[/dim]"
+                                )
+                                has_shown_reasoning = True
+                            console.print(
+                                f"[dim][italic]{reasoning_piece}[/italic][/dim]", end=""
+                            )
+
+                    # ── Extract normal content ──
                     content_piece = delta.get("content")
                     if content_piece:
                         full_content += content_piece
                         if not has_started_output:
+                            # If we were showing reasoning, close the reasoning section
+                            if has_shown_reasoning:
+                                reasoning_completed = True
+                                console.print()
+                                console.print(
+                                    "  [dim]───────────────── End Reasoning ───────────────────[/dim]"
+                                )
+                                console.print()
                             # Clear the thinking line when output starts
                             console.print()
                             has_started_output = True
@@ -116,6 +145,14 @@ class AgentEngine:
 
             if has_started_output:
                 console.print()  # newline after streaming
+            elif has_shown_reasoning and not reasoning_completed:
+                # Reasoning was shown but no content came - close the section
+                reasoning_completed = True
+                console.print()
+                console.print(
+                    "  [dim]───────────────── End Reasoning ───────────────────[/dim]"
+                )
+                console.print()
 
             # If there were no tool calls, just store the assistant message and return
             if not any("name" in tc for tc in tool_calls):

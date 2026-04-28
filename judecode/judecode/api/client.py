@@ -147,6 +147,27 @@ class ApiClient:
         return delta.get("content") or ""
 
     @staticmethod
+    def _extract_reasoning(chunk: dict) -> str:
+        """Extract reasoning/thinking content from a chunk if present.
+
+        Different models use different field names:
+        - DeepSeek R1: delta.reasoning
+        - Qwen: delta.reasoning_content
+        - Some models: delta.thinking
+        """
+        choices = chunk.get("choices", [])
+        if not choices:
+            return ""
+        delta = choices[0].get("delta", {})
+        reasoning = (
+            delta.get("reasoning")
+            or delta.get("reasoning_content")
+            or delta.get("thinking")
+            or ""
+        )
+        return reasoning if isinstance(reasoning, str) else ""
+
+    @staticmethod
     def _error_chunk(content: str) -> dict:
         """Build a synthetic assistant chunk that carries an error message."""
         return {

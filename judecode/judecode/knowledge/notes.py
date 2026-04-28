@@ -93,7 +93,7 @@ def list_notes() -> list[dict]:
     for md_file in sorted(vault.rglob("*.md")):
         rel = md_file.relative_to(vault)
         content = md_file.read_text(encoding="utf-8")
-        tags = re.findall(r'#(\w+)', content)
+        tags = re.findall(r'#(\w[\w-]*)', content)
         links = re.findall(r'\[\[([^\]]+)\]\]', content)
         notes.append({
             "title": str(rel.with_suffix("")),
