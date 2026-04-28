@@ -18,6 +18,38 @@ class AgentEngine:
             {"role": "system", "content": system_prompt}
         ]
 
+    def _show_thinking(self, turn: int) -> None:
+        """Show a thinking indicator before each model response turn."""
+        if turn == 1:
+            console.print(f"\n  [dim]⏳ Thinking...[/dim]")
+        else:
+            console.print(f"\n  [dim]⏳ Processing results... (turn {turn})[/dim]")
+
+    def _show_tool_call(self, tool_name: str, args: dict) -> None:
+        """Display tool call information."""
+        console.print()
+        if args:
+            args_preview = json.dumps(args, ensure_ascii=False, indent=2)
+            if len(args_preview) > 200:
+                args_preview = args_preview[:197] + "..."
+            console.print(
+                f"  [bold yellow]⚡[/bold yellow] Using tool [bold white]{tool_name}[/bold white]"
+            )
+            console.print(
+                f"     [dim]Parameters:[/dim] [bright_white]{args_preview}[/bright_white]"
+            )
+        else:
+            console.print(
+                f"  [bold yellow]⚡[/bold yellow] Using tool [bold white]{tool_name}[/bold white]"
+            )
+
+    def _show_tool_result(self, result: str) -> None:
+        """Display a snippet of the tool result."""
+        result_preview = result[:300] + "..." if len(result) > 300 else result
+        console.print(
+            f"     [dim green]✓ Done[/dim green] [dim]{result_preview}[/dim]"
+        )
+
     async def chat(self, user_message: str) -> None:
         """Send a user message and handle streaming + tool calls."""
         self.messages.append({"role": "user", "content": user_message})
@@ -37,6 +69,9 @@ class AgentEngine:
                 )
                 return
 
+            # Show thinking indicator before each model response
+            self._show_thinking(turn)
+
             # Stream the response
             try:
                 async for chunk in self.api.chat_completion(
@@ -51,6 +86,7 @@ class AgentEngine:
                     if content_piece:
                         full_content += content_piece
                         if not has_started_output:
+                            # Clear the thinking line when output starts
                             console.print()
                             has_started_output = True
                         console.print(content_piece, end="")
@@ -120,23 +156,7 @@ class AgentEngine:
                 except json.JSONDecodeError:
                     args = {}
 
-                # Show tool call with parameters
-                console.print()
-                if args:
-                    args_preview = json.dumps(args, ensure_ascii=False, indent=2)
-                    # Limit preview length
-                    if len(args_preview) > 200:
-                        args_preview = args_preview[:197] + "..."
-                    console.print(
-                        f"  [bold yellow]⚡[/bold yellow] Using tool [bold white]{tool_name}[/bold white]"
-                    )
-                    console.print(
-                        f"     [dim]Parameters:[/dim] [bright_white]{args_preview}[/bright_white]"
-                    )
-                else:
-                    console.print(
-                        f"  [bold yellow]⚡[/bold yellow] Using tool [bold white]{tool_name}[/bold white]"
-                    )
+                self._show_tool_call(tool_name, args)
 
                 try:
                     result = execute_tool(tool_name, args)
@@ -151,8 +171,4 @@ class AgentEngine:
                     "tool_call_id": tc.get("id", ""),
                     "content": result,
                 })
-                # Show result snippet
-                result_preview = result[:300] + "..." if len(result) > 300 else result
-                console.print(
-                    f"     [dim green]Result:[/dim green] [dim]{result_preview}[/dim]"
-                )
+                self._show_tool_result(result)

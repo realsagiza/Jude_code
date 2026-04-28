@@ -174,7 +174,7 @@ The agent can use tools like shell, read, write, edit, grep, web_search, etc.
                 continue
 
             # Normal message - process through agent
-            print_thinking()
+            # Thinking indicator is now handled inside agent.chat() for every turn
 
             try:
                 await agent.chat(user_input)
