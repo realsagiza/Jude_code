@@ -87,10 +87,10 @@ class ApiClient:
                                     yield chunk
                                 except json.JSONDecodeError:
                                     continue
-                        except (httpx.StreamError, httpx.RemoteProtocolError) as e:
-                            # Connection interrupted mid-stream: remember what we got
-                            # and retry.  On the final attempt we yield the error
-                            # as a synthetic chunk so the agent can decide how to
+                        except (httpx.StreamError, httpx.RemoteProtocolError, TypeError) as e:
+                            # Connection interrupted mid-stream (or internal type error in Python 3.14):
+                            # remember what we got and retry.  On the final attempt we yield
+                            # the error as a synthetic chunk so the agent can decide how to
                             # proceed instead of crashing.
                             last_error = e
                             if attempt == self.max_retries:
