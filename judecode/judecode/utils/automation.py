@@ -132,12 +132,12 @@ def batch_delete(
     if not base.is_dir():
         raise NotADirectoryError(f"Not a directory: {directory}")
 
-    from glob import glob as glob_glob, iglob
-
     results = []
     count = 0
-    search_pattern = str(base / ("**/" if recursive else "") / pattern)
-    for f in sorted(Path(p) for p in iglob(search_pattern, recursive=recursive)):
+
+    # Use pathlib's glob which is cross-platform
+    file_list = list(base.rglob(pattern)) if recursive else list(base.glob(pattern))
+    for f in sorted(file_list):
         if not f.is_file():
             continue
         if dry_run:

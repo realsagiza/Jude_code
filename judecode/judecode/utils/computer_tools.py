@@ -420,12 +420,42 @@ def open_app(app_name: str) -> str:
             return f"Opened application: {app_name}"
 
         elif system == "windows":
-            subprocess.run(
-                ["start", app_name],
-                shell=True,
-                timeout=10,
-            )
-            return f"Opened application: {app_name}"
+            # Try multiple strategies to open an app on Windows
+            import shutil
+
+            # Strategy 1: Check if the app name matches a known executable
+            exe_path = shutil.which(app_name)
+            if exe_path:
+                subprocess.Popen([exe_path], shell=False)
+                return f"Opened application: {app_name}"
+
+            # Strategy 2: Try 'start' command (shell=True required for CMD built-in)
+            try:
+                subprocess.Popen(
+                    ["start", app_name],
+                    shell=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return f"Opened application: {app_name}"
+            except Exception:
+                pass
+
+            # Strategy 3: Try with .exe extension
+            try:
+                subprocess.Popen(
+                    ["start", f"{app_name}.exe"],
+                    shell=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return f"Opened application: {app_name}"
+            except Exception as e:
+                return (
+                    f"Could not open '{app_name}'. "
+                    f"Error: {e}. "
+                    f"Try using the full executable name (e.g., 'chrome' instead of 'Chrome')."
+                )
 
         elif system == "linux":
             subprocess.run(
@@ -503,7 +533,7 @@ def get_active_window_info() -> str:
 
 
 def list_running_apps() -> str:
-    """List running applications (macOS only with osascript, else basic)."""
+    """List currently running applications with visible windows."""
     system = platform.system().lower()
     try:
         if system == "darwin":
@@ -522,6 +552,56 @@ def list_running_apps() -> str:
                 if apps:
                     return "Running applications:\n  " + "\n  ".join(apps)
                 return "No visible applications found."
-        return "List running apps is only fully supported on macOS."
+        elif system == "windows":
+            try:
+                # Use tasklist to get running GUI processes
+                result = subprocess.run(
+                    ["tasklist", "/FI", "SESSIONNAME eq Console", "/NH"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+                if result.returncode == 0:
+                    lines = [line.strip() for line in result.stdout.split("\n") if line.strip()]
+                    # Filter out common background processes, keep user-facing apps
+                    skip_patterns = [
+                        "System", "svchost", "RuntimeBroker", "sihost",
+                        "taskhost", "ctfmon", "SearchApp", "Widgets",
+                        "SecurityHealth", "smartscreen",
+                    ]
+                    apps = []
+                    for line in lines:
+                        name = line.split()[0] if line.split() else ""
+                        if name and name.lower().endswith(".exe"):
+                            name_clean = name[:-4]  # Remove .exe
+                            if name_clean not in skip_patterns and name_clean not in apps:
+                                apps.append(name_clean)
+                    if apps:
+                        return "Running applications:\n  " + "\n  ".join(apps)
+                    return "No visible applications found (try tasklist)."
+                return "Could not list applications."
+            except Exception as e:
+                return f"Error listing Windows apps: {type(e).__name__}: {e}"
+        elif system == "linux":
+            # Linux: try wmctrl or xprop
+            result = subprocess.run(
+                ["wmctrl", "-l"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                apps = set()
+                for line in result.stdout.strip().split("\n"):
+                    parts = line.split(None, 3)
+                    if len(parts) >= 4:
+                        apps.add(parts[3])
+                if apps:
+                    return "Running applications:\n  " + "\n  ".join(sorted(apps))
+                return "No visible windows found."
+            return "Could not list applications (install wmctrl)."
+        return "List running apps is not supported on this platform."
     except Exception as e:
         return f"Error listing apps: {type(e).__name__}: {e}"
