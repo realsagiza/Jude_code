@@ -1,6 +1,8 @@
 """Jude Code Agent Engine - handles the conversation loop and tool execution."""
 
+import asyncio
 import json
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from judecode.api.client import ApiClient
@@ -49,6 +51,17 @@ class AgentEngine:
         console.print(
             f"     [dim green]✓ Done[/dim green] [dim]{result_preview}[/dim]"
         )
+
+    def _execute_tool_safe(self, tool_name: str, args: dict) -> str:
+        """Execute a tool safely, catching TypeError and other exceptions."""
+        try:
+            return execute_tool(tool_name, args)
+        except TypeError as e:
+            return (
+                f"Error executing tool '{tool_name}': "
+                f"TypeError ({type(e).__name__}: {e}). "
+                "This usually means a required parameter was missing."
+            )
 
     async def chat(self, user_message: str) -> None:
         """Send a user message and handle streaming + tool calls."""
@@ -182,30 +195,75 @@ class AgentEngine:
             if turn == 1 and not has_started_output:
                 console.print()  # ensure newline before tool calls if no content was streamed
 
-            # Execute each tool with visible output
+            # ── Parallel Tool Execution ──
+            # Parse all tool calls first
+            parsed_calls = []
             for tc in tool_calls:
                 if "name" not in tc:
                     continue
-                tool_name = tc["name"]
                 args_str = tc.get("arguments", "{}")
                 try:
                     args = json.loads(args_str) if args_str else {}
                 except json.JSONDecodeError:
                     args = {}
+                parsed_calls.append({
+                    "id": tc.get("id", ""),
+                    "name": tc["name"],
+                    "args": args,
+                })
 
-                self._show_tool_call(tool_name, args)
-
+            if len(parsed_calls) == 1:
+                # Single tool call - execute inline (no overhead)
+                tc = parsed_calls[0]
+                self._show_tool_call(tc["name"], tc["args"])
                 try:
-                    result = execute_tool(tool_name, args)
+                    result = execute_tool(tc["name"], tc["args"])
                 except TypeError as e:
                     result = (
-                        f"Error executing tool '{tool_name}': "
+                        f"Error executing tool '{tc['name']}': "
                         f"TypeError ({type(e).__name__}: {e}). "
                         "This usually means a required parameter was missing."
                     )
                 self.messages.append({
                     "role": "tool",
-                    "tool_call_id": tc.get("id", ""),
+                    "tool_call_id": tc["id"],
                     "content": result,
                 })
                 self._show_tool_result(result)
+            else:
+                # Multiple tool calls - execute in parallel!
+                console.print(
+                    f"\n  [bold cyan]⚡⚡⚡ Parallel execution: {len(parsed_calls)} tools[/bold cyan]"
+                )
+                for tc in parsed_calls:
+                    self._show_tool_call(tc["name"], tc["args"])
+
+                # Run all tools concurrently using ThreadPoolExecutor
+                loop = asyncio.get_event_loop()
+                with ThreadPoolExecutor(max_workers=len(parsed_calls)) as executor:
+                    futures = []
+                    for tc in parsed_calls:
+                        fut = loop.run_in_executor(
+                            executor,
+                            self._execute_tool_safe,
+                            tc["name"],
+                            tc["args"],
+                        )
+                        futures.append(fut)
+
+                    # Wait for all to complete
+                    results = await asyncio.gather(*futures, return_exceptions=True)
+
+                # Process results
+                for i, (tc, result) in enumerate(zip(parsed_calls, results)):
+                    if isinstance(result, Exception):
+                        result = (
+                            f"Error executing tool '{tc['name']}': "
+                            f"{type(result).__name__}: {result}"
+                        )
+                    self.messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "content": result,
+                    })
+                    self._show_tool_result(result)
