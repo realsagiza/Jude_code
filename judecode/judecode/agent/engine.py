@@ -7,18 +7,44 @@ from typing import Any
 
 from judecode.api.client import ApiClient
 from judecode.agent.tools import TOOL_DEFINITIONS, execute_tool
+from judecode.agent.continuation import (
+    ContinuationTracker,
+    detect_stream_interruption,
+    detect_incomplete_work,
+    generate_continuation_nudge,
+)
+from judecode.config import (
+    MAX_CONTINUATIONS,
+    CONTINUE_ON_STREAM_ERROR,
+    CONTINUE_ON_INCOMPLETE_WORK,
+    CONTINUE_ON_TOOL_ERROR,
+)
 from judecode.ui.console import console
 
 
 class AgentEngine:
     """Main agent logic: stream completions, handle tool calls, iterate."""
 
-    def __init__(self, system_prompt: str, api_client: ApiClient):
+    def __init__(
+        self,
+        system_prompt: str,
+        api_client: ApiClient,
+        max_continuations: int = MAX_CONTINUATIONS,
+        continue_on_stream_error: bool = CONTINUE_ON_STREAM_ERROR,
+        continue_on_incomplete_work: bool = CONTINUE_ON_INCOMPLETE_WORK,
+        continue_on_tool_error: bool = CONTINUE_ON_TOOL_ERROR,
+    ):
         self.system_prompt = system_prompt
         self.api = api_client
         self.messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt}
         ]
+        self.continuation = ContinuationTracker(
+            max_continuations=max_continuations,
+            continue_on_stream_error=continue_on_stream_error,
+            continue_on_incomplete_work=continue_on_incomplete_work,
+            continue_on_tool_error=continue_on_tool_error,
+        )
 
     def _show_thinking(self, turn: int) -> None:
         """Show a thinking indicator before each model response turn."""
@@ -52,6 +78,20 @@ class AgentEngine:
             f"     [dim green]✓ Done[/dim green] [dim]{result_preview}[/dim]"
         )
 
+    def _show_continuation_nudge(self, reason: str, count: int, max_c: int):
+        """Display a continuation nudge in the UI."""
+        color = "yellow" if count <= 3 else "red"
+        reason_labels = {
+            "stream_interrupted": "Stream Interrupted",
+            "tool_error": "Tool Error Detected",
+            "incomplete_work": "Possible Incomplete Work",
+        }
+        label = reason_labels.get(reason, "Checking Progress")
+        console.print(
+            f"\n  [bold {color}]⟳ Continuation #{count}/{max_c}[/bold {color}] "
+            f"[dim]({label})[/dim]"
+        )
+
     def _execute_tool_safe(self, tool_name: str, args: dict) -> str:
         """Execute a tool safely, catching TypeError and other exceptions."""
         try:
@@ -63,207 +103,332 @@ class AgentEngine:
                 "This usually means a required parameter was missing."
             )
 
-    async def chat(self, user_message: str) -> None:
-        """Send a user message and handle streaming + tool calls."""
-        self.messages.append({"role": "user", "content": user_message})
+    def _is_nudge_message(self, content: str) -> bool:
+        """Check if a message is a system nudge (starts with [SYSTEM:)."""
+        return content.strip().startswith("[SYSTEM:")
 
-        MAX_TURNS = 100
-        turn = 0
-        while True:
-            turn += 1
-            full_content = ""
-            full_reasoning = ""
-            tool_calls: list[dict[str, Any]] = []
-            has_started_output = False
-            has_shown_reasoning = False
-            reasoning_completed = False
+    async def continue_task(self) -> None:
+        """
+        Manually trigger a continuation nudge.
+        Called when user types /continue.
+        """
+        if not self.continuation.can_continue():
+            console.print(
+                "\n  [bold red]Max continuations reached. Start a new task or clear the conversation.[/bold red]\n"
+            )
+            return
 
-            if turn > MAX_TURNS:
-                console.print(
-                    f"\n  [bold yellow]Reached max conversation turns ({MAX_TURNS}). "
-                    "Stopping to prevent infinite loop.[/bold yellow]\n"
-                )
-                return
+        nudge = (
+            f"[SYSTEM: Manual continuation requested by user. "
+            f"Please continue working on the current task from where you left off. "
+            f"(Continuation {self.continuation.count + 1}/{self.continuation.max_continuations})]"
+        )
+        self.continuation.record_continuation("manual", nudge)
+        self.messages.append({"role": "user", "content": nudge})
+        console.print(
+            f"\n  [bold yellow]⟳ Manual continuation #{self.continuation.count}/{self.continuation.max_continuations}[/bold yellow]"
+        )
+        # Process the nudge directly
+        await self._process_turn()
 
-            # Show thinking indicator before each model response
-            self._show_thinking(turn)
+    async def _process_turn(self, turn_number: int = 1) -> bool:
+        """
+        Process a single turn of the conversation loop.
+        Args:
+            turn_number: The current turn number (for display purposes)
+        Returns True if more turns should follow, False if done.
+        """
+        full_content = ""
+        full_reasoning = ""
+        tool_calls: list[dict[str, Any]] = []
+        has_started_output = False
+        has_shown_reasoning = False
+        reasoning_completed = False
+        tool_results: list[str] = []
 
-            # Stream the response
-            try:
-                async for chunk in self.api.chat_completion(
-                    self.messages, tools=TOOL_DEFINITIONS
-                ):
-                    choices = chunk.get("choices", [])
-                    if not choices:
-                        continue
+        # Show thinking indicator
+        self._show_thinking(turn_number)
 
-                    delta = choices[0].get("delta", {})
+        # Stream the response
+        try:
+            async for chunk in self.api.chat_completion(
+                self.messages, tools=TOOL_DEFINITIONS
+            ):
+                choices = chunk.get("choices", [])
+                if not choices:
+                    continue
 
-                    # ── Extract reasoning/thinking content ──
-                    reasoning_piece = self.api._extract_reasoning(chunk)
-                    if reasoning_piece:
-                        full_reasoning += reasoning_piece
-                        if not reasoning_completed and not has_started_output:
-                            if not has_shown_reasoning:
-                                # Clear the "Thinking..." line and show reasoning header
-                                console.print()
-                                console.print(
-                                    "  [dim]───────────────────── Reasoning ─────────────────────[/dim]"
-                                )
-                                has_shown_reasoning = True
-                            console.print(
-                                f"[dim][italic]{reasoning_piece}[/italic][/dim]", end=""
-                            )
+                delta = choices[0].get("delta", {})
 
-                    # ── Extract normal content ──
-                    content_piece = delta.get("content")
-                    if content_piece:
-                        full_content += content_piece
-                        if not has_started_output:
-                            # If we were showing reasoning, close the reasoning section
-                            if has_shown_reasoning:
-                                reasoning_completed = True
-                                console.print()
-                                console.print(
-                                    "  [dim]───────────────── End Reasoning ───────────────────[/dim]"
-                                )
-                                console.print()
-                            # Clear the thinking line when output starts
+                # ── Extract reasoning/thinking content ──
+                reasoning_piece = self.api._extract_reasoning(chunk)
+                if reasoning_piece:
+                    full_reasoning += reasoning_piece
+                    if not reasoning_completed and not has_started_output:
+                        if not has_shown_reasoning:
                             console.print()
-                            has_started_output = True
-                        console.print(content_piece, end="")
+                            console.print(
+                                "  [dim]───────────────────── Reasoning ─────────────────────[/dim]"
+                            )
+                            has_shown_reasoning = True
+                        console.print(
+                            f"[dim][italic]{reasoning_piece}[/italic][/dim]", end=""
+                        )
 
-                    # Handle tool calls
-                    tool_call_pieces = delta.get("tool_calls", [])
-                    for tc in tool_call_pieces:
-                        index = tc.get("index", 0)
-                        if index >= len(tool_calls):
-                            tool_calls.extend([{} for _ in range(index - len(tool_calls) + 1)])
-                        if "id" in tc:
-                            tool_calls[index]["id"] = tc["id"]
-                        if "function" in tc:
-                            fn = tc["function"]
-                            if "name" in fn:
-                                tool_calls[index]["name"] = fn["name"]
-                            if "arguments" in fn:
-                                if "arguments" not in tool_calls[index]:
-                                    tool_calls[index]["arguments"] = ""
-                                tool_calls[index]["arguments"] += fn["arguments"]
+                # ── Extract normal content ──
+                content_piece = delta.get("content")
+                if content_piece:
+                    full_content += content_piece
+                    if not has_started_output:
+                        if has_shown_reasoning:
+                            reasoning_completed = True
+                            console.print()
+                            console.print(
+                                "  [dim]───────────────── End Reasoning ───────────────────[/dim]"
+                            )
+                            console.print()
+                        console.print()
+                        has_started_output = True
+                    console.print(content_piece, end="")
 
-            except Exception as e:
-                console.print(
-                    f"\n  [bold red]Stream error:[/bold red] {type(e).__name__}: {e}\n"
+                # Handle tool calls
+                tool_call_pieces = delta.get("tool_calls", [])
+                for tc in tool_call_pieces:
+                    index = tc.get("index", 0)
+                    if index >= len(tool_calls):
+                        tool_calls.extend(
+                            [{} for _ in range(index - len(tool_calls) + 1)]
+                        )
+                    if "id" in tc:
+                        tool_calls[index]["id"] = tc["id"]
+                    if "function" in tc:
+                        fn = tc["function"]
+                        if "name" in fn:
+                            tool_calls[index]["name"] = fn["name"]
+                        if "arguments" in fn:
+                            if "arguments" not in tool_calls[index]:
+                                tool_calls[index]["arguments"] = ""
+                            tool_calls[index]["arguments"] += fn["arguments"]
+
+        except Exception as e:
+            console.print(
+                f"\n  [bold red]Stream error:[/bold red] {type(e).__name__}: {e}\n"
+            )
+            self.continuation.had_stream_error = True
+            self.continuation.partial_content_buffer = full_content
+
+            if (
+                self.continuation.continue_on_stream_error
+                and self.continuation.can_continue()
+            ):
+                nudge = generate_continuation_nudge(
+                    reason="stream_interrupted",
+                    continuation_count=self.continuation.count,
+                    max_continuations=self.continuation.max_continuations,
+                    partial_content=full_content,
                 )
-                return
-
-            if has_started_output:
-                console.print()  # newline after streaming
-            elif has_shown_reasoning and not reasoning_completed:
-                # Reasoning was shown but no content came - close the section
-                reasoning_completed = True
-                console.print()
-                console.print(
-                    "  [dim]───────────────── End Reasoning ───────────────────[/dim]"
+                self.continuation.record_continuation("stream_interrupted", nudge)
+                self._show_continuation_nudge(
+                    "stream_interrupted",
+                    self.continuation.count,
+                    self.continuation.max_continuations,
                 )
-                console.print()
+                self.messages.append({"role": "user", "content": nudge})
+                return True  # Continue to next turn
+            return False
 
-            # If there were no tool calls, just store the assistant message and return
-            if not any("name" in tc for tc in tool_calls):
-                self.messages.append({
-                    "role": "assistant",
-                    "content": full_content,
-                })
-                return
+        if has_started_output:
+            console.print()
+        elif has_shown_reasoning and not reasoning_completed:
+            reasoning_completed = True
+            console.print()
+            console.print(
+                "  [dim]───────────────── End Reasoning ───────────────────[/dim]"
+            )
+            console.print()
 
-            # There were tool calls - we need to execute them and continue the conversation
+        # ── Determine if there were tool calls ──
+        has_tool_calls = any("name" in tc for tc in tool_calls)
+
+        # If no tool calls, store assistant message and check for continuation
+        if not has_tool_calls:
             self.messages.append({
                 "role": "assistant",
-                "content": full_content or None,
-                "tool_calls": [
-                    {
-                        "id": tc.get("id", ""),
-                        "type": "function",
-                        "function": {
-                            "name": tc["name"],
-                            "arguments": tc.get("arguments", ""),
-                        },
-                    }
-                    for tc in tool_calls if "name" in tc
-                ],
+                "content": full_content,
             })
 
-            if turn == 1 and not has_started_output:
-                console.print()  # ensure newline before tool calls if no content was streamed
+            if (
+                not self._is_nudge_message(full_content)
+                and self.continuation.continue_on_incomplete_work
+                and self.continuation.can_continue()
+            ):
+                if detect_incomplete_work(full_content, []):
+                    nudge = generate_continuation_nudge(
+                        reason="incomplete_work",
+                        continuation_count=self.continuation.count,
+                        max_continuations=self.continuation.max_continuations,
+                    )
+                    self.continuation.record_continuation("incomplete_work", nudge)
+                    self._show_continuation_nudge(
+                        "incomplete_work",
+                        self.continuation.count,
+                        self.continuation.max_continuations,
+                    )
+                    self.messages.append({"role": "user", "content": nudge})
+                    return True  # Continue
 
-            # ── Parallel Tool Execution ──
-            # Parse all tool calls first
-            parsed_calls = []
-            for tc in tool_calls:
-                if "name" not in tc:
-                    continue
-                args_str = tc.get("arguments", "{}")
-                try:
-                    args = json.loads(args_str) if args_str else {}
-                except json.JSONDecodeError:
-                    args = {}
-                parsed_calls.append({
+            return False  # Done
+
+        # ── There were tool calls - execute them ──
+        self.messages.append({
+            "role": "assistant",
+            "content": full_content or None,
+            "tool_calls": [
+                {
                     "id": tc.get("id", ""),
-                    "name": tc["name"],
-                    "args": args,
-                })
+                    "type": "function",
+                    "function": {
+                        "name": tc["name"],
+                        "arguments": tc.get("arguments", ""),
+                    },
+                }
+                for tc in tool_calls if "name" in tc
+            ],
+        })
 
-            if len(parsed_calls) == 1:
-                # Single tool call - execute inline (no overhead)
-                tc = parsed_calls[0]
+        if not has_started_output:
+            console.print()
+
+        # Parse all tool calls
+        parsed_calls = []
+        for tc in tool_calls:
+            if "name" not in tc:
+                continue
+            args_str = tc.get("arguments", "{}")
+            try:
+                args = json.loads(args_str) if args_str else {}
+            except json.JSONDecodeError:
+                args = {}
+            parsed_calls.append({
+                "id": tc.get("id", ""),
+                "name": tc["name"],
+                "args": args,
+            })
+
+        if len(parsed_calls) == 1:
+            tc = parsed_calls[0]
+            self._show_tool_call(tc["name"], tc["args"])
+            try:
+                result = execute_tool(tc["name"], tc["args"])
+            except TypeError as e:
+                result = (
+                    f"Error executing tool '{tc['name']}': "
+                    f"TypeError ({type(e).__name__}: {e}). "
+                    "This usually means a required parameter was missing."
+                )
+            self.messages.append({
+                "role": "tool",
+                "tool_call_id": tc["id"],
+                "content": result,
+            })
+            tool_results.append(result)
+            self._show_tool_result(result)
+        else:
+            console.print(
+                f"\n  [bold cyan]⚡⚡⚡ Parallel execution: {len(parsed_calls)} tools[/bold cyan]"
+            )
+            for tc in parsed_calls:
                 self._show_tool_call(tc["name"], tc["args"])
-                try:
-                    result = execute_tool(tc["name"], tc["args"])
-                except TypeError as e:
+
+            loop = asyncio.get_event_loop()
+            with ThreadPoolExecutor(max_workers=len(parsed_calls)) as executor:
+                futures = []
+                for tc in parsed_calls:
+                    fut = loop.run_in_executor(
+                        executor,
+                        self._execute_tool_safe,
+                        tc["name"],
+                        tc["args"],
+                    )
+                    futures.append(fut)
+
+                results = await asyncio.gather(*futures, return_exceptions=True)
+
+            for i, (tc, result) in enumerate(zip(parsed_calls, results)):
+                if isinstance(result, Exception):
                     result = (
                         f"Error executing tool '{tc['name']}': "
-                        f"TypeError ({type(e).__name__}: {e}). "
-                        "This usually means a required parameter was missing."
+                        f"{type(result).__name__}: {result}"
                     )
                 self.messages.append({
                     "role": "tool",
                     "tool_call_id": tc["id"],
                     "content": result,
                 })
+                tool_results.append(result)
                 self._show_tool_result(result)
-            else:
-                # Multiple tool calls - execute in parallel!
-                console.print(
-                    f"\n  [bold cyan]⚡⚡⚡ Parallel execution: {len(parsed_calls)} tools[/bold cyan]"
+
+        # ── Auto-continuation check after tool execution ──
+        if (
+            not self._is_nudge_message(full_content)
+            and self.continuation.can_continue()
+        ):
+            has_tool_error = any(
+                detect_stream_interruption(r) for r in tool_results
+            ) or any(
+                "error executing tool" in r.lower() for r in tool_results
+            )
+            work_incomplete = detect_incomplete_work(full_content, tool_results)
+
+            if has_tool_error and self.continuation.continue_on_tool_error:
+                nudge = generate_continuation_nudge(
+                    reason="tool_error",
+                    continuation_count=self.continuation.count,
+                    max_continuations=self.continuation.max_continuations,
                 )
-                for tc in parsed_calls:
-                    self._show_tool_call(tc["name"], tc["args"])
+                self.continuation.record_continuation("tool_error", nudge)
+                self._show_continuation_nudge(
+                    "tool_error",
+                    self.continuation.count,
+                    self.continuation.max_continuations,
+                )
+                self.messages.append({"role": "user", "content": nudge})
+                return True  # Continue
 
-                # Run all tools concurrently using ThreadPoolExecutor
-                loop = asyncio.get_event_loop()
-                with ThreadPoolExecutor(max_workers=len(parsed_calls)) as executor:
-                    futures = []
-                    for tc in parsed_calls:
-                        fut = loop.run_in_executor(
-                            executor,
-                            self._execute_tool_safe,
-                            tc["name"],
-                            tc["args"],
-                        )
-                        futures.append(fut)
+            elif work_incomplete and self.continuation.continue_on_incomplete_work:
+                nudge = generate_continuation_nudge(
+                    reason="incomplete_work",
+                    continuation_count=self.continuation.count,
+                    max_continuations=self.continuation.max_continuations,
+                )
+                self.continuation.record_continuation("incomplete_work", nudge)
+                self._show_continuation_nudge(
+                    "incomplete_work",
+                    self.continuation.count,
+                    self.continuation.max_continuations,
+                )
+                self.messages.append({"role": "user", "content": nudge})
+                return True  # Continue
 
-                    # Wait for all to complete
-                    results = await asyncio.gather(*futures, return_exceptions=True)
+        return True  # Continue to next turn naturally (no nudge needed)
 
-                # Process results
-                for i, (tc, result) in enumerate(zip(parsed_calls, results)):
-                    if isinstance(result, Exception):
-                        result = (
-                            f"Error executing tool '{tc['name']}': "
-                            f"{type(result).__name__}: {result}"
-                        )
-                    self.messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc["id"],
-                        "content": result,
-                    })
-                    self._show_tool_result(result)
+    async def chat(self, user_message: str) -> None:
+        """Send a user message and handle streaming + tool calls."""
+        # Reset continuation tracker for new user message
+        self.continuation.reset(user_message)
+
+        self.messages.append({"role": "user", "content": user_message})
+
+        MAX_TURNS = 100
+        turn = 0
+
+        while turn < MAX_TURNS:
+            turn += 1
+            should_continue = await self._process_turn(turn_number=turn)
+            if not should_continue:
+                return
+
+        console.print(
+            f"\n  [bold yellow]Reached max conversation turns ({MAX_TURNS}). "
+            "Stopping to prevent infinite loop.[/bold yellow]\n"
+        )

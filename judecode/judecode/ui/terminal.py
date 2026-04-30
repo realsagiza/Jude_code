@@ -10,7 +10,9 @@ from rich.align import Align
 from rich.rule import Rule
 from rich.box import DOUBLE_EDGE, HEAVY_EDGE
 
-from judecode.config import SYSTEM_PROMPT, MODEL, BASE_URL
+from judecode.config import (
+    SYSTEM_PROMPT, MODEL, BASE_URL, MAX_CONTINUATIONS,
+)
 from judecode.api.client import ApiClient
 from judecode.agent.engine import AgentEngine
 from judecode.ui.console import console
@@ -49,7 +51,10 @@ def print_greeting() -> None:
     info.append(f"Model: ", style="dim")
     info.append(f"{MODEL}\n", style="bold cyan")
     info.append(f"API: ", style="dim")
-    info.append(f"{BASE_URL}", style="dim blue")
+    info.append(f"{BASE_URL}\n", style="dim blue")
+    info.append(f"Continuation: ", style="dim")
+    info.append(f"✓ Enabled", style="bold green")
+    info.append(f" (max {MAX_CONTINUATIONS} nudges)", style="dim")
 
     panel = Panel(
         info,
@@ -152,11 +157,13 @@ async def run_agent_interactive() -> None:
             if user_input.lower() == "/help":
                 console.print("""
 [bold cyan]Jude Code Commands:[/bold cyan]
-  [bold]/help[/bold]   - Show this help
-  [bold]/quit[/bold]   - Exit Jude Code
-  [bold]/clear[/bold]  - Clear the conversation history
-  [bold]/model[/bold]  - Show current model info
-  [bold]Ctrl+D[/bold]  - Exit
+  [bold]/help[/bold]      - Show this help
+  [bold]/quit[/bold]      - Exit Jude Code
+  [bold]/clear[/bold]     - Clear the conversation history
+  [bold]/model[/bold]     - Show current model info
+  [bold]/continue[/bold]  - Manually trigger continuation (nudge agent to continue)
+  [bold]/status[/bold]    - Show continuation status and history
+  [bold]Ctrl+D[/bold]     - Exit
 
 You can type any question or request.
 The agent can use tools like shell, read, write, edit, grep, web_search, etc.
@@ -171,6 +178,32 @@ The agent can use tools like shell, read, write, edit, grep, web_search, etc.
             if user_input.lower() == "/model":
                 console.print(f"  [dim]Model: {MODEL}[/dim]", style="cyan")
                 console.print(f"  [dim]API: {BASE_URL}[/dim]\n", style="dim")
+                continue
+
+            if user_input.lower() == "/status":
+                ct = agent.continuation
+                console.print(f"\n  [bold cyan]Continuation Status:[/bold cyan]")
+                console.print(f"    Max continuations: [bold]{ct.max_continuations}[/bold]")
+                console.print(f"    Used: [bold]{ct.count}[/bold]")
+                console.print(f"    Stream error recovery: [bold]{'✓' if ct.continue_on_stream_error else '✗'}[/bold]")
+                console.print(f"    Incomplete work detection: [bold]{'✓' if ct.continue_on_incomplete_work else '✗'}[/bold]")
+                console.print(f"    Tool error recovery: [bold]{'✓' if ct.continue_on_tool_error else '✗'}[/bold]")
+                if ct.history:
+                    console.print(f"\n    [dim]History:[/dim]")
+                    for h in ct.history:
+                        console.print(f"      #{h['count']}: {h['reason']} at {h['timestamp'][:19]}")
+                else:
+                    console.print(f"\n    [dim]No continuations triggered yet.[/dim]")
+                console.print()
+                continue
+
+            if user_input.lower() == "/continue":
+                if agent.continuation.can_continue():
+                    await agent.continue_task()
+                else:
+                    console.print(
+                        "\n  [bold red]Max continuations reached. Start a new task or clear the conversation.[/bold red]\n"
+                    )
                 continue
 
             # Normal message - process through agent

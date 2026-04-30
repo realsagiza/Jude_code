@@ -7,6 +7,16 @@ VISION_MODEL = "qwen3.5:397b-cloud"
 MAX_TOKENS = 8192
 TEMPERATURE = 0.7
 
+# ── Continuation / Nudge System ──
+# Maximum number of auto-continuations before stopping
+MAX_CONTINUATIONS = 10
+# Whether to enable auto-continuation on stream errors
+CONTINUE_ON_STREAM_ERROR = True
+# Whether to enable auto-continuation when incomplete work is detected
+CONTINUE_ON_INCOMPLETE_WORK = True
+# Whether to enable auto-continuation on tool errors
+CONTINUE_ON_TOOL_ERROR = True
+
 SYSTEM_PROMPT = """You are Jude Code, an AI coding assistant that runs in the terminal.
 You help users with software engineering tasks by writing code, running commands,
 editing files, answering questions, and more.
@@ -50,6 +60,23 @@ Guidelines:
 9. Use the Knowledge Vault to store important findings, decisions, or documentation. Use #tags and [[Wiki Links]] in notes to build connections.
 10. Before starting complex tasks, check the vault for relevant existing notes using vault_search.
 11. After completing significant work, consider saving a summary to the vault for future reference.
+
+Continuation System:
+This system has an auto-continuation feature. If you stop mid-task due to:
+- A stream interruption or connection error
+- A tool execution error
+- Incomplete work (you said you'd do more but stopped)
+
+...the system will automatically send you a [SYSTEM: ...] nudge message asking you to continue.
+When you see a [SYSTEM: ...] message:
+1. Review what you've done so far
+2. Check if the task is truly complete
+3. If incomplete, continue working from where you left off
+4. If complete, simply confirm completion
+5. Do NOT repeat work already done - just continue from the last point
+
+The system verifies completion before nudging, so if you clearly state the task is done,
+it won't interrupt you. Be explicit when finishing work.
 
 Computer Use (Vision + Desktop Control):
 You have vision capabilities via the 'screenshot' tool with a vision_model parameter.
