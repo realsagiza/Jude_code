@@ -11,6 +11,7 @@ from judecode.agent.continuation import (
     ContinuationTracker,
     detect_stream_interruption,
     detect_incomplete_work,
+    detect_token_limit_truncation,
     generate_continuation_nudge,
 )
 from judecode.config import (
@@ -85,6 +86,7 @@ class AgentEngine:
             "stream_interrupted": "Stream Interrupted",
             "tool_error": "Tool Error Detected",
             "incomplete_work": "Possible Incomplete Work",
+            "token_limit": "Token Limit Reached",
         }
         label = reason_labels.get(reason, "Checking Progress")
         console.print(
@@ -145,6 +147,7 @@ class AgentEngine:
         has_shown_reasoning = False
         reasoning_completed = False
         tool_results: list[str] = []
+        finish_reason = ""
 
         # Show thinking indicator
         self._show_thinking(turn_number)
@@ -157,6 +160,11 @@ class AgentEngine:
                 choices = chunk.get("choices", [])
                 if not choices:
                     continue
+
+                # ── Track finish_reason from the last chunk ──
+                chunk_finish = choices[0].get("finish_reason")
+                if chunk_finish:
+                    finish_reason = chunk_finish
 
                 delta = choices[0].get("delta", {})
 
@@ -247,8 +255,20 @@ class AgentEngine:
             )
             console.print()
 
+        # ── Save finish_reason for continuation logic ──
+        self.continuation.last_finish_reason = finish_reason
+
         # ── Determine if there were tool calls ──
         has_tool_calls = any("name" in tc for tc in tool_calls)
+
+        # ── Capture partial tool call arguments if truncated ──
+        partial_arguments = ""
+        if finish_reason == "length" and has_tool_calls:
+            # Save the raw (potentially incomplete) arguments for the nudge
+            for tc in tool_calls:
+                if "arguments" in tc and tc.get("name"):
+                    partial_arguments += f"Tool: {tc['name']}\nArguments:\n{tc['arguments']}\n\n"
+            self.continuation.partial_arguments_buffer = partial_arguments
 
         # If no tool calls, store assistant message and check for continuation
         if not has_tool_calls:
@@ -256,6 +276,25 @@ class AgentEngine:
                 "role": "assistant",
                 "content": full_content,
             })
+
+            # ── Check for token limit truncation ──
+            if finish_reason == "length":
+                if self.continuation.can_continue():
+                    nudge = generate_continuation_nudge(
+                        reason="token_limit",
+                        continuation_count=self.continuation.count,
+                        max_continuations=self.continuation.max_continuations,
+                        partial_content=full_content,
+                    )
+                    self.continuation.record_continuation("token_limit", nudge)
+                    self._show_continuation_nudge(
+                        "token_limit",
+                        self.continuation.count,
+                        self.continuation.max_continuations,
+                    )
+                    self.messages.append({"role": "user", "content": nudge})
+                    return True  # Continue
+                return False
 
             if (
                 not self._is_nudge_message(full_content)
@@ -314,6 +353,46 @@ class AgentEngine:
                 "name": tc["name"],
                 "args": args,
             })
+
+        # ── If finish_reason is "length" AND we have partial tool calls ──
+        # This means the tool arguments were truncated. We still execute what we can,
+        # but the nudge will tell the model to continue from where it left off.
+        if finish_reason == "length" and parsed_calls:
+            # Execute what we have (even if partial)
+            for tc in parsed_calls:
+                self._show_tool_call(tc["name"], tc["args"])
+                try:
+                    result = execute_tool(tc["name"], tc["args"])
+                except Exception as e:
+                    result = (
+                        f"Error executing tool '{tc['name']}': "
+                        f"{type(e).__name__}: {e}"
+                    )
+                self.messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": result,
+                })
+                tool_results.append(result)
+                self._show_tool_result(result)
+
+            # Send continuation nudge with partial arguments
+            if self.continuation.can_continue():
+                nudge = generate_continuation_nudge(
+                    reason="token_limit",
+                    continuation_count=self.continuation.count,
+                    max_continuations=self.continuation.max_continuations,
+                    partial_content=full_content,
+                    partial_arguments=partial_arguments,
+                )
+                self.continuation.record_continuation("token_limit", nudge)
+                self._show_continuation_nudge(
+                    "token_limit",
+                    self.continuation.count,
+                    self.continuation.max_continuations,
+                )
+                self.messages.append({"role": "user", "content": nudge})
+                return True  # Continue
 
         if len(parsed_calls) == 1:
             tc = parsed_calls[0]

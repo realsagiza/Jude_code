@@ -39,6 +39,23 @@ TOOL_ERROR_INDICATORS = [
     "connection reset",
 ]
 
+# ── Indicators that content was truncated (token limit exceeded) ──
+
+TOKEN_LIMIT_INDICATORS = [
+    "token limit",
+    "max tokens",
+    "maximum tokens",
+    "context length",
+    "maximum context",
+    "context window",
+    "too many tokens",
+    "token budget",
+    "finish_reason.*length",
+    "truncated",
+    "content truncated",
+    "output truncated",
+]
+
 INCOMPLETE_WORK_PATTERNS = [
     # File operations that didn't complete
     r"(?:still|need|must|should|going to).*(?:write|create|edit|update|delete|add)",
@@ -52,6 +69,11 @@ INCOMPLETE_WORK_PATTERNS = [
     r"too long",
     r"max.*length",
     r"exceeded",
+    r"token limit",
+    r"max tokens",
+    r"maximum tokens",
+    r"context length",
+    r"truncated",
     # Shell errors
     r"command not found",
     r"permission denied",
@@ -102,6 +124,16 @@ def detect_stream_interruption(last_content: str) -> bool:
     return any(indicator in lower for indicator in PARTIAL_CONTENT_INDICATORS)
 
 
+def detect_token_limit_truncation(last_content: str, finish_reason: str = "") -> bool:
+    """Check if the response was truncated due to token limit."""
+    if finish_reason == "length":
+        return True
+    if not last_content:
+        return False
+    lower = last_content.lower()
+    return any(indicator in lower for indicator in TOKEN_LIMIT_INDICATORS)
+
+
 def detect_tool_error(tool_result: str) -> bool:
     """Check if a tool result indicates an error."""
     if not tool_result:
@@ -150,9 +182,15 @@ def should_continue(
     max_continuations: int,
     has_tool_calls: bool,
     had_stream_error: bool,
+    finish_reason: str = "",
+    partial_arguments: str = "",
 ) -> tuple[bool, str]:
     """
     Decide if the agent should auto-continue.
+
+    Args:
+        finish_reason: The finish_reason from the API response ("stop", "length", etc.)
+        partial_arguments: Any partial tool call arguments that were truncated
 
     Returns:
         (should_continue: bool, nudge_message: str)
@@ -170,6 +208,27 @@ def should_continue(
             f"Summarize what you've done so far and complete the remaining work. "
             f"(Continuation {continuation_count + 1}/{max_continuations})]",
         )
+
+    # If finish_reason is "length", content was truncated by token limit
+    if finish_reason == "length":
+        if partial_arguments:
+            return (
+                True,
+                f"[SYSTEM: The previous response was truncated because it exceeded the token limit. "
+                f"Here are the partial tool arguments that were captured:\n\n"
+                f"{partial_arguments[:1000]}\n\n"
+                f"Please CONTINUE writing from where you left off — do NOT restart from the beginning. "
+                f"Use the edit tool to append to the file that was being written, or continue the remaining content. "
+                f"(Continuation {continuation_count + 1}/{max_continuations})]",
+            )
+        else:
+            return (
+                True,
+                f"[SYSTEM: The previous response was truncated because it exceeded the token limit. "
+                f"Please continue from where you left off — do NOT restart. "
+                f"If you were writing a file, use edit or append to add the remaining content. "
+                f"(Continuation {continuation_count + 1}/{max_continuations})]",
+            )
 
     # If no tool calls were made and no stream error, the agent probably finished
     if not has_tool_calls and not had_stream_error:
@@ -208,6 +267,7 @@ def generate_continuation_nudge(
     continuation_count: int,
     max_continuations: int,
     partial_content: str = "",
+    partial_arguments: str = "",
 ) -> str:
     """Generate a context-aware nudge message for the agent."""
     remaining = max_continuations - continuation_count
@@ -217,6 +277,16 @@ def generate_continuation_nudge(
             f"[SYSTEM: Connection was interrupted mid-response. "
             f"Here's what was received so far:\n\n{partial_content[:500]}\n\n"
             f"Please continue from where you left off. "
+            f"You have {remaining} continuation(s) remaining.]"
+        )
+
+    elif reason == "token_limit":
+        args_preview = partial_arguments[:800] if partial_arguments else "(not available)"
+        return (
+            f"[SYSTEM: The response was truncated because it exceeded the token limit. "
+            f"Here are the partial tool arguments captured:\n\n{args_preview}\n\n"
+            f"IMPORTANT: Continue writing from where you left off — do NOT restart from scratch. "
+            f"If you were writing a file, use the edit tool to append remaining content. "
             f"You have {remaining} continuation(s) remaining.]"
         )
 
@@ -264,6 +334,8 @@ class ContinuationTracker:
         self.last_user_message: str = ""
         self.had_stream_error = False
         self.partial_content_buffer = ""
+        self.last_finish_reason: str = ""
+        self.partial_arguments_buffer: str = ""
 
     def reset(self, user_message: str = ""):
         """Reset when user sends a new message."""
@@ -272,6 +344,8 @@ class ContinuationTracker:
         self.last_user_message = user_message
         self.had_stream_error = False
         self.partial_content_buffer = ""
+        self.last_finish_reason = ""
+        self.partial_arguments_buffer = ""
 
     def record_continuation(self, reason: str, nudge: str):
         """Record a continuation event."""

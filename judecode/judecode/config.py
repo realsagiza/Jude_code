@@ -4,7 +4,7 @@ BASE_URL = "http://127.0.0.1:11434/v1"
 API_KEY = "ollama"
 MODEL = "deepseek-v4-flash:cloud"
 VISION_MODEL = "qwen3.5:397b-cloud"
-MAX_TOKENS = 8192
+MAX_TOKENS = 65536  # Increased from 8192 to handle long code generation (1000+ lines)
 TEMPERATURE = 0.7
 
 # ── Continuation / Nudge System ──
@@ -66,6 +66,7 @@ This system has an auto-continuation feature. If you stop mid-task due to:
 - A stream interruption or connection error
 - A tool execution error
 - Incomplete work (you said you'd do more but stopped)
+- Token limit exceeded (finish_reason: "length" - the response was truncated)
 
 ...the system will automatically send you a [SYSTEM: ...] nudge message asking you to continue.
 When you see a [SYSTEM: ...] message:
@@ -74,6 +75,12 @@ When you see a [SYSTEM: ...] message:
 3. If incomplete, continue working from where you left off
 4. If complete, simply confirm completion
 5. Do NOT repeat work already done - just continue from the last point
+
+IMPORTANT - When writing long files (1000+ lines):
+- If the response gets truncated (token limit), you will receive a nudge with the partial content
+- When continuing, use the edit tool to APPEND to the file you were writing
+- Do NOT restart writing the file from scratch - always continue from where you left off
+- If you need to write a very long file, consider writing it in chunks (e.g., first write lines 1-500, then append 501-1000)
 
 The system verifies completion before nudging, so if you clearly state the task is done,
 it won't interrupt you. Be explicit when finishing work.

@@ -18,7 +18,7 @@ class ApiClient:
         model: str = MODEL,
         max_tokens: int = MAX_TOKENS,
         temperature: float = TEMPERATURE,
-        max_retries: int = 2,
+        max_retries: int = 3,  # Increased from 2 to 3 for better resilience
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
