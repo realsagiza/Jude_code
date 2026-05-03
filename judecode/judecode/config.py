@@ -1,15 +1,47 @@
-"""Configuration for Jude Code."""
+"""Configuration for Jude Code.
 
-BASE_URL = "http://127.0.0.1:11434/v1"
-API_KEY = "ollama"
-MODEL = "deepseek-v4-flash:cloud"
-VISION_MODEL = "qwen3.5:397b-cloud"
-MAX_TOKENS = 65536  # Increased from 8192 to handle long code generation (1000+ lines)
-TEMPERATURE = 0.7
+Config values can be overridden via environment variables:
+    JUDECODE_BASE_URL
+    JUDECODE_API_KEY
+    JUDECODE_MODEL
+    JUDECODE_VISION_MODEL
+    JUDECODE_MAX_TOKENS
+    JUDECODE_TEMPERATURE
+    JUDECODE_MAX_CONTINUATIONS
+    JUDECODE_VAULT
+
+This allows the Windows .exe to be configured via config.ini
+(loaded by runtime_hook_windows.py before this module is imported).
+"""
+
+import os
+
+
+def _env(key: str, default: str) -> str:
+    """Get config from environment variable, with fallback to default."""
+    env_key = f"JUDECODE_{key}"
+    return os.environ.get(env_key, default)
+
+
+def _env_int(key: str, default: int) -> int:
+    """Get int config from environment variable."""
+    try:
+        return int(os.environ.get(f"JUDECODE_{key}", str(default)))
+    except (ValueError, TypeError):
+        return default
+
+
+# ── API Configuration ──
+BASE_URL = _env("BASE_URL", "http://127.0.0.1:11434/v1")
+API_KEY = _env("API_KEY", "ollama")
+MODEL = _env("MODEL", "deepseek-v4-flash:cloud")
+VISION_MODEL = _env("VISION_MODEL", "qwen3.5:397b-cloud")
+MAX_TOKENS = _env_int("MAX_TOKENS", 65536)
+TEMPERATURE = float(_env("TEMPERATURE", "0.7"))
 
 # ── Continuation / Nudge System ──
 # Maximum number of auto-continuations before stopping
-MAX_CONTINUATIONS = 10
+MAX_CONTINUATIONS = _env_int("MAX_CONTINUATIONS", 10)
 # Whether to enable auto-continuation on stream errors
 CONTINUE_ON_STREAM_ERROR = True
 # Whether to enable auto-continuation when incomplete work is detected
