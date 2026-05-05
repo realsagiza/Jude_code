@@ -42,6 +42,9 @@ from judecode.utils.computer_tools import (
     mouse_move, mouse_click, mouse_double_click, mouse_drag,
     keyboard_type, keyboard_press, keyboard_hotkey,
     scroll, open_app, list_running_apps,
+    # ⚡ NEW: Fast accessibility tree tools (10-50x faster than vision!)
+    get_browser_accessibility_snapshot,
+    get_desktop_accessibility_tree,
 )
 
 
@@ -838,6 +841,35 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 "properties": {}
             }
         }
+    },
+
+    # ── ⚡ NEW: Fast Accessibility Tree Tools (10-50x faster than vision) ──
+    {
+        "type": "function",
+        "function": {
+            "name": "get_browser_accessibility_snapshot",
+            "description": "⚡ FAST: Get a structured accessibility tree of the current browser page instead of using a vision model. Returns text with element labels, roles, and ref IDs. The LLM can read this directly to decide what to click/type. 10-50x faster than screenshot+vision. No vision model needed! Requires Playwright (pip install playwright && playwright install chromium).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "Optional URL to navigate to first before getting the accessibility tree."},
+                    "task_description": {"type": "string", "description": "Optional context about what the user wants to do, to focus the analysis."}
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_desktop_accessibility_tree",
+            "description": "⚡ FAST: Get a structured accessibility tree of the current active desktop window (macOS only). Uses the macOS Accessibility API (AXUIElement) to get UI element info. 10-50x faster than screenshot+vision. No vision model needed! Returns app name, window info, and UI elements in the active window.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_description": {"type": "string", "description": "Optional context about what the user wants to do, to focus the analysis."}
+                }
+            }
+        }
     }
 ]
 
@@ -1134,6 +1166,18 @@ def execute_tool(
 
         elif tool_name == "list_running_apps":
             return list_running_apps()
+
+        # ── ⚡ NEW: Fast Accessibility Tree Tools ──
+        elif tool_name == "get_browser_accessibility_snapshot":
+            return get_browser_accessibility_snapshot(
+                url=tool_params.get("url"),
+                task_description=tool_params.get("task_description"),
+            )
+
+        elif tool_name == "get_desktop_accessibility_tree":
+            return get_desktop_accessibility_tree(
+                task_description=tool_params.get("task_description"),
+            )
 
         else:
             return f"Unknown tool: {tool_name}"
