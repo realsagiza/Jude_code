@@ -160,8 +160,9 @@ async def run_agent_interactive() -> None:
 
     # ── Setup prompt_toolkit for long input ──
     if PROMPT_TOOLKIT_AVAILABLE:
-        # prompt_toolkit already supports Alt+Enter for new line by default
-        # in multiline mode. No custom key bindings needed.
+        # prompt_toolkit in multiline mode already handles:
+        # Enter = submit, Alt+Enter = new line
+        # No custom key bindings needed.
         ptk_style = PTKStyle.from_dict({
             "prompt": "bold cyan",
         })
