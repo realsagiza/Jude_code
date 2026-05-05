@@ -1,11 +1,8 @@
 """Terminal UI for Jude Code - with cool greeting and interactive loop.
 
-Supports long multi-line input via prompt_toolkit with:
-- Multi-line editing (Alt+Enter for new line, Enter to submit)
-- Syntax highlighting
-- Command history (up/down arrows)
-- Vi/Emacs key bindings
-- Auto-indent
+Supports long multi-line input with plain Python input():
+- Enter twice (blank line) to submit
+- No external dependencies needed
 """
 
 import asyncio
@@ -25,15 +22,6 @@ from judecode.config import (
 from judecode.api.client import ApiClient
 from judecode.agent.engine import AgentEngine
 from judecode.ui.console import console
-
-# ── prompt_toolkit for long input support ──
-try:
-    from prompt_toolkit import PromptSession
-    from prompt_toolkit.history import InMemoryHistory
-    from prompt_toolkit.styles import Style as PTKStyle
-    PROMPT_TOOLKIT_AVAILABLE = True
-except ImportError:
-    PROMPT_TOOLKIT_AVAILABLE = False
 
 
 def print_greeting() -> None:
@@ -90,16 +78,14 @@ def print_greeting() -> None:
     tips.append("Type ", style="white")
     tips.append("/quit", style="bold magenta")
     tips.append(" or ", style="white")
-    tips.append("Ctrl+D", style="bold magenta")
+    tips.append("Ctrl+C", style="bold green")
     tips.append(" to exit\n", style="white")
     tips.append("Type ", style="white")
     tips.append("/clear", style="bold magenta")
     tips.append(" to clear conversation\n", style="white")
     tips.append("Press ", style="white")
-    tips.append("Enter", style="bold green")
-    tips.append(" to submit, ", style="white")
-    tips.append("Alt+Enter", style="bold green")
-    tips.append(" for new line", style="white")
+    tips.append("Enter twice", style="bold green")
+    tips.append(" (blank line) to submit multi-line text", style="white")
 
     tips_panel = Panel(
         tips,
@@ -182,25 +168,30 @@ async def run_agent_interactive() -> None:
     try:
         while True:
             # ── Get user input (long text supported) ──
+            # Type your text. Press Enter twice (blank line) to send multi-line.
+            # Or just type a single line and press Enter once.
             try:
-                if session:
-                    # Use prompt_toolkit's async API
-                    prompt_text = "  >>> "
-                    user_input = await session.prompt_async(prompt_text)
+                console.print("\n  \u254b[bold cyan]\u256d[/bold cyan] ", end="")
+                first_line = input()
+                if not first_line:
+                    continue
+
+                # Check if it's a single-line command
+                first_stripped = first_line.strip()
+                is_command = first_stripped.startswith("/") or first_stripped in (
+                    "quit", "exit", ":q"
+                )
+
+                if is_command:
+                    user_input = first_stripped
                 else:
-                    # Fallback: multi-line input with plain input()
-                    # Type your message, press Enter twice (empty line) to submit
-                    console.print("\n  \u254b[bold cyan]\u256d[/bold cyan] (blank line to send)", end="")
-                    lines = []
+                    # Multi-line: read more lines until blank line
+                    lines = [first_line]
                     while True:
                         try:
                             line = input()
-                            if not line and lines:
-                                # Empty line after some text = done
+                            if not line:
                                 break
-                            if not line and not lines:
-                                # Empty line at start = skip
-                                continue
                             lines.append(line)
                         except (EOFError, KeyboardInterrupt):
                             raise
@@ -227,9 +218,10 @@ async def run_agent_interactive() -> None:
   [bold]/model[/bold]     - Show current model info
   [bold]/continue[/bold]  - Manually trigger continuation (nudge agent to continue)
   [bold]/status[/bold]    - Show continuation status and history
-  [bold]Ctrl+D[/bold]     - Exit
+  [bold]Ctrl+C[/bold]     - Exit
 
 You can type any question or request.
+For multi-line input, just press Enter twice (blank line) to send.
 The agent can use tools like shell, read, write, edit, grep, web_search, etc.
 """)
                 continue
