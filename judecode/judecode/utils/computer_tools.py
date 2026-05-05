@@ -53,7 +53,7 @@ from typing import Optional
 
 import pyautogui
 
-from judecode.config import BASE_URL, API_KEY, VISION_MODEL
+from judecode.config import VISION_BASE_URL, VISION_API_KEY, VISION_MODEL
 
 # Configure PyAutoGUI safety
 pyautogui.FAILSAFE = True  # Move mouse to top-left to abort
@@ -754,9 +754,9 @@ def _analyze_screenshot_sync(image_path: str, model: str, task_description: Opti
         "stream": False,
     }).encode("utf-8")
 
-    url = f"{BASE_URL}/chat/completions"
+    url = f"{VISION_BASE_URL}/chat/completions"
     headers = {
-        "Authorization": f"Bearer {API_KEY}",
+        "Authorization": f"Bearer {VISION_API_KEY}",
         "Content-Type": "application/json",
     }
 
@@ -775,7 +775,7 @@ def _analyze_screenshot_sync(image_path: str, model: str, task_description: Opti
         raise RuntimeError(f"Vision API error {e.code}: {error_body}")
     except urllib.error.URLError as e:
         raise RuntimeError(
-            f"Cannot connect to vision model at {BASE_URL}. "
+            f"Cannot connect to vision model at {VISION_BASE_URL}. "
             f"Make sure '{model}' is running. Error: {e.reason}"
         )
 

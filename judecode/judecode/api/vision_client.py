@@ -1,4 +1,8 @@
-"""Vision API Client for analyzing screenshots using a vision-capable model (e.g. Qwen)."""
+"""Vision API Client for analyzing screenshots using a vision-capable model (e.g. Qwen).
+
+VISION: ใช้ Ollama local (Qwen) สำหรับดูรูปภาพเท่านั้น
+MAIN:   ใช้ DeepSeek API โดยตรง (ยิง API ข้ามไป DeepSeex เลย ไม่ผ่าน Ollama)
+"""
 
 import base64
 import json
@@ -7,7 +11,7 @@ from typing import Optional
 
 import httpx
 
-from judecode.config import BASE_URL, API_KEY, VISION_MODEL
+from judecode.config import VISION_BASE_URL, VISION_API_KEY, VISION_MODEL
 
 
 class VisionClient:
@@ -15,12 +19,14 @@ class VisionClient:
 
     This client runs SEPARATELY from the main model.
     It only handles image analysis - the main model decides what actions to take.
+
+    Vision uses Ollama local (Qwen) - NOT DeepSeek API.
     """
 
     def __init__(
         self,
-        base_url: str = BASE_URL,
-        api_key: str = API_KEY,
+        base_url: str = VISION_BASE_URL,
+        api_key: str = VISION_API_KEY,
         model: str = VISION_MODEL,
         timeout: int = 120,
     ):

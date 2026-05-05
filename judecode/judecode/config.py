@@ -31,12 +31,24 @@ def _env_int(key: str, default: int) -> int:
         return default
 
 
-# ── API Configuration ──
-BASE_URL = _env("BASE_URL", "http://127.0.0.1:11434/v1")
-API_KEY = _env("API_KEY", "ollama")
-MODEL = _env("MODEL", "deepseek-v4-flash:cloud")
+# ── DeepSeek API (Main Model) ──
+# ยิง API ไปที่ DeepSeek โดยตรง
+DEEPSEEK_BASE_URL = _env("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+DEEPSEEK_API_KEY = _env("DEEPSEEK_API_KEY", "sk-YOUR-KEY-HERE")
+DEEPSEEK_MODEL = _env("DEEPSEEK_MODEL", "deepseek-chat")
+
+# ── Ollama (Vision Model - Qwen) ──
+# ใช้ Ollama local สำหรับ vision/screenshot เท่านั้น
+VISION_BASE_URL = _env("VISION_BASE_URL", "http://127.0.0.1:11434/v1")
+VISION_API_KEY = _env("VISION_API_KEY", "ollama")
 VISION_MODEL = _env("VISION_MODEL", "qwen3.5:397b-cloud")
-MAX_TOKENS = _env_int("MAX_TOKENS", 65536)
+
+# ── Shared API Config (for backward compatibility) ──
+BASE_URL = DEEPSEEK_BASE_URL
+API_KEY = DEEPSEEK_API_KEY
+MODEL = DEEPSEEK_MODEL
+# DeepSeek-chat output limit ~8K tokens, ปรับให้เหมาะสม
+MAX_TOKENS = _env_int("MAX_TOKENS", 8192)
 TEMPERATURE = float(_env("TEMPERATURE", "0.7"))
 
 # ── Continuation / Nudge System ──

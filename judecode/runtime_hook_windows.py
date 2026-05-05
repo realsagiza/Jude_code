@@ -47,13 +47,27 @@ def _load_config_ini():
 
             if 'JudeCode' in config:
                 section = config['JudeCode']
-                # Set environment variables that judecode.config will read
-                if 'BaseURL' in section:
-                    os.environ['JUDECODE_BASE_URL'] = section['BaseURL']
-                if 'Model' in section:
-                    os.environ['JUDECODE_MODEL'] = section['Model']
+
+                # ── DeepSeek API (Main Model) ──
+                if 'DeepSeekBaseURL' in section:
+                    os.environ['JUDECODE_DEEPSEEK_BASE_URL'] = section['DeepSeekBaseURL']
+                if 'DeepSeekAPIKey' in section:
+                    os.environ['JUDECODE_DEEPSEEK_API_KEY'] = section['DeepSeekAPIKey']
+                if 'DeepSeekModel' in section:
+                    os.environ['JUDECODE_DEEPSEEK_MODEL'] = section['DeepSeekModel']
+
+                # ── Ollama Vision ──
+                if 'VisionBaseURL' in section:
+                    os.environ['JUDECODE_VISION_BASE_URL'] = section['VisionBaseURL']
                 if 'VisionModel' in section:
                     os.environ['JUDECODE_VISION_MODEL'] = section['VisionModel']
+
+                # ── Backward compat ──
+                if 'BaseURL' in section and 'DeepSeekBaseURL' not in section:
+                    os.environ['JUDECODE_DEEPSEEK_BASE_URL'] = section['BaseURL']
+                if 'Model' in section and 'DeepSeekModel' not in section:
+                    os.environ['JUDECODE_DEEPSEEK_MODEL'] = section['Model']
+
                 if 'VaultPath' in section:
                     os.environ['JUDECODE_VAULT'] = section['VaultPath']
     except Exception:
