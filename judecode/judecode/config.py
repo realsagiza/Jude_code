@@ -15,6 +15,10 @@ This allows the Windows .exe to be configured via config.ini
 """
 
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 def _env(key: str, default: str) -> str:
