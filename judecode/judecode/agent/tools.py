@@ -8,6 +8,9 @@ from judecode.utils.shell import execute_shell
 from judecode.utils.search_tools import glob_search, grep_search
 from judecode.utils.web_tools import web_fetch, web_search
 
+# ── Task Management Tools ──
+from judecode.utils.task_tools import execute_task_tool, TASK_TOOL_FUNCTIONS
+
 from judecode.knowledge.notes import (
     create_note,
     read_note,
@@ -891,6 +894,241 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 }
             }
         }
+    },
+
+    # ── ⚡ NEW: Task Management Tools ──
+    {
+        "type": "function",
+        "function": {
+            "name": "task_add",
+            "description": "Add a new task to the task queue. Returns the task ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Task title"},
+                    "description": {"type": "string", "description": "Optional description"},
+                    "priority": {"type": "string", "enum": ["low", "medium", "high", "urgent"], "description": "Priority level (default: medium)"},
+                    "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional list of tags"}
+                },
+                "required": ["title"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_list",
+            "description": "List tasks with optional filters by status, priority, or tag.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string", "enum": ["pending", "in_progress", "done", "cancelled"], "description": "Filter by status"},
+                    "priority": {"type": "string", "enum": ["low", "medium", "high", "urgent"], "description": "Filter by priority"},
+                    "tag": {"type": "string", "description": "Filter by tag"},
+                    "sort_by": {"type": "string", "enum": ["priority", "status", "created", "updated"], "description": "Sort field (default: priority)"},
+                    "reverse": {"type": "boolean", "description": "Reverse sort order"}
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_get",
+            "description": "Get detailed info about a specific task by ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "integer", "description": "Task ID"}
+                },
+                "required": ["task_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_update",
+            "description": "Update a task's title, description, priority, or tags.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "integer", "description": "Task ID"},
+                    "title": {"type": "string", "description": "New title"},
+                    "description": {"type": "string", "description": "New description"},
+                    "priority": {"type": "string", "enum": ["low", "medium", "high", "urgent"], "description": "New priority"},
+                    "tags": {"type": "array", "items": {"type": "string"}, "description": "New tags list"}
+                },
+                "required": ["task_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_delete",
+            "description": "Delete a task by ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "integer", "description": "Task ID"}
+                },
+                "required": ["task_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_start",
+            "description": "Mark a task as in_progress. Use this when you start working on a task.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "integer", "description": "Task ID"}
+                },
+                "required": ["task_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_complete",
+            "description": "Mark a task as done. Call this when a task is completed.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "integer", "description": "Task ID"}
+                },
+                "required": ["task_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_cancel",
+            "description": "Cancel a task (mark as cancelled).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "integer", "description": "Task ID"}
+                },
+                "required": ["task_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_next",
+            "description": "Get the next pending task from the queue. Shows what to work on next.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_queue",
+            "description": "Show the full prioritized task execution queue.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string", "enum": ["pending", "in_progress", "done", "cancelled"], "description": "Filter by status (default: pending)"},
+                    "sort_by": {"type": "string", "enum": ["priority", "status", "created", "updated"], "description": "Sort field (default: priority)"}
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_advance",
+            "description": "Complete the current task and advance to the next one in the queue.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_summary",
+            "description": "Get a summary of task statistics (total, pending, in_progress, done, etc.).",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_clear_done",
+            "description": "Delete all completed tasks from the list.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_reset_queue",
+            "description": "Reset all in_progress tasks back to pending status.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_add_pomodoro",
+            "description": "Add a pomodoro session count to a task.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "integer", "description": "Task ID"}
+                },
+                "required": ["task_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_import",
+            "description": "Import tasks from a JSON file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Path to JSON file"}
+                },
+                "required": ["path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_export",
+            "description": "Export all tasks to a JSON file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Path to save JSON file"}
+                },
+                "required": ["path"]
+            }
+        }
     }
 ]
 
@@ -1199,6 +1437,10 @@ def execute_tool(
             return get_desktop_accessibility_tree(
                 task_description=tool_params.get("task_description"),
             )
+
+        # ── ⚡ NEW: Task Management Tools ──
+        elif tool_name in TASK_TOOL_FUNCTIONS:
+            return execute_task_tool(tool_name, tool_params)
 
         else:
             return f"Unknown tool: {tool_name}"
