@@ -151,7 +151,8 @@ async def run_agent_interactive() -> None:
             # Or just type a single line and press Enter once.
             try:
                 console.print("\n  \u254b[bold cyan]\u256d[/bold cyan] ", end="")
-                first_line = input()
+                loop = asyncio.get_running_loop()
+                first_line = await loop.run_in_executor(None, input)
                 if not first_line:
                     continue
 
@@ -168,7 +169,7 @@ async def run_agent_interactive() -> None:
                     lines = [first_line]
                     while True:
                         try:
-                            line = input()
+                            line = await loop.run_in_executor(None, input)
                             if not line:
                                 break
                             lines.append(line)
