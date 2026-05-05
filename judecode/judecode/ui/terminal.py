@@ -144,27 +144,6 @@ async def run_agent_interactive() -> None:
 
     print_greeting()
 
-    # ── Setup prompt_toolkit for long input ──
-    if PROMPT_TOOLKIT_AVAILABLE:
-        # prompt_toolkit in multiline mode already handles:
-        # Enter = submit, Alt+Enter = new line
-        # No custom key bindings needed.
-        ptk_style = PTKStyle.from_dict({
-            "prompt": "bold cyan",
-        })
-
-        session = PromptSession(
-            history=InMemoryHistory(),
-            style=ptk_style,
-            enable_history_search=True,
-            multiline=True,
-            lexer=None,
-            wrap_lines=True,
-            complete_while_typing=False,
-        )
-    else:
-        session = None
-
     try:
         while True:
             # ── Get user input (long text supported) ──
