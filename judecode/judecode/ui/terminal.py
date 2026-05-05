@@ -196,11 +196,27 @@ async def run_agent_interactive() -> None:
             # ── Get user input (long text supported) ──
             try:
                 if session:
-                    prompt_text = "\n  \u254b[bold cyan]\u256d[/bold cyan] "
-                    user_input = await session.prompt_async(prompt_text, default="")
+                    # Use prompt_toolkit's async API directly
+                    prompt_text = "  >>> "
+                    user_input = await session.prompt_async(prompt_text)
                 else:
-                    console.print("\n  \u254b[bold cyan]\u256d[/bold cyan] ", end="")
-                    user_input = input()
+                    # Fallback: multi-line input with plain input()
+                    # Type your message, press Enter twice (empty line) to submit
+                    console.print("\n  \u254b[bold cyan]\u256d[/bold cyan] (Enter twice to send)", end="")
+                    lines = []
+                    while True:
+                        try:
+                            line = input()
+                            if not line and lines:
+                                # Empty line after some text = done
+                                break
+                            if not line and not lines:
+                                # Empty line at start = skip
+                                continue
+                            lines.append(line)
+                        except (EOFError, KeyboardInterrupt):
+                            raise
+                    user_input = "\n".join(lines)
             except (EOFError, KeyboardInterrupt):
                 print_goodbye()
                 break
