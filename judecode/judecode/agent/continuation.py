@@ -320,7 +320,7 @@ class ContinuationTracker:
 
     def __init__(
         self,
-        max_continuations: int = 10,
+        max_continuations: int = 100,
         continue_on_stream_error: bool = True,
         continue_on_incomplete_work: bool = True,
         continue_on_tool_error: bool = True,
