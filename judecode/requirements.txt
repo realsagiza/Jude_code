@@ -2,6 +2,9 @@ httpx>=0.27.0
 rich>=13.7.0
 pyperclip>=1.8.2
 
+# Long multi-line input support
+prompt_toolkit>=3.0.0
+
 # Computer Use (vision + desktop control)
 # Uses mss (cross-platform) for screenshots instead of macOS-only pyobjc
 mss>=9.0.0

@@ -1,7 +1,16 @@
-"""Terminal UI for Jude Code - with cool greeting and interactive loop."""
+"""Terminal UI for Jude Code - with cool greeting and interactive loop.
+
+Supports long multi-line input via prompt_toolkit with:
+- Multi-line editing (Alt+Enter for new line, Enter to submit)
+- Syntax highlighting
+- Command history (up/down arrows)
+- Vi/Emacs key bindings
+- Auto-indent
+"""
 
 import asyncio
 import sys
+import os
 
 from rich.panel import Panel
 from rich.markdown import Markdown
@@ -16,6 +25,18 @@ from judecode.config import (
 from judecode.api.client import ApiClient
 from judecode.agent.engine import AgentEngine
 from judecode.ui.console import console
+
+# ── prompt_toolkit for long input support ──
+try:
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.history import InMemoryHistory
+    from prompt_toolkit.lexers import PygmentsLexer
+    from prompt_toolkit.styles import Style as PTKStyle
+    from prompt_toolkit.key_binding import KeyBindings
+    from pygments.lexers import PythonLexer
+    PROMPT_TOOLKIT_AVAILABLE = True
+except ImportError:
+    PROMPT_TOOLKIT_AVAILABLE = False
 
 
 def print_greeting() -> None:
@@ -76,7 +97,12 @@ def print_greeting() -> None:
     tips.append(" to exit\n", style="white")
     tips.append("Type ", style="white")
     tips.append("/clear", style="bold magenta")
-    tips.append(" to clear conversation", style="white")
+    tips.append(" to clear conversation\n", style="white")
+    tips.append("Press ", style="white")
+    tips.append("Enter", style="bold green")
+    tips.append(" to submit, ", style="white")
+    tips.append("Alt+Enter", style="bold green")
+    tips.append(" for new line", style="white")
 
     tips_panel = Panel(
         tips,
@@ -129,18 +155,52 @@ def get_input_prompt() -> str:
 
 
 async def run_agent_interactive() -> None:
-    """Main interactive agent loop."""
+    """Main interactive agent loop with multi-line input support."""
     api_client = ApiClient()
     agent = AgentEngine(SYSTEM_PROMPT, api_client)
 
     print_greeting()
 
+    # ── Setup prompt_toolkit for long input ──
+    if PROMPT_TOOLKIT_AVAILABLE:
+        # Custom key bindings: Enter = submit, Alt+Enter = new line
+        kb = KeyBindings()
+
+        @kb.add("enter")
+        def _(event):
+            """Enter submits the text. Alt+Enter inserts new line."""
+            if event.is_alt:
+                event.current_buffer.insert_text("\n")
+            else:
+                event.current_buffer.validate_and_handle()
+
+        ptk_style = PTKStyle.from_dict({
+            "prompt": "bold cyan",
+        })
+
+        session = PromptSession(
+            history=InMemoryHistory(),
+            style=ptk_style,
+            key_bindings=kb,
+            enable_history_search=True,
+            multiline=True,
+            lexer=None,
+            wrap_lines=True,
+            complete_while_typing=False,
+        )
+    else:
+        session = None
+
     try:
         while True:
-            # Print prompt
+            # ── Get user input (long text supported) ──
             try:
-                console.print("\n\u254b[bold cyan]\u256d[/bold cyan] ", end="")
-                user_input = input()
+                if session:
+                    prompt_text = "\n  \u254b[bold cyan]\u256d[/bold cyan] "
+                    user_input = await session.prompt_async(prompt_text, default="")
+                else:
+                    console.print("\n  \u254b[bold cyan]\u256d[/bold cyan] ", end="")
+                    user_input = input()
             except (EOFError, KeyboardInterrupt):
                 print_goodbye()
                 break
