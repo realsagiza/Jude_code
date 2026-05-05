@@ -3,23 +3,36 @@ Task Tools - Bridge between agent tools and TaskManager.
 
 These functions are called by the agent's execute_tool() dispatcher.
 Each function returns a string result that the LLM can read.
+
+=== Package Discovery ===
+Instead of fragile relative-path resolution, we discover the task_manager
+package by looking for it next to the judecode project root, OR by
+checking if it's already importable (installed as editable package).
 """
 
 import json
 import os
+import sys
+from pathlib import Path
 from typing import Optional
 
-# ── Resolve task_manager package path ──
-# task_manager/ lives at ../task_manager/ relative to judecode project root
-# __file__ = judecode/judecode/utils/task_tools.py
-# We go up: utils/ -> judecode/ -> judecode/ (project root) -> ../ = judCode/
-import sys
-_task_tools_dir = os.path.dirname(os.path.abspath(__file__))  # .../judecode/judecode/utils/
-_judecode_pkg_dir = os.path.dirname(_task_tools_dir)           # .../judecode/judecode/
-_judecode_project_root = os.path.dirname(_judecode_pkg_dir)     # .../judecode/
-_judcode_root = os.path.dirname(_judecode_project_root)          # .../judCode/
-if _judcode_root not in sys.path:
-    sys.path.insert(0, _judcode_root)
+# ── Discover task_manager package ──
+# Try import first (works when package is installed via pip install -e .)
+try:
+    import task_manager  # noqa: F401
+except ImportError:
+    # Fallback: locate task_manager/ next to judecode/ project root
+    # __file__ = .../judecode/judecode/utils/task_tools.py
+    # We want:  .../judecode/task_manager/  (sibling of judecode/ package)
+    _this_file = Path(__file__).resolve()                     # .../judecode/judecode/utils/task_tools.py
+    _judecode_project_root = _this_file.parent.parent.parent   # .../judecode/
+    _sibling_path = str(_judecode_project_root / "task_manager")
+    if _sibling_path not in sys.path:
+        sys.path.insert(0, _sibling_path)
+    # Also add the parent dir so 'import task_manager' resolves
+    _parent_of_root = str(_judecode_project_root.parent)
+    if _parent_of_root not in sys.path:
+        sys.path.insert(0, _parent_of_root)
 
 from task_manager.manager import TaskManager
 from task_manager.models.task import TaskStatus, TaskPriority

@@ -675,13 +675,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "screenshot",
-            "description": "Take a screenshot of the current screen. Optionally analyze it with a vision model (qwen3.5:397b-cloud via Ollama local) to understand what's on screen. NOTE: DeepSeek does NOT support vision, so vision analysis uses Ollama (Qwen 3.5) locally.",
+            "description": "Take a screenshot. Optionally analyze with vision_model (qwen3.5:397b-cloud via Ollama).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "vision_model": {"type": "string", "description": "Vision model name to analyze the screenshot (e.g. 'qwen3.5:397b-cloud'). Leave empty to just take screenshot without analysis."},
-                    "task_description": {"type": "string", "description": "Optional context about what the user wants to do, to focus the vision analysis."},
-                    "save_path": {"type": "string", "description": "Optional path to save the screenshot file."}
+                    "vision_model": {"type": "string", "description": "Vision model name (e.g. 'qwen3.5:397b-cloud'). Empty = just screenshot."},
+                    "task_description": {"type": "string", "description": "Context to focus vision analysis."},
+                    "save_path": {"type": "string", "description": "Optional path to save screenshot."}
                 }
             }
         }
@@ -872,12 +872,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "get_browser_accessibility_snapshot",
-            "description": "⚡ FAST: Get a structured accessibility tree of the current browser page instead of using a vision model. Returns text with element labels, roles, and ref IDs. The LLM can read this directly to decide what to click/type. 10-50x faster than screenshot+vision. No vision model needed! Requires Playwright (pip install playwright && playwright install chromium).",
+            "description": "⚡ FAST: Get browser page accessibility tree (structured text elements). 10-50x faster than vision. Requires Playwright.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string", "description": "Optional URL to navigate to first before getting the accessibility tree."},
-                    "task_description": {"type": "string", "description": "Optional context about what the user wants to do, to focus the analysis."}
+                    "url": {"type": "string", "description": "Optional URL to navigate to first."},
+                    "task_description": {"type": "string", "description": "Optional context to focus analysis."}
                 }
             }
         }
@@ -886,11 +886,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "get_desktop_accessibility_tree",
-            "description": "⚡ FAST: Get a structured accessibility tree of the current active desktop window (macOS only). Uses the macOS Accessibility API (AXUIElement) to get UI element info. 10-50x faster than screenshot+vision. No vision model needed! Returns app name, window info, and UI elements in the active window.",
+            "description": "⚡ FAST: macOS desktop accessibility tree via AXUIElement. 10-50x faster than vision. No vision model needed.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "task_description": {"type": "string", "description": "Optional context about what the user wants to do, to focus the analysis."}
+                    "task_description": {"type": "string", "description": "Optional context to focus analysis."}
                 }
             }
         }

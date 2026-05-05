@@ -3,6 +3,10 @@ Kanban Automation Plugin for JudeCode.
 
 Auto-creates Kanban boards, tracks progress, manages checkpoints.
 ใช้ทุกครั้งที่เริ่มงานใหม่!
+
+=== Vault Path ===
+Uses the SAME vault path as the Knowledge Vault system.
+Respects JUDECODE_VAULT environment variable.
 """
 
 import os
@@ -11,9 +15,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-# ─── Configuration ───
-
-VAULT_PATH = Path(os.path.expanduser("~/.judecode/vault"))
+# ─── Shared Vault Path (respects JUDECODE_VAULT) ───
+# Same logic as knowledge/vault.py - but we avoid importing from there
+# to keep this plugin self-contained (it can be run standalone)
+_DEFAULT_VAULT = os.path.expanduser("~/.judecode/vault")
+VAULT_PATH = Path(os.environ.get("JUDECODE_VAULT", _DEFAULT_VAULT))
 VAULT_PATH.mkdir(parents=True, exist_ok=True)
 
 
