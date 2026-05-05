@@ -30,10 +30,7 @@ from judecode.ui.console import console
 try:
     from prompt_toolkit import PromptSession
     from prompt_toolkit.history import InMemoryHistory
-    from prompt_toolkit.lexers import PygmentsLexer
     from prompt_toolkit.styles import Style as PTKStyle
-    from prompt_toolkit.key_binding import KeyBindings
-    from pygments.lexers import PythonLexer
     PROMPT_TOOLKIT_AVAILABLE = True
 except ImportError:
     PROMPT_TOOLKIT_AVAILABLE = False
@@ -106,7 +103,7 @@ def print_greeting() -> None:
 
     tips_panel = Panel(
         tips,
-        title="[bold]Commands[/bold]",
+        title="[bold]Commands & Tips[/bold]",
         border_style="dim",
         box=DOUBLE_EDGE,
     )
@@ -163,17 +160,8 @@ async def run_agent_interactive() -> None:
 
     # ── Setup prompt_toolkit for long input ──
     if PROMPT_TOOLKIT_AVAILABLE:
-        # Custom key bindings: Enter = submit, Alt+Enter = new line
-        kb = KeyBindings()
-
-        @kb.add("enter")
-        def _(event):
-            """Enter submits the text. Alt+Enter inserts new line."""
-            if event.is_alt:
-                event.current_buffer.insert_text("\n")
-            else:
-                event.current_buffer.validate_and_handle()
-
+        # prompt_toolkit already supports Alt+Enter for new line by default
+        # in multiline mode. No custom key bindings needed.
         ptk_style = PTKStyle.from_dict({
             "prompt": "bold cyan",
         })
@@ -181,7 +169,6 @@ async def run_agent_interactive() -> None:
         session = PromptSession(
             history=InMemoryHistory(),
             style=ptk_style,
-            key_bindings=kb,
             enable_history_search=True,
             multiline=True,
             lexer=None,
@@ -196,13 +183,13 @@ async def run_agent_interactive() -> None:
             # ── Get user input (long text supported) ──
             try:
                 if session:
-                    # Use prompt_toolkit's async API directly
+                    # Use prompt_toolkit's async API
                     prompt_text = "  >>> "
                     user_input = await session.prompt_async(prompt_text)
                 else:
                     # Fallback: multi-line input with plain input()
                     # Type your message, press Enter twice (empty line) to submit
-                    console.print("\n  \u254b[bold cyan]\u256d[/bold cyan] (Enter twice to send)", end="")
+                    console.print("\n  \u254b[bold cyan]\u256d[/bold cyan] (blank line to send)", end="")
                     lines = []
                     while True:
                         try:
