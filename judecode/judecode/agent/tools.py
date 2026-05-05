@@ -37,15 +37,36 @@ from judecode.utils.automation import (
 )
 
 # ── Computer Use tools (vision + mouse + keyboard) ──
-from judecode.utils.computer_tools import (
-    screenshot, get_screen_size, get_mouse_position, get_active_window_info,
-    mouse_move, mouse_click, mouse_double_click, mouse_drag,
-    keyboard_type, keyboard_press, keyboard_hotkey,
-    scroll, open_app, list_running_apps,
-    # ⚡ NEW: Fast accessibility tree tools (10-50x faster than vision!)
-    get_browser_accessibility_snapshot,
-    get_desktop_accessibility_tree,
-)
+try:
+    from judecode.utils.computer_tools import (
+        screenshot, get_screen_size, get_mouse_position, get_active_window_info,
+        mouse_move, mouse_click, mouse_double_click, mouse_drag,
+        keyboard_type, keyboard_press, keyboard_hotkey,
+        scroll, open_app, list_running_apps,
+        get_browser_accessibility_snapshot,
+        get_desktop_accessibility_tree,
+    )
+except Exception:
+    # If computer tools fail to import (e.g. headless server), define stubs
+    def _stub_error(name):
+        return lambda *a, **kw: f"Error: {name} is not available on this system (no GUI/display)."
+
+    screenshot = _stub_error("screenshot")
+    get_screen_size = _stub_error("get_screen_size")
+    get_mouse_position = _stub_error("get_mouse_position")
+    get_active_window_info = _stub_error("get_active_window_info")
+    mouse_move = _stub_error("mouse_move")
+    mouse_click = _stub_error("mouse_click")
+    mouse_double_click = _stub_error("mouse_double_click")
+    mouse_drag = _stub_error("mouse_drag")
+    keyboard_type = _stub_error("keyboard_type")
+    keyboard_press = _stub_error("keyboard_press")
+    keyboard_hotkey = _stub_error("keyboard_hotkey")
+    scroll = _stub_error("scroll")
+    open_app = _stub_error("open_app")
+    list_running_apps = _stub_error("list_running_apps")
+    get_browser_accessibility_snapshot = _stub_error("get_browser_accessibility_snapshot")
+    get_desktop_accessibility_tree = _stub_error("get_desktop_accessibility_tree")
 
 
 TOOL_DEFINITIONS: list[dict[str, Any]] = [

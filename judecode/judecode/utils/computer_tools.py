@@ -51,13 +51,61 @@ import urllib.error
 from pathlib import Path
 from typing import Optional
 
-import pyautogui
-
 from judecode.config import VISION_BASE_URL, VISION_API_KEY, VISION_MODEL
 
-# Configure PyAutoGUI safety
-pyautogui.FAILSAFE = True  # Move mouse to top-left to abort
-pyautogui.PAUSE = 0.5      # 0.5 second pause between actions
+# ── Lazy pyautogui import ──
+# pyautogui (via mouseinfo) crashes on headless servers with no DISPLAY.
+# We import it lazily inside each function so computer-tool code can be
+# imported cleanly even when there is no GUI / display server.
+_PYAUTOGUI = None  # will be set by _get_pyautogui()
+
+
+def _get_pyautogui():
+    """Lazy-import pyautogui and configure safety settings.
+
+    Returns the pyautogui module, or raises RuntimeError with a
+    helpful message if the display / GUI is not available.
+    """
+    global _PYAUTOGUI
+    if _PYAUTOGUI is not None:
+        return _PYAUTOGUI
+
+    # Check for a display server before importing pyautogui
+    system = platform.system().lower()
+    if system == "linux":
+        display = os.environ.get("DISPLAY")
+        if not display:
+            raise RuntimeError(
+                "No DISPLAY environment variable found.  "
+                "This machine appears to be headless (no GUI).  "
+                "Computer-use tools (screenshot, mouse, keyboard, etc.) "
+                "are not available.  "
+                "Install Xvfb for a virtual display if needed:\n"
+                "  sudo apt install xvfb && Xvfb :99 -screen 0 1920x1080 &\n"
+                "  export DISPLAY=:99"
+            )
+
+    try:
+        import pyautogui as _pg
+    except ImportError as exc:
+        raise RuntimeError(
+            "pyautogui is not installed.  "
+            "Computer-use tools require:\n"
+            "  pip install pyautogui pillow mss"
+        ) from exc
+    except Exception as exc:
+        # Catch errors like mouseinfo trying to open a display
+        raise RuntimeError(
+            "Failed to initialise pyautogui – the system likely has no GUI "
+            "display available.  Computer-use tools are disabled.\n"
+            f"Underlying error: {exc}"
+        ) from exc
+
+    # Configure safety
+    _pg.FAILSAFE = True
+    _pg.PAUSE = 0.5
+    _PYAUTOGUI = _pg
+    return _PYAUTOGUI
 
 # ── Screenshot Optimization Constants ──
 MAX_SCREENSHOT_WIDTH = 800  # Resize to 800px max (60-75% token savings)
@@ -577,8 +625,12 @@ def _prune_screenshot_history():
 
 def get_screen_size() -> str:
     """Get the screen resolution."""
-    w, h = pyautogui.size()
-    return f"Screen size: {w}x{h} pixels"
+    try:
+        pg = _get_pyautogui()
+        w, h = pg.size()
+        return f"Screen size: {w}x{h} pixels"
+    except RuntimeError as e:
+        return f"Error: {e}"
 
 
 def screenshot(
@@ -663,10 +715,15 @@ def screenshot(
 
     # If no vision model, just return basic info
     if not vision_model:
-        w, h = pyautogui.size()
+        try:
+            pg = _get_pyautogui()
+            w, h = pg.size()
+            screen_res = f"Screen resolution: {w}x{h}"
+        except RuntimeError:
+            screen_res = "Screen resolution: unknown (no display)"
         result = (
             f"Screenshot saved to: {img_path} ({file_size / 1024:.1f} KB)\n"
-            f"Screen resolution: {w}x{h}\n"
+            f"{screen_res}\n"
         )
         result += "\n".join(opt_info_parts)
         result += (
@@ -796,16 +853,21 @@ def mouse_move(x: int, y: int, duration: float = 0.5) -> str:
     Returns:
         Confirmation
     """
-    w, h = pyautogui.size()
+    try:
+        pg = _get_pyautogui()
+    except RuntimeError as e:
+        return f"Error: {e}"
+
+    w, h = pg.size()
     if x < 0 or x > w or y < 0 or y > h:
         return (
             f"Error: Coordinates ({x}, {y}) are outside screen bounds "
             f"(0-{w}, 0-{h}). No action taken."
         )
     try:
-        pyautogui.moveTo(x, y, duration=duration)
+        pg.moveTo(x, y, duration=duration)
         return f"Mouse moved to ({x}, {y})"
-    except pyautogui.FailSafeException:
+    except pg.FailSafeException:
         return "Mouse movement aborted by failsafe (mouse at corner)."
     except Exception as e:
         return f"Error moving mouse: {type(e).__name__}: {e}"
@@ -822,18 +884,23 @@ def mouse_click(button: str = "left", x: Optional[int] = None, y: Optional[int] 
     Returns:
         Confirmation
     """
+    try:
+        pg = _get_pyautogui()
+    except RuntimeError as e:
+        return f"Error: {e}"
+
     if button not in ("left", "right", "middle"):
         return f"Error: Invalid button '{button}'. Use 'left', 'right', or 'middle'."
 
     try:
         if x is not None and y is not None:
-            pyautogui.click(x, y, button=button)
+            pg.click(x, y, button=button)
             return f"Clicked {button} button at ({x}, {y})"
         else:
-            pos = pyautogui.position()
-            pyautogui.click(button=button)
+            pos = pg.position()
+            pg.click(button=button)
             return f"Clicked {button} button at current position ({pos.x}, {pos.y})"
-    except pyautogui.FailSafeException:
+    except pg.FailSafeException:
         return "Click aborted by failsafe."
     except Exception as e:
         return f"Error clicking: {type(e).__name__}: {e}"
@@ -850,12 +917,17 @@ def mouse_double_click(x: Optional[int] = None, y: Optional[int] = None) -> str:
         Confirmation
     """
     try:
+        pg = _get_pyautogui()
+    except RuntimeError as e:
+        return f"Error: {e}"
+
+    try:
         if x is not None and y is not None:
-            pyautogui.doubleClick(x, y)
+            pg.doubleClick(x, y)
             return f"Double-clicked at ({x}, {y})"
         else:
-            pos = pyautogui.position()
-            pyautogui.doubleClick()
+            pos = pg.position()
+            pg.doubleClick()
             return f"Double-clicked at ({pos.x}, {pos.y})"
     except Exception as e:
         return f"Error double-clicking: {type(e).__name__}: {e}"
@@ -875,8 +947,13 @@ def mouse_drag(start_x: int, start_y: int, end_x: int, end_y: int, duration: flo
         Confirmation
     """
     try:
-        pyautogui.moveTo(start_x, start_y, duration=0.2)
-        pyautogui.drag(end_x - start_x, end_y - start_y, duration=duration)
+        pg = _get_pyautogui()
+    except RuntimeError as e:
+        return f"Error: {e}"
+
+    try:
+        pg.moveTo(start_x, start_y, duration=0.2)
+        pg.drag(end_x - start_x, end_y - start_y, duration=duration)
         return f"Dragged from ({start_x}, {start_y}) to ({end_x}, {end_y})"
     except Exception as e:
         return f"Error dragging: {type(e).__name__}: {e}"
@@ -895,8 +972,11 @@ def keyboard_type(text: str, interval: float = 0.05) -> str:
     if not text:
         return "No text provided to type."
     try:
-        pyautogui.typewrite(text, interval=interval)
+        pg = _get_pyautogui()
+        pg.typewrite(text, interval=interval)
         return f"Typed '{text[:50]}{'...' if len(text) > 50 else ''}' ({len(text)} characters)"
+    except RuntimeError as e:
+        return f"Error: {e}"
     except Exception as e:
         return f"Error typing: {type(e).__name__}: {e}"
 
@@ -911,8 +991,11 @@ def keyboard_press(key: str) -> str:
         Confirmation
     """
     try:
-        pyautogui.press(key)
+        pg = _get_pyautogui()
+        pg.press(key)
         return f"Pressed key: {key}"
+    except RuntimeError as e:
+        return f"Error: {e}"
     except Exception as e:
         return f"Error pressing key: {type(e).__name__}: {e}"
 
@@ -935,6 +1018,11 @@ def keyboard_hotkey(*keys: str) -> str:
     if not keys:
         return "No keys provided."
     try:
+        pg = _get_pyautogui()
+    except RuntimeError as e:
+        return f"Error: {e}"
+
+    try:
         # Normalize modifier keys for cross-platform
         system = platform.system().lower()
         normalized = []
@@ -947,7 +1035,7 @@ def keyboard_hotkey(*keys: str) -> str:
             else:
                 normalized.append(k)
 
-        pyautogui.hotkey(*normalized)
+        pg.hotkey(*normalized)
         keys_str = ", ".join(normalized)
         return f"Pressed hotkey: {keys_str}"
     except Exception as e:
@@ -966,10 +1054,15 @@ def scroll(clicks: int, x: Optional[int] = None, y: Optional[int] = None) -> str
         Confirmation
     """
     try:
+        pg = _get_pyautogui()
+    except RuntimeError as e:
+        return f"Error: {e}"
+
+    try:
         if x is not None and y is not None:
-            pyautogui.scroll(clicks, x, y)
+            pg.scroll(clicks, x, y)
         else:
-            pyautogui.scroll(clicks)
+            pg.scroll(clicks)
         direction = "up" if clicks > 0 else "down"
         return f"Scrolled {direction} ({abs(clicks)} clicks)"
     except Exception as e:
@@ -1078,8 +1171,11 @@ def open_app(app_name: str) -> str:
 def get_mouse_position() -> str:
     """Get the current mouse cursor position."""
     try:
-        pos = pyautogui.position()
+        pg = _get_pyautogui()
+        pos = pg.position()
         return f"Mouse position: ({pos.x}, {pos.y})"
+    except RuntimeError as e:
+        return f"Error: {e}"
     except Exception as e:
         return f"Error getting position: {type(e).__name__}: {e}"
 
