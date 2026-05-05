@@ -10,16 +10,21 @@ setup(
         "httpx>=0.27.0",
         "rich>=13.7.0",
         "pyperclip>=1.8.2",
+        "python-dotenv>=1.0.0",
         "mss>=9.0.0",
         "Pillow>=10.0.0",
         "pyautogui>=0.9.54",
     ],
+    extras_require={
+        "browser": ["playwright>=1.50.0"],
+        "full": ["playwright>=1.50.0", "pyppeteer>=0.0.25"],
+    },
     entry_points={
         "console_scripts": [
             "judecode=judecode.ui.terminal:main_cli",
         ],
     },
-    python_requires=">=3.10",
+    python_requires=">=3.10, <3.14",  # Python 3.14+ incompatible with pyppeteer
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",

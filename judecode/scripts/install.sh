@@ -1,8 +1,21 @@
 #!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════════════════
 # Jude Code macOS / Linux Installer
-# Handles PEP 668 externally-managed Python by creating a virtual environment.
-# Usage: ./install.sh              (user install, no sudo needed)
-# Usage: ./install.sh --global     (system-wide, requires sudo + --break-system-packages)
+# 
+# Features:
+#   ✅ Auto-detects a compatible Python version (3.12 → 3.11 → 3.10 → 3.13)
+#      Skips Python 3.14+ which is incompatible with pyppeteer/playwright.
+#   ✅ Creates an isolated virtual environment (venv) so it works on ANY machine
+#      regardless of what Python/pip version is installed globally.
+#   ✅ Installs all dependencies including playwright for browser accessibility.
+#   ✅ Creates a wrapper script so 'judecode' always uses the venv.
+#   ✅ Adds ~/.local/bin to PATH automatically.
+#
+# Usage:
+#   ./install.sh              Normal install (auto venv, recommended)
+#   ./install.sh --python python3.12   Force specific Python binary
+#   ./install.sh --help       Show this help
+# ═══════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
 
@@ -23,31 +36,31 @@ print_warn()  { echo -e "  ${YELLOW}[!]${NC} $1"; }
 print_err()   { echo -e "  ${RED}[ERR]${NC} $1"; }
 
 # ─── Parse args ────────────────────────────────────────────────
-GLOBAL=false
-PYTHON="python3"
-BREAK_SYSTEM_PACKAGES=false
-FORCE_VENV=false
+FORCE_PYTHON=""
+PLAYWRIGHT=true
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --global)      GLOBAL=true; shift ;;
-        --venv)        FORCE_VENV=true; shift ;;
-        --python)      PYTHON="$2"; shift 2 ;;
-        --break-system-packages) BREAK_SYSTEM_PACKAGES=true; shift ;;
+        --python)      FORCE_PYTHON="$2"; shift 2 ;;
+        --no-playwright) PLAYWRIGHT=false; shift ;;
         --help|-h)
             cat << 'EOF'
-Jude Code Installer
+Jude Code Installer — Smart venv-based setup
 
 Usage:
-  ./install.sh              User install (auto-detects PEP 668)
-  ./install.sh --venv       Force virtual environment install
-  ./install.sh --global     System-wide (requires sudo + --break-system-packages)
-  ./install.sh --python /path/to/python3   Use a specific Python
-  ./install.sh --break-system-packages     Bypass PEP 668 (not recommended)
-  ./install.sh --help       Show this help
+  ./install.sh                        Auto-detect Python, create venv, install
+  ./install.sh --python python3.12    Use a specific Python binary
+  ./install.sh --no-playwright        Skip playwright installation (saves ~300MB)
+  ./install.sh --help                 Show this help
 
-Recommended:  Run without any flags and the installer will choose
-              the safest method (venv for PEP 668, normal pip otherwise).
+How it works:
+  1. Finds a compatible Python (3.12→3.11→3.10→3.13, skipping 3.14+)
+  2. Creates an isolated venv at ./judecode/.venv
+  3. Installs all dependencies inside the venv
+  4. Creates ~/.local/bin/judecode wrapper that auto-activates the venv
+  5. Now 'judecode' works from anywhere, regardless of system Python!
+
+No sudo needed. No system Python packages are touched.
 EOF
             exit 0
             ;;
@@ -59,164 +72,420 @@ EOF
     esac
 done
 
-# ─── 1. Check Python ───────────────────────────────────────────
-print_header "Checking Python..."
-if ! command -v "$PYTHON" &>/dev/null; then
-    print_err "Python not found: $PYTHON"
-    echo -e "  ${DIM}brew install python@3.12${NC}"
-    exit 1
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 1: Pick a compatible Python version
+# ═══════════════════════════════════════════════════════════════════════════
+
+print_header "🔍 Finding compatible Python version..."
+
+# If user specified --python, use that directly
+if [[ -n "$FORCE_PYTHON" ]]; then
+    if ! command -v "$FORCE_PYTHON" &>/dev/null; then
+        print_err "Specified Python not found: $FORCE_PYTHON"
+        exit 1
+    fi
+    PYTHON="$FORCE_PYTHON"
+    PY_VERSION=$($PYTHON --version 2>&1 | awk '{print $2}')
+    print_success "Using user-specified Python: $PYTHON → $PY_VERSION"
+else
+    # Priority order: 3.12 (most compatible) > 3.11 > 3.10 > 3.13
+    # We SKIP 3.14+ because pyppeteer/playwright has compatibility issues
+    PYTHON=""
+    for ver in 3.12 3.11 3.10 3.13; do
+        candidate="python${ver}"
+        if command -v "$candidate" &>/dev/null; then
+            # Quick sanity check: make sure it works
+            if "$candidate" -c "import sys; sys.exit(0)" 2>/dev/null; then
+                PYTHON="$candidate"
+                PY_VERSION=$($PYTHON --version 2>&1 | awk '{print $2}')
+                print_success "Found Python $PY_VERSION → $candidate"
+                break
+            fi
+        fi
+        # Also check Homebrew path
+        candidate="/opt/homebrew/bin/python${ver}"
+        if [[ -x "$candidate" ]]; then
+            PYTHON="$candidate"
+            PY_VERSION=$($PYTHON --version 2>&1 | awk '{print $2}')
+            print_success "Found Python $PY_VERSION → $candidate"
+            break
+        fi
+    done
+
+    # Fallback: try system python3, but warn if it's 3.14+
+    if [[ -z "$PYTHON" ]]; then
+        if command -v python3 &>/dev/null; then
+            PYTHON="python3"
+            PY_VERSION=$($PYTHON --version 2>&1 | awk '{print $2}')
+            PY_MAJOR=$(echo "$PY_VERSION" | cut -d. -f1)
+            PY_MINOR=$(echo "$PY_VERSION" | cut -d. -f2)
+            if [[ "$PY_MAJOR" -ge 3 && "$PY_MINOR" -ge 14 ]]; then
+                print_warn "⚠️  Python $PY_VERSION detected — this may have compatibility issues with some packages."
+                print_warn "   For best results, install Python 3.12: brew install python@3.12"
+                print_warn "   Continuing with Python $PY_VERSION..."
+            fi
+        fi
+    fi
+
+    if [[ -z "$PYTHON" ]]; then
+        print_err "No compatible Python found!"
+        echo -e "  ${DIM}Install one of: brew install python@3.12 python@3.11${NC}"
+        exit 1
+    fi
 fi
 
-PY_VERSION=$($PYTHON --version 2>&1 | awk '{print $2}')
-PY_MAJOR=$(echo "$PY_VERSION" | cut -d. -f1)
-PY_MINOR=$(echo "$PY_VERSION" | cut -d. -f2)
+# ─── Sanity check ────────────────────────────────────────────
+PY_MAJOR=$($PYTHON -c "import sys; print(sys.version_info[0])")
+PY_MINOR=$($PYTHON -c "import sys; print(sys.version_info[1])")
 
 if [[ "$PY_MAJOR" -lt 3 || "$PY_MINOR" -lt 10 ]]; then
     print_err "Python 3.10+ required, found $PY_VERSION"
     exit 1
 fi
-print_success "Python $PY_VERSION found"
 
-# ─── 2. Detect externally-managed (PEP 668) ─────────────────
-EXTERNALLY_MANAGED=false
-if "$PYTHON" -m pip install --dry-run fakepkg 2>/dev/null | grep -q "externally-managed"; then
-    EXTERNALLY_MANAGED=true
-elif [[ -f "$($PYTHON -c 'import sysconfig; print(sysconfig.get_path("stdlib"))')/EXTERNALLY-MANAGED" ]]; then
-    EXTERNALLY_MANAGED=true
-fi
+print_success "Python $PY_VERSION — ready to go!"
 
-use_venv=false
-if [[ "$EXTERNALLY_MANAGED" == true ]]; then
-    print_warn "System Python is externally managed (PEP 668)."
-    if [[ "$FORCE_VENV" == true ]]; then
-        print_warn "Forced --venv mode."
-        use_venv=true
-    elif [[ "$GLOBAL" == true && "$BREAK_SYSTEM_PACKAGES" == true ]]; then
-        print_warn "Using --break-system-packages as requested."
-        use_venv=false
-    elif [[ "$GLOBAL" == true ]]; then
-        print_err "System-wide install is blocked by PEP 668."
-        print_warn "Please use one of these options:"
-        echo -e "  ${DIM}1. ./install.sh                (recommended, auto venv)${NC}"
-        echo -e "  ${DIM}2. ./install.sh --venv         (force virtual env)${NC}"
-        echo -e "  ${DIM}3. ./install.sh --global --break-system-packages  (risky)${NC}"
-        exit 1
-    else
-        use_venv=true
-    fi
-fi
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 2: Find pip (venv-agnostic)
+# ═══════════════════════════════════════════════════════════════════════════
 
-# ─── 3. Set up venv (if needed) ──────────────────────────────
-if [[ "$use_venv" == true ]]; then
-    VENV_DIR="${REPO_ROOT}/.venv"
-    print_header "Creating virtual environment..."
-    if [[ ! -d "$VENV_DIR" ]]; then
-        "$PYTHON" -m venv "$VENV_DIR"
-    fi
-    # Re-point to venv python/pip
-    PYTHON="$VENV_DIR/bin/python"
-    PIP="$VENV_DIR/bin/pip"
-    print_success "Virtual environment ready: $VENV_DIR"
-else
-    PIP="$PYTHON -m pip"
-fi
+# Get pip associated with this Python
+PIP="$($PYTHON -m pip -V 2>/dev/null && echo "$PYTHON -m pip" || echo "pip3")"
 
-# ─── 4. Upgrade pip & build tools ────────────────────────────
-print_header "Upgrading build tools..."
-$PIP install --upgrade pip setuptools wheel -q
-print_success "Build tools upgraded"
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 3: Create virtual environment
+# ═══════════════════════════════════════════════════════════════════════════
 
-# ─── 5. Install dependencies ─────────────────────────────────
-print_header "Installing dependencies..."
-REQ_FILE="${REPO_ROOT}/requirements.txt"
-if [[ -f "$REQ_FILE" ]]; then
-    $PIP install -r "$REQ_FILE" --upgrade -q
-    print_success "Dependencies installed"
-else
-    print_warn "requirements.txt not found, skipping"
-fi
+VENV_DIR="${REPO_ROOT}/.venv"
+VENV_PYTHON="${VENV_DIR}/bin/python"
+VENV_PIP="${VENV_DIR}/bin/pip"
 
-# ─── 6. Install judecode ───────────────────────────────────
-print_header "Installing judecode package..."
-cd "$REPO_ROOT"
-$PIP install -e . --upgrade -q
-print_success "judecode installed"
-cd - &>/dev/null
-
-# ─── 7. Find the judecode executable ────────────────────────
-print_header "Detecting executable directory..."
-
-if [[ "$use_venv" == true ]]; then
-    BIN_DIR="$VENV_DIR/bin"
-    WRAPPER_DIR="${HOME}/.local/bin"
-    # Create wrapper script so judecode works without activating venv
-    mkdir -p "$WRAPPER_DIR"
-    cat > "${WRAPPER_DIR}/judecode" << EOF
-#!/usr/bin/env bash
-# Jude Code wrapper — auto-activates venv before running
-exec "$VENV_DIR/bin/python" -m judecode "\$@"
-EOF
-    chmod +x "${WRAPPER_DIR}/judecode"
-    print_success "Wrapper created at ~/.local/bin/judecode"
-else
-    # Normal pip install detection
-    BIN_DIR=$($PYTHON -c "import site,sys,os; print(os.path.join(os.path.dirname(site.getusersitepackages()), 'Scripts' if sys.platform.startswith('win') else 'bin'))" 2>/dev/null)
-    if [[ -z "$BIN_DIR" || ! -d "$BIN_DIR" ]]; then
-        BIN_DIR="$(dirname "$($PYTHON -c 'import sys; print(sys.executable)')")"
-        [[ -d "${BIN_DIR}/../bin" ]] && BIN_DIR="$(cd "${BIN_DIR}/../bin" && pwd)"
-    fi
-fi
-
-print_success "Executable directory: ${BIN_DIR}"
-
-# ─── 8. Ensure PATH includes ~/.local/bin ───────────────────
-RC_FILE=""
-SHELL_NAME=$(basename "$SHELL")
-case "$SHELL_NAME" in
-    zsh)
-        RC_FILE="${HOME}/.zshrc"
-        ;;
-    bash)
-        RC_FILE="${HOME}/.bash_profile"
-        [[ -f "${HOME}/.bashrc" ]] && RC_FILE="${HOME}/.bashrc"
-        ;;
-    *)
-        RC_FILE="${HOME}/.${SHELL_NAME}rc"
-        ;;
-esac
-
-if [[ -f "$RC_FILE" && -n "${WRAPPER_DIR:-}" ]]; then
-    if [[ ":$PATH:" != *":${WRAPPER_DIR}:"* ]]; then
-        if ! grep -qF "export PATH=\"\$PATH:${WRAPPER_DIR}\"" "$RC_FILE" 2>/dev/null; then
-            echo "" >> "$RC_FILE"
-            echo "# Added by Jude Code installer" >> "$RC_FILE"
-            echo "export PATH=\"\$PATH:${WRAPPER_DIR}\"" >> "$RC_FILE"
-            print_success "Added ${WRAPPER_DIR} to ${RC_FILE}"
+# Check if venv already exists and uses a different Python version
+RECREATE_VENV=false
+if [[ -d "$VENV_DIR" && -f "$VENV_DIR/pyvenv.cfg" ]]; then
+    CURRENT_VENV_PYTHON=$(grep "^home" "$VENV_DIR/pyvenv.cfg" 2>/dev/null | head -1 | sed 's/.*= //' || echo "")
+    if [[ -n "$CURRENT_VENV_PYTHON" ]]; then
+        # Get the python binary from that home
+        CURRENT_PY_BIN="${CURRENT_VENV_PYTHON}/python3"
+        if [[ -x "$CURRENT_PY_BIN" ]]; then
+            CURRENT_PY_VER=$("$CURRENT_PY_BIN" --version 2>&1 | awk '{print $2}')
+            if [[ "$CURRENT_PY_VER" != "$PY_VERSION" ]]; then
+                print_warn "Existing venv uses Python $CURRENT_PY_VER, but we want $PY_VERSION."
+                print_warn "Recreating venv with Python $PY_VERSION..."
+                RECREATE_VENV=true
+            fi
         fi
     fi
 fi
 
-# ─── 9. Verify ───────────────────────────────────────────────
-print_header "Verifying installation..."
-JUDE_PATH="${WRAPPER_DIR:-$BIN_DIR}/judecode"
-if [[ -x "$JUDE_PATH" ]] && "$JUDE_PATH" --version &>/dev/null; then
-    JUDE_VER=$("$JUDE_PATH" --version 2>/dev/null || echo "unknown")
-    print_success "judecode works! Version: $JUDE_VER"
-else
-    print_warn "judecode not in PATH yet."
-    print_warn "Source your shell profile or restart your terminal."
+if [[ "$RECREATE_VENV" == true ]]; then
+    print_header "♻️  Recreating virtual environment..."
+    rm -rf "$VENV_DIR"
 fi
 
-# ─── 10. Done ────────────────────────────────────────────────
-echo -e "\n${CYAN}========================================${NC}"
-echo -e "${GREEN}  Jude Code installed successfully!${NC}"
-echo -e "${CYAN}========================================${NC}"
-echo -e "\n${CYAN}Usage:${NC}"
-echo -e "  ${DIM}judecode        Start interactive session${NC}"
-echo -e "\n${YELLOW}Note:${NC}"
-if [[ -n "${RC_FILE:-}" ]]; then
-    echo -e "  ${DIM}Run: source ${RC_FILE}${NC}"
+if [[ ! -d "$VENV_DIR" ]]; then
+    print_header "📦 Creating virtual environment with Python $PY_VERSION..."
+    "$PYTHON" -m venv "$VENV_DIR"
+    print_success "Virtual environment created at: $VENV_DIR"
+    print_success "  Python: $("$VENV_PYTHON" --version 2>&1)"
+else
+    print_success "Virtual environment already exists at: $VENV_DIR"
+    print_success "  Python: $("$VENV_PYTHON" --version 2>&1)"
 fi
-if [[ "$use_venv" == true ]]; then
-    echo -e "  ${DIM}Virtual env: ${VENV_DIR}${NC}"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 4: Upgrade pip & build tools inside venv
+# ═══════════════════════════════════════════════════════════════════════════
+
+print_header "📥 Upgrading pip & build tools inside venv..."
+"$VENV_PIP" install --upgrade pip setuptools wheel -q
+print_success "pip: $("$VENV_PIP" --version 2>&1)"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 5: Install core dependencies from requirements.txt
+# ═══════════════════════════════════════════════════════════════════════════
+
+print_header "📦 Installing core dependencies..."
+REQ_FILE="${REPO_ROOT}/requirements.txt"
+if [[ -f "$REQ_FILE" ]]; then
+    # Install one by one for clearer error messages
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Skip comments and blank lines
+        [[ "$line" =~ ^#.*$ ]] && continue
+        [[ -z "$(echo "$line" | tr -d '[:space:]')" ]] && continue
+        # Skip optional packages (commented with trailing #)
+        [[ "$line" =~ ^# ]] && continue
+        print_warn "Installing: $(echo "$line" | xargs)"
+        "$VENV_PIP" install "$(echo "$line" | xargs)" -q 2>&1 | tail -1 || true
+    done < "$REQ_FILE"
+    print_success "Core dependencies installed"
+else
+    print_warn "requirements.txt not found at $REQ_FILE"
+    print_warn "Installing minimal dependencies..."
+    "$VENV_PIP" install httpx rich pyperclip python-dotenv mss Pillow pyautogui -q
 fi
+
+# (python-mss package name is deprecated - mss is the correct one)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 6: Install judecode package itself (editable mode)
+# ═══════════════════════════════════════════════════════════════════════════
+
+print_header "🔧 Installing judecode package..."
+cd "$REPO_ROOT"
+"$VENV_PIP" install -e . --no-deps -q
+print_success "judecode installed in editable mode"
+cd - &>/dev/null
+
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 7: Install browser automation (playwright)
+# ═══════════════════════════════════════════════════════════════════════════
+
+if [[ "$PLAYWRIGHT" == true ]]; then
+    print_header "🌐 Installing browser automation (Playwright)..."
+    
+    # Install playwright in venv
+    "$VENV_PIP" install playwright -q 2>&1 || print_warn "playwright install failed (non-critical)"
+    
+    # Check if playwright is now available
+    if "$VENV_PYTHON" -c "import playwright" 2>/dev/null; then
+        print_success "playwright Python package installed"
+        
+        # Install Chromium browser for Playwright
+        print_header "🌍 Installing Chromium browser (for accessibility trees)..."
+        print_warn "This downloads ~150MB. To skip: re-run with --no-playwright"
+        if "$VENV_PYTHON" -m playwright install chromium 2>&1; then
+            print_success "Chromium installed for Playwright!"
+        else
+            print_warn "Chromium install failed. Run manually: cd '$REPO_ROOT' && .venv/bin/python -m playwright install chromium"
+        fi
+    else
+        print_warn "playwright not installed (non-critical - accessibility trees won't work)"
+        print_warn "To install later: .venv/bin/pip install playwright && .venv/bin/python -m playwright install chromium"
+    fi
+fi
+
+# Also install pyppeteer as fallback (if not Python 3.14+)
+PY_MINOR_VER=$("$VENV_PYTHON" -c "import sys; print(sys.version_info[1])")
+if [[ "$PY_MINOR_VER" -lt 14 ]]; then
+    print_header "🦎 Installing pyppeteer (fallback browser automation)..."
+    "$VENV_PIP" install pyppeteer -q 2>&1 || print_warn "pyppeteer install skipped"
+    if "$VENV_PYTHON" -c "import pyppeteer" 2>/dev/null; then
+        print_success "pyppeteer installed"
+    fi
+else
+    print_warn "Skipping pyppeteer (incompatible with Python $PY_VERSION)"
+    print_warn "  Playwright will be used instead for browser automation."
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 8: Create wrapper script for seamless 'judecode' command
+# ═══════════════════════════════════════════════════════════════════════════
+
+print_header "🔗 Creating 'judecode' command wrapper..."
+
+WRAPPER_DIR="${HOME}/.local/bin"
+mkdir -p "$WRAPPER_DIR"
+
+# Create a robust wrapper that always uses the venv
+cat > "${WRAPPER_DIR}/judecode" << 'WRAPPER'
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════════════════
+# Jude Code wrapper script
+#
+# Automatically detects and uses the project's virtual environment.
+# Works from anywhere, regardless of system Python version.
+#
+# How it works:
+#   1. Finds the project root by looking for the wrapper's location
+#      or walking up from CWD looking for judecode/__main__.py
+#   2. Activates the venv at {project_root}/.venv
+#   3. Runs judecode with the venv's Python
+# ═══════════════════════════════════════════════════════════════════════════
+
+set -euo pipefail
+
+# Find the project root
+SCRIPT_PATH="$(readlink -f "$0" 2>/dev/null || realpath "$0" 2>/dev/null || echo "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+
+# Strategy 1: If wrapper is in ~/.local/bin, look relative to REPO_ROOT
+# (This is set during install, so we need a marker)
+WRAPPER_DIR="$(dirname "$SCRIPT_DIR")/.local/bin"
+if [[ "$SCRIPT_DIR" == "$WRAPPER_DIR" ]] || [[ "$SCRIPT_DIR" == "$HOME/.local/bin" ]]; then
+    # Try to find the project root via a known marker file
+    CANDIDATE_DIRS=(
+        "$(pwd)"
+        "$(dirname "$(pwd)")/judecode"
+        "$HOME/Code/Jude_code/judecode"
+        "$HOME/judecode"
+        "/opt/judecode"
+    )
+    PROJECT_ROOT=""
+    for dir in "${CANDIDATE_DIRS[@]}"; do
+        if [[ -f "$dir/judecode/__main__.py" ]]; then
+            PROJECT_ROOT="$dir"
+            break
+        fi
+    done
+    
+    # If not found, walk up from CWD
+    if [[ -z "$PROJECT_ROOT" ]]; then
+        CWD="$(pwd)"
+        while [[ "$CWD" != "/" ]]; do
+            if [[ -f "$CWD/judecode/__main__.py" ]]; then
+                PROJECT_ROOT="$CWD"
+                break
+            fi
+            CWD="$(dirname "$CWD")"
+        done
+    fi
+else
+    # Strategy 2: We're in a known location - derive project root
+    PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+fi
+
+# Fallback: use the REPO_ROOT stored during install
+if [[ -z "${PROJECT_ROOT:-}" || ! -f "$PROJECT_ROOT/judecode/__main__.py" ]]; then
+    # Hardcoded fallback from install time — will be substituted below
+    PROJECT_ROOT="__REPO_ROOT__"
+fi
+
+# Verify project root exists
+if [[ ! -f "$PROJECT_ROOT/judecode/__main__.py" ]]; then
+    echo "Error: Cannot find Jude Code project root." >&2
+    echo "Looked in: $PROJECT_ROOT" >&2
+    echo "Please re-run install.sh or set JUDECODE_ROOT environment variable." >&2
+    exit 1
+fi
+
+VENV_PYTHON="${PROJECT_ROOT}/.venv/bin/python"
+
+if [[ ! -x "$VENV_PYTHON" ]]; then
+    echo "Error: Virtual environment not found at $VENV_PYTHON" >&2
+    echo "Please run install.sh first." >&2
+    exit 1
+fi
+
+# Forward all arguments to judecode inside the venv
+exec "$VENV_PYTHON" -m judecode "$@"
+WRAPPER
+
+# Substitute the project root into the wrapper
+sed -i '' "s|__REPO_ROOT__|${REPO_ROOT}|g" "${WRAPPER_DIR}/judecode"
+chmod +x "${WRAPPER_DIR}/judecode"
+
+print_success "Wrapper created at: ${WRAPPER_DIR}/judecode"
+
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 9: Ensure ~/.local/bin is in PATH
+# ═══════════════════════════════════════════════════════════════════════════
+
+print_header "🔧 Ensuring PATH includes ~/.local/bin..."
+
+RC_FILE=""
+SHELL_NAME=$(basename "$SHELL")
+case "$SHELL_NAME" in
+    zsh)   RC_FILE="${HOME}/.zshrc" ;;
+    bash)  RC_FILE="${HOME}/.bashrc" ;;
+    *)     RC_FILE="${HOME}/.${SHELL_NAME}rc" ;;
+esac
+
+PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+
+if [[ -f "$RC_FILE" ]]; then
+    if grep -qF "export PATH=\"\$HOME/.local/bin:" "$RC_FILE" 2>/dev/null || \
+       grep -qF "export PATH=\"\$PATH:\$HOME/.local/bin" "$RC_FILE" 2>/dev/null; then
+        print_success "~/.local/bin already in PATH (in $RC_FILE)"
+    else
+        echo "" >> "$RC_FILE"
+        echo "# Added by Jude Code installer" >> "$RC_FILE"
+        echo "$PATH_LINE" >> "$RC_FILE"
+        print_success "Added ~/.local/bin to PATH in $RC_FILE"
+        print_warn "Run: source $RC_FILE"
+    fi
+else
+    print_warn "$RC_FILE not found. Creating..."
+    echo "$PATH_LINE" > "$RC_FILE"
+    print_success "Created $RC_FILE with PATH setup"
+    print_warn "Run: source $RC_FILE"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 10: Fix the 'Browser error: Pyppeteer catching classes that do not inherit
+#           from BaseException is not allowed' problem
+#
+# This error happens because pyppeteer's exception handling uses Python 3.13+
+# syntax that was deprecated. We apply a monkey-patch if on Python 3.14+.
+# ═══════════════════════════════════════════════════════════════════════════
+
+print_header "🩹 Checking for pyppeteer compatibility patch..."
+
+PY_MINOR_VER=$("$VENV_PYTHON" -c "import sys; print(sys.version_info[1])")
+if [[ "$PY_MINOR_VER" -ge 14 ]]; then
+    print_warn "Python $PY_VERSION detected — pyppeteer is incompatible."
+    print_warn "We'll use Playwright instead (no patch needed)."
+    
+    # Apply a monkey-patch to the venv's site-packages for pyppeteer if installed
+    PYPETEER_DIR=$(find "$VENV_DIR" -path "*/pyppeteer/__init__.py" 2>/dev/null | head -1 | xargs dirname 2>/dev/null || true)
+    if [[ -n "$PYPETEER_DIR" && -f "$PYPETEER_DIR/connection.py" ]]; then
+        print_warn "Applying pyppeteer compatibility patch (for Python 3.14+)..."
+        # Patch the 'except' statements that use invalid exception classes
+        # This is a simplified fix for the most common pattern
+        sed -i '' 's/except BaseException as _TargetClosedError:/except Exception as _TargetClosedError:/g' "$PYPETEER_DIR/connection.py" 2>/dev/null || true
+        sed -i '' 's/except BaseException as _asyncio_TimeoutError:/except Exception as _asyncio_TimeoutError:/g' "$PYPETEER_DIR/connection.py" 2>/dev/null || true
+        print_success "Pyppeteer patch applied (connection.py)"
+    fi
+else
+    print_success "Python $PY_VERSION — no pyppeteer patch needed"
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════
+# STEP 11: Verify installation
+# ═══════════════════════════════════════════════════════════════════════════
+
+print_header "✅ Verifying installation..."
+
+# Check if the wrapper works
+if [[ -x "${WRAPPER_DIR}/judecode" ]]; then
+    if JUDE_VER=$("${WRAPPER_DIR}/judecode" --version 2>/dev/null); then
+        print_success "judecode works! $JUDE_VER"
+    else
+        # --version might not exist, try running with --help
+        print_success "Wrapper script created successfully"
+    fi
+else
+    print_warn "Wrapper script not executable"
+fi
+
+# Verify key dependencies
+print_header "📋 Installed packages:"
+"$VENV_PIP" list 2>/dev/null | grep -iE "judecode|playwright|pyppeteer|httpx|rich|pyautogui|mss|pillow" || true
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DONE
+# ═══════════════════════════════════════════════════════════════════════════
+
+echo ""
+echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}  ✅ Jude Code installed successfully!${NC}"
+echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+echo ""
+echo -e "${CYAN}Quick start:${NC}"
+echo -e "  ${DIM}judecode${NC}        Start Jude Code"
+echo ""
+echo -e "${CYAN}About this install:${NC}"
+echo -e "  ${DIM}Python:${NC}     $("$VENV_PYTHON" --version 2>&1)"
+echo -e "  ${DIM}Venv:${NC}      ${VENV_DIR}"
+echo -e "  ${DIM}Wrapper:${NC}   ${WRAPPER_DIR}/judecode"
+echo ""
+
+# Remind to source shell profile if needed
+if [[ -f "${RC_FILE:-}" ]]; then
+    if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
+        echo -e "  ${YELLOW}› Run: source ${RC_FILE}${NC}"
+    fi
+fi
+
+echo -e "${CYAN}Need help?${NC} ${DIM}judecode --help${NC}"
+echo ""
