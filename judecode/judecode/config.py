@@ -32,13 +32,15 @@ def _env_int(key: str, default: int) -> int:
 
 
 # ── DeepSeek API (Main Model) ──
-# ยิง API ไปที่ DeepSeek โดยตรง
-DEEPSEEK_BASE_URL = _env("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+# ใช้ DeepSeek API โดยตรง (ไม่ผ่าน Ollama)
+# รองรับ deepseek-v4-flash (default, มี thinking mode) และ deepseek-v4-pro
+DEEPSEEK_BASE_URL = _env("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_API_KEY = _env("DEEPSEEK_API_KEY", "sk-YOUR-KEY-HERE")
-DEEPSEEK_MODEL = _env("DEEPSEEK_MODEL", "deepseek-chat")
+DEEPSEEK_MODEL = _env("DEEPSEEK_MODEL", "deepseek-v4-flash")
 
 # ── Ollama (Vision Model - Qwen) ──
 # ใช้ Ollama local สำหรับ vision/screenshot เท่านั้น
+# DeepSeek Cloud API ยังไม่รองรับ vision/multimodal mode
 VISION_BASE_URL = _env("VISION_BASE_URL", "http://127.0.0.1:11434/v1")
 VISION_API_KEY = _env("VISION_API_KEY", "ollama")
 VISION_MODEL = _env("VISION_MODEL", "qwen3.5:397b-cloud")
@@ -47,7 +49,7 @@ VISION_MODEL = _env("VISION_MODEL", "qwen3.5:397b-cloud")
 BASE_URL = DEEPSEEK_BASE_URL
 API_KEY = DEEPSEEK_API_KEY
 MODEL = DEEPSEEK_MODEL
-# DeepSeek-chat output limit ~8K tokens, ปรับให้เหมาะสม
+# deepseek-v4-flash output limit ~8K tokens
 MAX_TOKENS = _env_int("MAX_TOKENS", 8192)
 TEMPERATURE = float(_env("TEMPERATURE", "0.7"))
 
@@ -145,6 +147,7 @@ When the user asks you to interact with the desktop, browser, or applications:
 5. Use keyboard_hotkey for shortcuts
 6. Use open_app to launch applications
 
-The vision model (Qwen 3.5) runs separately from your main model. It only analyzes images.
-You use the description it returns to decide what actions to take.
+The vision model (Qwen 3.5 via Ollama local) runs separately from your main model.
+It only analyzes images - you use the description it returns to decide what actions to take.
+NOTE: DeepSeek Cloud API does NOT support vision/multimodal mode yet, so Ollama (Qwen) is used ONLY for vision tasks.
 """

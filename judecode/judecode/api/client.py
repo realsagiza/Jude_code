@@ -1,4 +1,8 @@
-"""API Client for communicating with Ollama-compatible endpoints."""
+"""API Client for communicating with DeepSeek API (OpenAI-compatible).
+
+ใช้ DeepSeek API โดยตรง (ไม่ผ่าน Ollama)
+Endpoint: https://api.deepseek.com/chat/completions
+"""
 
 import json
 from typing import AsyncGenerator, Optional

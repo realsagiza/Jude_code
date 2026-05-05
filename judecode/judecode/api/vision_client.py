@@ -1,7 +1,10 @@
 """Vision API Client for analyzing screenshots using a vision-capable model (e.g. Qwen).
 
 VISION: ใช้ Ollama local (Qwen) สำหรับดูรูปภาพเท่านั้น
-MAIN:   ใช้ DeepSeek API โดยตรง (ยิง API ข้ามไป DeepSeex เลย ไม่ผ่าน Ollama)
+MAIN:   ใช้ DeepSeek API โดยตรง (ไม่ผ่าน Ollama)
+
+หมายเหตุ: DeepSeek Cloud API ยังไม่รองรับ vision/multimodal mode
+ดังนั้น vision ต้องพึ่ง Ollama (Qwen) ต่อไปจนกว่า DeepSeek จะเพิ่ม vision support
 """
 
 import base64

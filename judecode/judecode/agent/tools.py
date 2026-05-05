@@ -672,7 +672,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "screenshot",
-            "description": "Take a screenshot of the current screen. Optionally analyze it with a vision model (qwen3.5:397b-cloud) to understand what's on screen.",
+            "description": "Take a screenshot of the current screen. Optionally analyze it with a vision model (qwen3.5:397b-cloud via Ollama local) to understand what's on screen. NOTE: DeepSeek does NOT support vision, so vision analysis uses Ollama (Qwen 3.5) locally.",
             "parameters": {
                 "type": "object",
                 "properties": {

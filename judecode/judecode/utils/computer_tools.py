@@ -33,7 +33,10 @@ TIER 3 (FALLBACK - original behavior):
   - Only used when Tier 1 & 2 are not applicable
 
 Requires: pyautogui, pillow, playwright (optional, for browser accessibility)
-Vision requires: Qwen 3.5 or any vision-capable model running in Ollama
+Vision requires: Qwen 3.5 or any vision-capable model running in Ollama (local)
+
+NOTE: DeepSeek Cloud API does NOT support vision/multimodal mode yet.
+      Vision tasks still require Ollama (Qwen 3.5) running locally.
 """
 
 import base64
