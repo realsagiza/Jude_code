@@ -3,11 +3,18 @@
 Supports long multi-line input with plain Python input():
 - Enter twice (blank line) to submit
 - No external dependencies needed
+
+Interrupt/Pause support:
+- Ctrl+C during agent execution → pauses the agent (does NOT exit)
+- /stop command → pauses the agent after current action
+- When paused, type a new message to redirect, or /continue to resume
+- Ctrl+C while idle (waiting for input) → normal exit
 """
 
 import asyncio
 import sys
 import os
+import signal
 
 from rich.panel import Panel
 from rich.markdown import Markdown
@@ -77,12 +84,13 @@ def print_greeting() -> None:
     tips.append(" for available commands\n", style="white")
     tips.append("Type ", style="white")
     tips.append("/quit", style="bold magenta")
-    tips.append(" or ", style="white")
-    tips.append("Ctrl+C", style="bold green")
-    tips.append(" to exit\n", style="white")
+    tips.append(" or Ctrl+C when idle to exit\n", style="white")
     tips.append("Type ", style="white")
     tips.append("/clear", style="bold magenta")
     tips.append(" to clear conversation\n", style="white")
+    tips.append("Type ", style="white")
+    tips.append("/stop", style="bold magenta")
+    tips.append(" or Ctrl+C while running to pause agent\n", style="white")
     tips.append("Press ", style="white")
     tips.append("Enter twice", style="bold green")
     tips.append(" (blank line) to submit multi-line text", style="white")
@@ -142,13 +150,32 @@ async def run_agent_interactive() -> None:
     api_client = ApiClient()
     agent = AgentEngine(SYSTEM_PROMPT, api_client)
 
+    # ── Interrupt/Pause signal handling ──
+    # Track whether the agent is currently running
+    agent_running = False
+
+    def handle_sigint(sig, frame):
+        """Handle Ctrl+C: pause agent if running, exit if idle."""
+        nonlocal agent_running
+        if agent_running:
+            agent.request_stop()
+            console.print(
+                "  [bold yellow](Press Ctrl+C again to force exit)[/bold yellow]"
+            )
+        else:
+            # Exit if idle (waiting for input)
+            console.print()
+            print_goodbye()
+            os._exit(0)
+
+    # Install the custom SIGINT handler
+    original_sigint = signal.signal(signal.SIGINT, handle_sigint)
+
     print_greeting()
 
     try:
         while True:
             # ── Get user input (long text supported) ──
-            # Type your text. Press Enter twice (blank line) to send multi-line.
-            # Or just type a single line and press Enter once.
             try:
                 console.print("\n  \u254b[bold cyan]\u256d[/bold cyan] ", end="")
                 loop = asyncio.get_running_loop()
@@ -184,7 +211,7 @@ async def run_agent_interactive() -> None:
             if not user_input:
                 continue
 
-            # Commands
+            # ── Commands ──
             if user_input.lower() in ("/quit", "/exit", ":q", "quit", "exit"):
                 print_goodbye()
                 break
@@ -197,8 +224,11 @@ async def run_agent_interactive() -> None:
   [bold]/clear[/bold]     - Clear the conversation history
   [bold]/model[/bold]     - Show current model info
   [bold]/continue[/bold]  - Manually trigger continuation (nudge agent to continue)
+  [bold]/stop[/bold]      - Pause the agent after current action (same as Ctrl+C)
+  [bold]/pause[/bold]     - Alias for /stop
   [bold]/status[/bold]    - Show continuation status and history
-  [bold]Ctrl+C[/bold]     - Exit
+  [bold]Ctrl+C[/bold]     - Pause agent if running, exit if idle
+  [bold]Ctrl+C twice[/bold] - Force exit
 
 You can type any question or request.
 For multi-line input, just press Enter twice (blank line) to send.
@@ -208,6 +238,7 @@ The agent can use tools like shell, read, write, edit, grep, web_search, etc.
 
             if user_input.lower() == "/clear":
                 agent.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+                agent.reset_stop()
                 console.print("  [dim]Conversation cleared[/dim]\n", style="cyan")
                 continue
 
@@ -233,24 +264,43 @@ The agent can use tools like shell, read, write, edit, grep, web_search, etc.
                 console.print()
                 continue
 
+            if user_input.lower() in ("/stop", "/pause"):
+                if agent_running:
+                    agent.request_stop()
+                    console.print(
+                        "  [bold yellow]Stop requested. Waiting for current action to finish...[/bold yellow]"
+                    )
+                else:
+                    console.print(
+                        "  [dim]Agent is not currently running.[/dim]\n"
+                    )
+                continue
+
             if user_input.lower() == "/continue":
                 if agent.continuation.can_continue():
-                    await agent.continue_task()
+                    agent_running = True
+                    try:
+                        await agent.continue_task()
+                    finally:
+                        agent_running = False
                 else:
                     console.print(
                         "\n  [bold red]Max continuations reached. Start a new task or clear the conversation.[/bold red]\n"
                     )
                 continue
 
-            # Normal message - process through agent
-            # Thinking indicator is now handled inside agent.chat() for every turn
-
+            # ── Normal message - process through agent ──
+            agent_running = True
             try:
                 await agent.chat(user_input)
             except Exception as e:
                 console.print(f"\n  [bold red]Error:[/bold red] {e}\n")
+            finally:
+                agent_running = False
 
     finally:
+        # Restore original SIGINT handler
+        signal.signal(signal.SIGINT, original_sigint)
         await api_client.close()
 
 

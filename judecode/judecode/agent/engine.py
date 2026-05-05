@@ -46,6 +46,8 @@ class AgentEngine:
             continue_on_incomplete_work=continue_on_incomplete_work,
             continue_on_tool_error=continue_on_tool_error,
         )
+        # ── Interrupt / Pause support ──
+        self.cancel_requested = False
 
     def _show_thinking(self, turn: int) -> None:
         """Show a thinking indicator before each model response turn."""
@@ -108,6 +110,17 @@ class AgentEngine:
     def _is_nudge_message(self, content: str) -> bool:
         """Check if a message is a system nudge (starts with [SYSTEM:)."""
         return content.strip().startswith("[SYSTEM:")
+
+    def request_stop(self) -> None:
+        """Request the agent to stop/pause after the current action."""
+        self.cancel_requested = True
+        console.print(
+            "\n  [bold red]⏹ Stop requested... will pause after current action[/bold red]\n"
+        )
+
+    def reset_stop(self) -> None:
+        """Clear the stop/pause flag (e.g. after user redirects)."""
+        self.cancel_requested = False
 
     async def continue_task(self) -> None:
         """
@@ -269,6 +282,19 @@ class AgentEngine:
                 if "arguments" in tc and tc.get("name"):
                     partial_arguments += f"Tool: {tc['name']}\nArguments:\n{tc['arguments']}\n\n"
             self.continuation.partial_arguments_buffer = partial_arguments
+
+        # ── Check for cancel/stop BEFORE auto-continuation ──
+        if self.cancel_requested:
+            self.cancel_requested = False
+            console.print(
+                "\n  [bold yellow]⏸ Paused by user. Type a new message to redirect, or /continue to resume.[/bold yellow]\n"
+            )
+            # Store the assistant message so far, then stop
+            self.messages.append({
+                "role": "assistant",
+                "content": full_content,
+            })
+            return False  # Stop the loop
 
         # If no tool calls, store assistant message and check for continuation
         if not has_tool_calls:
@@ -446,6 +472,14 @@ class AgentEngine:
                 })
                 tool_results.append(result)
                 self._show_tool_result(result)
+
+        # ── Check for cancel/stop BEFORE auto-continuation ──
+        if self.cancel_requested:
+            self.cancel_requested = False
+            console.print(
+                "\n  [bold yellow]⏸ Paused by user after tool execution. Type a new message to redirect, or /continue to resume.[/bold yellow]\n"
+            )
+            return False  # Stop the loop
 
         # ── Auto-continuation check after tool execution ──
         if (
