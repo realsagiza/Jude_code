@@ -55,7 +55,7 @@ TEMPERATURE = float(_env("TEMPERATURE", "0.7"))
 
 # ── Continuation / Nudge System ──
 # Maximum number of auto-continuations before stopping
-MAX_CONTINUATIONS = _env_int("MAX_CONTINUATIONS", 10)
+MAX_CONTINUATIONS = _env_int("MAX_CONTINUATIONS", 50)
 # Whether to enable auto-continuation on stream errors
 CONTINUE_ON_STREAM_ERROR = True
 # Whether to enable auto-continuation when incomplete work is detected
