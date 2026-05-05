@@ -287,6 +287,18 @@ print_header "🔗 Creating 'judecode' command wrapper..."
 WRAPPER_DIR="${HOME}/.local/bin"
 mkdir -p "$WRAPPER_DIR"
 
+# ── Store the project root in a reliable marker file ──
+# Marker lives at ~/.local/share/judecode/install_root — a predictable
+# location that the wrapper can find from anywhere (no relative-path
+# guesswork between the wrapper and the venv).
+#
+# If you move the judecode folder, just re-run install.sh to update it.
+MARKER_DIR="${HOME}/.local/share/judecode"
+mkdir -p "$MARKER_DIR"
+MARKER_FILE="${MARKER_DIR}/install_root"
+echo "$REPO_ROOT" > "$MARKER_FILE"
+print_success "Project root marker saved: $MARKER_FILE"
+
 # Create a robust wrapper that always uses the venv
 cat > "${WRAPPER_DIR}/judecode" << 'WRAPPER'
 #!/usr/bin/env bash
@@ -297,64 +309,47 @@ cat > "${WRAPPER_DIR}/judecode" << 'WRAPPER'
 # Works from anywhere, regardless of system Python version.
 #
 # How it works:
-#   1. Finds the project root by looking for the wrapper's location
-#      or walking up from CWD looking for judecode/__main__.py
-#   2. Activates the venv at {project_root}/.venv
-#   3. Runs judecode with the venv's Python
+#   1. Reads the project root from ~/.local/share/judecode/install_root
+#      (written by install.sh). This is the primary method.
+#   2. Falls back to walking up from CWD looking for judecode/__main__.py.
+#   3. Falls back to JUDECODE_ROOT env var.
+#   4. Runs judecode with the venv's Python.
 # ═══════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
 
-# Find the project root
-SCRIPT_PATH="$(readlink -f "$0" 2>/dev/null || realpath "$0" 2>/dev/null || echo "$0")"
-SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+# ── Step 1: Read marker file ──
+# Written by install.sh to a predictable location (~/.local/share/judecode/)
+PROJECT_ROOT=""
+MARKER_FILE="${HOME}/.local/share/judecode/install_root"
+if [[ -f "$MARKER_FILE" ]]; then
+    read -r PROJECT_ROOT < "$MARKER_FILE"
+    PROJECT_ROOT="$(echo "$PROJECT_ROOT" | xargs)"   # trim whitespace
+fi
 
-# Strategy 1: If wrapper is in ~/.local/bin, look relative to REPO_ROOT
-# (This is set during install, so we need a marker)
-WRAPPER_DIR="$(dirname "$SCRIPT_DIR")/.local/bin"
-if [[ "$SCRIPT_DIR" == "$WRAPPER_DIR" ]] || [[ "$SCRIPT_DIR" == "$HOME/.local/bin" ]]; then
-    # Try to find the project root via a known marker file
-    CANDIDATE_DIRS=(
-        "$(pwd)"
-        "$(dirname "$(pwd)")/judecode"
-        "$HOME/Code/Jude_code/judecode"
-        "$HOME/judecode"
-        "/opt/judecode"
-    )
-    PROJECT_ROOT=""
-    for dir in "${CANDIDATE_DIRS[@]}"; do
-        if [[ -f "$dir/judecode/__main__.py" ]]; then
-            PROJECT_ROOT="$dir"
+# ── Step 2: Fallback — walk up from CWD ──
+if [[ -z "$PROJECT_ROOT" || ! -f "$PROJECT_ROOT/judecode/__main__.py" ]]; then
+    CWD="$(pwd)"
+    while [[ "$CWD" != "/" ]]; do
+        if [[ -f "$CWD/judecode/__main__.py" ]]; then
+            PROJECT_ROOT="$CWD"
             break
         fi
+        CWD="$(dirname "$CWD")"
     done
-    
-    # If not found, walk up from CWD
-    if [[ -z "$PROJECT_ROOT" ]]; then
-        CWD="$(pwd)"
-        while [[ "$CWD" != "/" ]]; do
-            if [[ -f "$CWD/judecode/__main__.py" ]]; then
-                PROJECT_ROOT="$CWD"
-                break
-            fi
-            CWD="$(dirname "$CWD")"
-        done
+fi
+
+# ── Step 3: Fallback — try JUDECODE_ROOT env var ──
+if [[ -z "$PROJECT_ROOT" || ! -f "$PROJECT_ROOT/judecode/__main__.py" ]]; then
+    if [[ -n "${JUDECODE_ROOT:-}" && -f "$JUDECODE_ROOT/judecode/__main__.py" ]]; then
+        PROJECT_ROOT="$JUDECODE_ROOT"
     fi
-else
-    # Strategy 2: We're in a known location - derive project root
-    PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 fi
 
-# Fallback: use the REPO_ROOT stored during install
-if [[ -z "${PROJECT_ROOT:-}" || ! -f "$PROJECT_ROOT/judecode/__main__.py" ]]; then
-    # Hardcoded fallback from install time — will be substituted below
-    PROJECT_ROOT="__REPO_ROOT__"
-fi
-
-# Verify project root exists
+# ── Step 4: Verify ──
 if [[ ! -f "$PROJECT_ROOT/judecode/__main__.py" ]]; then
     echo "Error: Cannot find Jude Code project root." >&2
-    echo "Looked in: $PROJECT_ROOT" >&2
+    echo "Tried: $MARKER_FILE, walking up from $(pwd), and JUDECODE_ROOT env var." >&2
     echo "Please re-run install.sh or set JUDECODE_ROOT environment variable." >&2
     exit 1
 fi
@@ -371,8 +366,6 @@ fi
 exec "$VENV_PYTHON" -m judecode "$@"
 WRAPPER
 
-# Substitute the project root into the wrapper
-sed -i '' "s|__REPO_ROOT__|${REPO_ROOT}|g" "${WRAPPER_DIR}/judecode"
 chmod +x "${WRAPPER_DIR}/judecode"
 
 print_success "Wrapper created at: ${WRAPPER_DIR}/judecode"
