@@ -57,40 +57,23 @@ TOKEN_LIMIT_INDICATORS = [
 ]
 
 INCOMPLETE_WORK_PATTERNS = [
-    # File operations that didn't complete
-    r"(?:still|need|must|should|going to).*(?:write|create|edit|update|delete|add)",
-    r"(?:writing|creating|editing|updating).*(?:next|remaining|rest|other)",
-    r"(?:not yet|haven't|hasn't).*(?:finished|completed|done|written)",
-    r"let me (?:also|now|then|next)\s+(?:write|create|edit|update|delete|add|implement|fix|change)",
-    r"i (?:will|need to|should|must)\s+(?:next|then|also)\s+(?:write|create|edit|update|delete|add|implement|fix|change)",
-    # Partial file writes
-    r"content truncated",
-    r"output truncated",
-    r"too long",
-    r"max.*length",
-    r"exceeded",
-    r"token limit",
-    r"max tokens",
-    r"maximum tokens",
-    r"context length",
-    r"truncated",
-    # Shell errors
+    # Strong signals that work was interrupted mid-operation
+    r"(?:i (?:will|need to|should|must|shall|can)\s+(?:now|then|next)\s+(?:write|create|edit|update|delete|add))",
+    r"(?:let me\s+(?:now|then|next)\s+(?:write|create|edit|update|delete|add|implement|fix|change))",
+    # Output was explicitly truncated by the system
+    r"(?:output|content|response)\s+(?:was\s+)?truncated",
+    r"(?:token|context)\s+(?:limit|length|window)\s+(?:exceeded|reached|hit)",
+    r"(?:max|maximum)\s+(?:token|output|context)\s+(?:length|limit|size)",
+    # Shell/build errors that blocked completion (only specific exit codes)
+    r"exit code: (?:1|2)",
     r"command not found",
     r"permission denied",
-    r"no such file",
-    r"not found",
-    r"failed",
-    r"error:",
-    r"warning:",
-    r"exit code: 1",
-    r"exit code: 2",
-    # Continuation signals
-    r"continuing|continuing from|resuming|picking up",
-    r"next (?:step|file|part|task|thing)",
-    r"remaining (?:work|tasks|files|steps)",
-    r"more (?:work|files|tasks|steps|to do)",
+    # Agent explicitly says there's more to do
+    r"continuing with|continuing from|resuming",
     r"incomplete",
     r"partially (?:done|complete|finished)",
+    # Agent says it was cut off
+    r"(?:was|got|being)\s+(?:cut|truncated)\s+(?:off|short)",
 ]
 
 COMPLETION_INDICATORS = [

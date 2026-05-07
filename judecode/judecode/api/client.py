@@ -13,7 +13,7 @@ from judecode.config import BASE_URL, API_KEY, MODEL, MAX_TOKENS, TEMPERATURE
 
 
 class ApiClient:
-    """Client for Ollama-compatible chat completion API."""
+    """Client for DeepSeek API (OpenAI-compatible) chat completions."""
 
     def __init__(
         self,

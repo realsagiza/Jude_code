@@ -51,7 +51,7 @@ if not _DEFAULT_KEY:
         stacklevel=2,
     )
 DEEPSEEK_API_KEY = _DEFAULT_KEY
-DEEPSEEK_MODEL = _env("DEEPSEEK_MODEL", "deepseek-v4-flash")
+DEEPSEEK_MODEL = _env("DEEPSEEK_MODEL", "deepseek-chat")
 
 # ── Vision API (Screenshot Analysis) ──
 # รองรับทั้ง Ollama (local) และ Cloud API เช่น DashScope/Qwen, OpenAI Vision
@@ -62,7 +62,7 @@ DEEPSEEK_MODEL = _env("DEEPSEEK_MODEL", "deepseek-v4-flash")
 #   JUDECODE_VISION_MODEL=qwen3.6-flash-2026-04-16
 VISION_BASE_URL = _env("VISION_BASE_URL", "http://127.0.0.1:11434/v1")
 VISION_API_KEY = _env("VISION_API_KEY", "ollama")
-VISION_MODEL = _env("VISION_MODEL", "qwen3.6-flash-2026-04-16")
+VISION_MODEL = _env("VISION_MODEL", "llava")
 
 # ── Shared API Config (for backward compatibility) ──
 BASE_URL = DEEPSEEK_BASE_URL

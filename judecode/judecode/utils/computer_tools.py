@@ -1038,9 +1038,14 @@ def keyboard_hotkey(*keys: str) -> str:
         for k in keys:
             kl = k.lower()
             if kl in ("cmd", "command", "win", "windows", "super"):
+                # pyautogui uses 'command' on macOS, 'win' on Windows/Linux
                 normalized.append("command" if system == "darwin" else "win")
             elif kl in ("alt", "option"):
-                normalized.append("option" if system == "darwin" else "alt")
+                # pyautogui uses 'alt' on all platforms (including macOS)
+                normalized.append("alt")
+            elif kl == "ctrl":
+                # pyautogui uses 'ctrl' on all platforms; macOS translates to ⌃
+                normalized.append("ctrl")
             else:
                 normalized.append(k)
 
