@@ -61,8 +61,8 @@ INCOMPLETE_WORK_PATTERNS = [
     r"(?:still|need|must|should|going to).*(?:write|create|edit|update|delete|add)",
     r"(?:writing|creating|editing|updating).*(?:next|remaining|rest|other)",
     r"(?:not yet|haven't|hasn't).*(?:finished|completed|done|written)",
-    r"let me (?:also|now|then|next)",
-    r"i (?:will|need to|should|must).*(?:next|now|then|also)",
+    r"let me (?:also|now|then|next)\s+(?:write|create|edit|update|delete|add|implement|fix|change)",
+    r"i (?:will|need to|should|must)\s+(?:next|then|also)\s+(?:write|create|edit|update|delete|add|implement|fix|change)",
     # Partial file writes
     r"content truncated",
     r"output truncated",

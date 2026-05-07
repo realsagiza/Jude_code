@@ -212,7 +212,7 @@ async def run_agent_interactive() -> None:
                 continue
 
             # ── Commands ──
-            if user_input.lower() in ("/quit", "/exit", ":q", "quit", "exit"):
+            if user_input.lower() in ("/quit", "/exit", ":q"):
                 print_goodbye()
                 break
 

@@ -8,6 +8,7 @@ Config values can be overridden via environment variables:
     JUDECODE_MAX_TOKENS
     JUDECODE_TEMPERATURE
     JUDECODE_MAX_CONTINUATIONS
+    JUDECODE_MAX_TURNS
     JUDECODE_VAULT
 
 This allows the Windows .exe to be configured via config.ini
@@ -71,9 +72,14 @@ MODEL = DEEPSEEK_MODEL
 MAX_TOKENS = _env_int("MAX_TOKENS", 8192)
 TEMPERATURE = float(_env("TEMPERATURE", "0.7"))
 
+# ── Knowledge Vault ──
+VAULT_PATH = _env("VAULT", os.path.expanduser("~/.judecode/vault"))
+
 # ── Continuation / Nudge System ──
 # Maximum number of auto-continuations before stopping
 MAX_CONTINUATIONS = _env_int("MAX_CONTINUATIONS", 100)
+# Maximum conversation turns before stopping
+MAX_TURNS = _env_int("MAX_TURNS", 100)
 # Whether to enable auto-continuation on stream errors
 CONTINUE_ON_STREAM_ERROR = True
 # Whether to enable auto-continuation when incomplete work is detected

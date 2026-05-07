@@ -1130,11 +1130,11 @@ def open_app(app_name: str) -> str:
                 subprocess.Popen([exe_path], shell=False)
                 return f"Opened application: {app_name}"
 
-            # Strategy 2: Try 'start' command (shell=True required for CMD built-in)
+            # Strategy 2: Try 'start' command via cmd /c (safe: app_name is a single arg)
             try:
                 subprocess.Popen(
-                    ["start", app_name],
-                    shell=True,
+                    ["cmd", "/c", "start", "", app_name],
+                    shell=False,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
@@ -1145,8 +1145,8 @@ def open_app(app_name: str) -> str:
             # Strategy 3: Try with .exe extension
             try:
                 subprocess.Popen(
-                    ["start", f"{app_name}.exe"],
-                    shell=True,
+                    ["cmd", "/c", "start", "", f"{app_name}.exe"],
+                    shell=False,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )

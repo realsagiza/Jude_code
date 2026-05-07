@@ -5,8 +5,9 @@ import re
 from pathlib import Path
 from typing import Optional
 
+from judecode.config import VAULT_PATH
 
-DEFAULT_VAULT_PATH = os.path.expanduser("~/.judecode/vault")
+DEFAULT_VAULT_PATH = VAULT_PATH
 
 
 def get_vault_path() -> Path:

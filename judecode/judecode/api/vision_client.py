@@ -13,6 +13,15 @@ MAIN:   ใช้ DeepSeek API โดยตรง (ไม่ผ่าน Ollama)
 ดังนั้น vision ต้องใช้ API อื่นตาม config เช่น DashScope (Qwen), OpenAI Vision, หรือ Ollama local
 """
 
+import warnings
+
+warnings.warn(
+    "judecode.api.vision_client is deprecated. "
+    "Use judecode.utils.computer_tools.screenshot() directly instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 from judecode.utils.computer_tools import (
     screenshot,
     get_screen_size,

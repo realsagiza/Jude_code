@@ -11,11 +11,13 @@ from judecode.agent.continuation import (
     ContinuationTracker,
     detect_stream_interruption,
     detect_incomplete_work,
+    detect_completion,
     detect_token_limit_truncation,
     generate_continuation_nudge,
 )
 from judecode.config import (
     MAX_CONTINUATIONS,
+    MAX_TURNS,
     CONTINUE_ON_STREAM_ERROR,
     CONTINUE_ON_INCOMPLETE_WORK,
     CONTINUE_ON_TOOL_ERROR,
@@ -48,6 +50,8 @@ class AgentEngine:
         )
         # ── Interrupt / Pause support ──
         self.cancel_requested = False
+        # ── Turn counter (shared between chat() and continue_task()) ──
+        self._turn_count = 0
 
     def _show_thinking(self, turn: int) -> None:
         """Show a thinking indicator before each model response turn."""
@@ -143,8 +147,9 @@ class AgentEngine:
         console.print(
             f"\n  [bold yellow]⟳ Manual continuation #{self.continuation.count}/{self.continuation.max_continuations}[/bold yellow]"
         )
-        # Process the nudge directly
-        await self._process_turn()
+        # Process the nudge directly, passing the current turn context
+        self._turn_count += 1
+        await self._process_turn(turn_number=self._turn_count)
 
     async def _process_turn(self, turn_number: int = 1) -> bool:
         """
@@ -523,6 +528,10 @@ class AgentEngine:
                 self.messages.append({"role": "user", "content": nudge})
                 return True  # Continue
 
+        # ── Check if work is clearly done before auto-continuing ──
+        if not self._is_nudge_message(full_content) and detect_completion(full_content):
+            return False  # Work is done, stop
+
         return True  # Continue to next turn naturally (no nudge needed)
 
     async def chat(self, user_message: str) -> None:
@@ -532,12 +541,9 @@ class AgentEngine:
 
         self.messages.append({"role": "user", "content": user_message})
 
-        MAX_TURNS = 100
-        turn = 0
-
-        while turn < MAX_TURNS:
-            turn += 1
-            should_continue = await self._process_turn(turn_number=turn)
+        while self._turn_count < MAX_TURNS:
+            self._turn_count += 1
+            should_continue = await self._process_turn(turn_number=self._turn_count)
             if not should_continue:
                 return
 
