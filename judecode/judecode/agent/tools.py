@@ -675,11 +675,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "screenshot",
-            "description": "Take a screenshot. Optionally analyze with vision_model (qwen3.5:397b-cloud via Ollama).",
+            "description": "Take a screenshot. Optionally analyze with vision_model (configured via JUDECODE_VISION_MODEL in .env).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "vision_model": {"type": "string", "description": "Vision model name (e.g. 'qwen3.5:397b-cloud'). Empty = just screenshot."},
+                    "vision_model": {"type": "string", "description": "Vision model name (set via JUDECODE_VISION_MODEL in .env). Empty = just screenshot."},
                     "task_description": {"type": "string", "description": "Context to focus vision analysis."},
                     "save_path": {"type": "string", "description": "Optional path to save screenshot."}
                 }

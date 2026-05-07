@@ -6,11 +6,11 @@ That module has its own synchronous _analyze_screenshot_sync() function using ur
 
 This file is kept as a placeholder only. All imports should use computer_tools.screenshot() directly.
 
-VISION:  ใช้ Ollama local (Qwen) สำหรับดูรูปภาพเท่านั้น
+VISION:  ใช้ Vision API (Ollama/Cloud) ผ่าน computer_tools.screenshot() ตามค่าตั้งค่าใน .env
 MAIN:   ใช้ DeepSeek API โดยตรง (ไม่ผ่าน Ollama)
 
 หมายเหตุ: DeepSeek Cloud API ยังไม่รองรับ vision/multimodal mode
-ดังนั้น vision ต้องพึ่ง Ollama (Qwen) ต่อไปจนกว่า DeepSeek จะเพิ่ม vision support
+ดังนั้น vision ต้องใช้ API อื่นตาม config เช่น DashScope (Qwen), OpenAI Vision, หรือ Ollama local
 """
 
 from judecode.utils.computer_tools import (

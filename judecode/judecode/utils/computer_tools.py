@@ -33,10 +33,16 @@ TIER 3 (FALLBACK - original behavior):
   - Only used when Tier 1 & 2 are not applicable
 
 Requires: pyautogui, pillow, playwright (optional, for browser accessibility)
-Vision requires: Qwen 3.5 or any vision-capable model running in Ollama (local)
+Vision requires: A vision-capable model via any OpenAI-compatible API.
+  - Local: Ollama with llava, bakllava, qwen2-vl, etc.
+  - Cloud: DashScope (Qwen), OpenAI Vision, Anthropic, etc.
+  Configure via .env:
+    JUDECODE_VISION_BASE_URL=<your-api-url>/v1
+    JUDECODE_VISION_API_KEY=sk-your-key
+    JUDECODE_VISION_MODEL=your-vision-model
 
 NOTE: DeepSeek Cloud API does NOT support vision/multimodal mode yet.
-      Vision tasks still require Ollama (Qwen 3.5) running locally.
+      Vision tasks require a separate vision-capable API/model.
 """
 
 import base64
@@ -649,7 +655,7 @@ def screenshot(
        History is pruned to keep only the 3 most recent.
 
     Args:
-        vision_model: Optional model name (e.g. 'qwen3.5:397b-cloud').
+        vision_model: Optional model name (configured via JUDECODE_VISION_MODEL in .env).
                       If provided, the screenshot will be analyzed.
                       ⚠️ Consider using get_browser_accessibility_snapshot()
                       or get_desktop_accessibility_tree() instead - they're

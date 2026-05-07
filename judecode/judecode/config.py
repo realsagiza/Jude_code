@@ -52,12 +52,16 @@ if not _DEFAULT_KEY:
 DEEPSEEK_API_KEY = _DEFAULT_KEY
 DEEPSEEK_MODEL = _env("DEEPSEEK_MODEL", "deepseek-v4-flash")
 
-# ── Ollama (Vision Model - Qwen) ──
-# ใช้ Ollama local สำหรับ vision/screenshot เท่านั้น
+# ── Vision API (Screenshot Analysis) ──
+# รองรับทั้ง Ollama (local) และ Cloud API เช่น DashScope/Qwen, OpenAI Vision
 # DeepSeek Cloud API ยังไม่รองรับ vision/multimodal mode
+# ตั้งค่าผ่าน .env หรือ environment variables:
+#   JUDECODE_VISION_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+#   JUDECODE_VISION_API_KEY=sk-your-key-here
+#   JUDECODE_VISION_MODEL=qwen3.6-flash-2026-04-16
 VISION_BASE_URL = _env("VISION_BASE_URL", "http://127.0.0.1:11434/v1")
 VISION_API_KEY = _env("VISION_API_KEY", "ollama")
-VISION_MODEL = _env("VISION_MODEL", "qwen3.5:397b-cloud")
+VISION_MODEL = _env("VISION_MODEL", "qwen3.6-flash-2026-04-16")
 
 # ── Shared API Config (for backward compatibility) ──
 BASE_URL = DEEPSEEK_BASE_URL
@@ -110,7 +114,7 @@ Computer Use:
 - Prefer get_browser_accessibility_snapshot() or get_desktop_accessibility_tree()
   over screenshot+vision (10-50x faster).
 - Use screenshot(vision_model=...) only when accessibility trees are insufficient.
-- Vision model (Qwen via Ollama local) runs separately from your main model.
+- Vision model (configured via JUDECODE_VISION_MODEL in .env) runs separately from your main model.
 
 Task Manager:
 Break down complex requests into tasks FIRST using task_add(), then
