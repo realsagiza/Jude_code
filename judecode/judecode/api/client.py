@@ -24,6 +24,7 @@ class ApiClient:
         base_url: str = BASE_URL,
         api_key: str = API_KEY,
         model: str = MODEL,
+        fallback_model: str = "deepseek-chat",  # Non-thinking fallback
         max_tokens: int = MAX_TOKENS,
         temperature: float = TEMPERATURE,
         max_retries: int = 3,  # Increased from 2 to 3 for better resilience
@@ -31,10 +32,12 @@ class ApiClient:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
+        self.fallback_model = fallback_model
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.max_retries = max_retries
         self._client = httpx.AsyncClient(timeout=httpx.Timeout(300.0))
+        self._has_fallback = False  # Track if we already fell back
 
     def _build_headers(self) -> dict:
         return {
@@ -68,8 +71,11 @@ class ApiClient:
         url = f"{self.base_url}/chat/completions"
         headers = self._build_headers()
 
-        last_error = None
-        for attempt in range(1, self.max_retries + 1):
+        last_error: Optional[BaseException] = None
+        attempt = 0
+
+        while attempt < self.max_retries:
+            attempt += 1
             try:
                 async with self._client.stream(
                     "POST", url, json=payload, headers=headers
@@ -88,6 +94,20 @@ class ApiClient:
                                 "attempt": attempt,
                             },
                         )
+                        # ── Auto-fallback: reasoning_content error → switch to non-thinking model ──
+                        if "reasoning_content" in error_msg and not self._has_fallback:
+                            self._has_fallback = True
+                            old_model = self.model
+                            self.model = self.fallback_model
+                            payload["model"] = self.model
+                            logger.warning(
+                                f"⚠️  API error 400: reasoning_content mismatch with '{old_model}'. "
+                                f"Auto-falling back to '{self.fallback_model}' (non-thinking mode)."
+                            )
+                            attempt = 0  # Reset retry counter for fresh start
+                            last_error = None
+                            continue  # Retry immediately with fallback model
+
                         raise RuntimeError(error_msg)
 
                     remaining_content = ""
@@ -122,7 +142,7 @@ class ApiClient:
                                     "remaining_content_length": len(remaining_content),
                                 },
                             )
-                            if attempt == self.max_retries:
+                            if attempt >= self.max_retries:
                                 yield self._error_chunk(
                                     f"Stream interrupted after receiving partial content.\n"
                                     f"Partial content so far:\n{remaining_content}\n\n"
@@ -149,7 +169,7 @@ class ApiClient:
                         "attempt": attempt,
                     },
                 )
-                if attempt == self.max_retries:
+                if attempt >= self.max_retries:
                     yield self._error_chunk(
                         f"Connection failed after {self.max_retries} attempts.\n"
                         f"Error: {type(e).__name__}: {e}\n"
@@ -157,17 +177,18 @@ class ApiClient:
                     )
                     return
             except RuntimeError as e:
+                error_str = str(e)
                 log_error_details(
                     logger,
                     f"API request failed",
                     exc_info=False,
                     extra={
-                        "error": str(e),
+                        "error": error_str,
                     },
                 )
                 yield self._error_chunk(
                     f"API request failed.\n"
-                    f"Error: {type(e).__name__}: {e}\n"
+                    f"Error: {type(e).__name__}: {error_str}\n"
                     f"Please check API endpoint, model, and network settings."
                 )
                 return
@@ -183,7 +204,7 @@ class ApiClient:
                         "attempt": attempt,
                     },
                 )
-                if attempt == self.max_retries:
+                if attempt >= self.max_retries:
                     yield self._error_chunk(
                         f"HTTP error after {self.max_retries} attempts.\n"
                         f"Error: {type(e).__name__}: {e}\n"
@@ -263,6 +284,22 @@ class ApiClient:
         response = await self._client.post(url, json=payload, headers=headers)
         if response.status_code != 200:
             error_msg = f"API error {response.status_code}: {response.text}"
+
+            # ── Auto-fallback: reasoning_content error → switch to non-thinking model ──
+            if "reasoning_content" in error_msg and not self._has_fallback:
+                self._has_fallback = True
+                old_model = self.model
+                self.model = self.fallback_model
+                logger.warning(
+                    f"⚠️  API error 400: reasoning_content mismatch with '{old_model}'. "
+                    f"Auto-falling back to '{self.fallback_model}' (non-thinking mode)."
+                )
+                # Retry once with fallback model
+                payload["model"] = self.model
+                response = await self._client.post(url, json=payload, headers=headers)
+                if response.status_code == 200:
+                    return response.json()
+
             log_error_details(
                 logger,
                 error_msg,
