@@ -197,7 +197,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "Search the web using DuckDuckGo",
+            "description": "Search the web using Tavily AI Search (or DuckDuckGo fallback)",
             "parameters": {
                 "type": "object",
                 "properties": {
