@@ -83,7 +83,9 @@ MAX_TURNS = _env_int("MAX_TURNS", 100)
 # Whether to enable auto-continuation on stream errors
 CONTINUE_ON_STREAM_ERROR = True
 # Whether to enable auto-continuation when incomplete work is detected
-CONTINUE_ON_INCOMPLETE_WORK = True
+# ปิดเป็น default เพราะ tool call errors + stream interruption ก็เพียงพอแล้ว
+# incomplete_work pattern มัก false positive ในการสนทนาทั่วไป
+CONTINUE_ON_INCOMPLETE_WORK = False
 # Whether to enable auto-continuation on tool errors
 CONTINUE_ON_TOOL_ERROR = True
 

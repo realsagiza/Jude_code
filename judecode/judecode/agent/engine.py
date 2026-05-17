@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -23,6 +24,9 @@ from judecode.config import (
     CONTINUE_ON_TOOL_ERROR,
 )
 from judecode.ui.console import console
+from judecode.utils.logger import get_logger, log_error_details
+
+logger = get_logger("judecode.engine")
 
 
 class AgentEngine:
@@ -105,6 +109,12 @@ class AgentEngine:
         try:
             return execute_tool(tool_name, args)
         except TypeError as e:
+            log_error_details(
+                logger,
+                f"Tool execution TypeError in '{tool_name}'",
+                exc_info=True,
+                extra={"args": args},
+            )
             return (
                 f"Error executing tool '{tool_name}': "
                 f"TypeError ({type(e).__name__}: {e}). "
@@ -237,8 +247,17 @@ class AgentEngine:
                             tool_calls[index]["arguments"] += fn["arguments"]
 
         except Exception as e:
-            console.print(
-                f"\n  [bold red]Stream error:[/bold red] {type(e).__name__}: {e}\n"
+            error_msg = f"Stream error: {type(e).__name__}: {e}"
+            console.print(f"\n  [bold red]{error_msg}[/bold red]\n")
+            log_error_details(
+                logger,
+                error_msg,
+                exc_info=True,
+                extra={
+                    "turn": turn_number,
+                    "full_content_length": len(full_content),
+                    "has_partial": bool(full_content),
+                },
             )
             self.continuation.had_stream_error = True
             self.continuation.partial_content_buffer = full_content
@@ -295,20 +314,26 @@ class AgentEngine:
                 "\n  [bold yellow]⏸ Paused by user. Type a new message to redirect, or /continue to resume.[/bold yellow]\n"
             )
             # Store the assistant message so far, then stop
-            self.messages.append({
+            msg: dict[str, Any] = {
                 "role": "assistant",
                 "content": full_content,
-            })
+            }
+            if full_reasoning:
+                msg["reasoning_content"] = full_reasoning
+            self.messages.append(msg)
             return False  # Stop the loop
 
         # If no tool calls, store assistant message and check for continuation
         if not has_tool_calls:
-            self.messages.append({
+            msg: dict[str, Any] = {
                 "role": "assistant",
                 "content": full_content,
-            })
+            }
+            if full_reasoning:
+                msg["reasoning_content"] = full_reasoning
+            self.messages.append(msg)
 
-            # ── Check for token limit truncation ──
+            # ── Check for token limit truncation (only valid no-tool-call continuation) ──
             if finish_reason == "length":
                 if self.continuation.can_continue():
                     nudge = generate_continuation_nudge(
@@ -327,30 +352,11 @@ class AgentEngine:
                     return True  # Continue
                 return False
 
-            if (
-                not self._is_nudge_message(full_content)
-                and self.continuation.continue_on_incomplete_work
-                and self.continuation.can_continue()
-            ):
-                if detect_incomplete_work(full_content, []):
-                    nudge = generate_continuation_nudge(
-                        reason="incomplete_work",
-                        continuation_count=self.continuation.count,
-                        max_continuations=self.continuation.max_continuations,
-                    )
-                    self.continuation.record_continuation("incomplete_work", nudge)
-                    self._show_continuation_nudge(
-                        "incomplete_work",
-                        self.continuation.count,
-                        self.continuation.max_continuations,
-                    )
-                    self.messages.append({"role": "user", "content": nudge})
-                    return True  # Continue
-
+            # ── No tool calls + not truncated = normal conversation → NEVER auto-continue ──
             return False  # Done
 
         # ── There were tool calls - execute them ──
-        self.messages.append({
+        msg: dict[str, Any] = {
             "role": "assistant",
             "content": full_content or None,
             "tool_calls": [
@@ -364,7 +370,10 @@ class AgentEngine:
                 }
                 for tc in tool_calls if "name" in tc
             ],
-        })
+        }
+        if full_reasoning:
+            msg["reasoning_content"] = full_reasoning
+        self.messages.append(msg)
 
         if not has_started_output:
             console.print()
@@ -395,6 +404,12 @@ class AgentEngine:
                 try:
                     result = execute_tool(tc["name"], tc["args"])
                 except Exception as e:
+                    log_error_details(
+                        logger,
+                        f"Tool execution error in '{tc['name']}'",
+                        exc_info=True,
+                        extra={"args": tc["args"]},
+                    )
                     result = (
                         f"Error executing tool '{tc['name']}': "
                         f"{type(e).__name__}: {e}"
@@ -431,6 +446,12 @@ class AgentEngine:
             try:
                 result = execute_tool(tc["name"], tc["args"])
             except TypeError as e:
+                log_error_details(
+                    logger,
+                    f"Tool execution TypeError in '{tc['name']}'",
+                    exc_info=True,
+                    extra={"args": tc["args"]},
+                )
                 result = (
                     f"Error executing tool '{tc['name']}': "
                     f"TypeError ({type(e).__name__}: {e}). "

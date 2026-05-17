@@ -57,23 +57,25 @@ TOKEN_LIMIT_INDICATORS = [
 ]
 
 INCOMPLETE_WORK_PATTERNS = [
-    # Strong signals that work was interrupted mid-operation
-    r"(?:i (?:will|need to|should|must|shall|can)\s+(?:now|then|next)\s+(?:write|create|edit|update|delete|add))",
-    r"(?:let me\s+(?:now|then|next)\s+(?:write|create|edit|update|delete|add|implement|fix|change))",
+    # ⚠️ STRICT: ONLY match explicit interruption/system messages
+    # NOT normal conversational phrases like "I need to", "let me", etc.
+
     # Output was explicitly truncated by the system
     r"(?:output|content|response)\s+(?:was\s+)?truncated",
     r"(?:token|context)\s+(?:limit|length|window)\s+(?:exceeded|reached|hit)",
-    r"(?:max|maximum)\s+(?:token|output|context)\s+(?:length|limit|size)",
-    # Shell/build errors that blocked completion (only specific exit codes)
-    r"exit code: (?:1|2)",
+    r"(?:max|maximum)\s+(?:token|output|context)\s+(?:length|limit|size|budget)",
+    r"finish_reason.*length",
+
+    # Shell/build errors that blocked completion
+    r"exit code: [12]\b",
     r"command not found",
     r"permission denied",
-    # Agent explicitly says there's more to do
-    r"continuing with|continuing from|resuming",
-    r"incomplete",
-    r"partially (?:done|complete|finished)",
-    # Agent says it was cut off
-    r"(?:was|got|being)\s+(?:cut|truncated)\s+(?:off|short)",
+
+    # Agent explicitly says there's more to do — only match exact continuation nudge context
+    r"continuing from where",
+    r"was interrupted",
+    r"previous response (?:was )?interrupted",
+    r"previous response (?:was )?truncated",
 ]
 
 COMPLETION_INDICATORS = [

@@ -5,11 +5,15 @@ Endpoint: https://api.deepseek.com/chat/completions
 """
 
 import json
+import logging
 from typing import AsyncGenerator, Optional
 
 import httpx
 
 from judecode.config import BASE_URL, API_KEY, MODEL, MAX_TOKENS, TEMPERATURE
+from judecode.utils.logger import get_logger, log_error_details
+
+logger = get_logger("judecode.api")
 
 
 class ApiClient:
@@ -72,9 +76,19 @@ class ApiClient:
                 ) as response:
                     if response.status_code != 200:
                         error_body = await response.aread()
-                        raise RuntimeError(
-                            f"API error {response.status_code}: {error_body.decode()}"
+                        error_msg = f"API error {response.status_code}: {error_body.decode()}"
+                        log_error_details(
+                            logger,
+                            error_msg,
+                            exc_info=False,
+                            extra={
+                                "model": self.model,
+                                "url": url,
+                                "status_code": response.status_code,
+                                "attempt": attempt,
+                            },
                         )
+                        raise RuntimeError(error_msg)
 
                     remaining_content = ""
                     if stream:
@@ -97,6 +111,17 @@ class ApiClient:
                             # the error as a synthetic chunk so the agent can decide how to
                             # proceed instead of crashing.
                             last_error = e
+                            log_error_details(
+                                logger,
+                                f"Stream interrupted (attempt {attempt}/{self.max_retries})",
+                                exc_info=False,
+                                extra={
+                                    "error_type": type(e).__name__,
+                                    "error": str(e),
+                                    "attempt": attempt,
+                                    "remaining_content_length": len(remaining_content),
+                                },
+                            )
                             if attempt == self.max_retries:
                                 yield self._error_chunk(
                                     f"Stream interrupted after receiving partial content.\n"
@@ -112,8 +137,18 @@ class ApiClient:
                         body = await response.aread()
                         yield json.loads(body)
                     return  # Successful completion
-            except (httpx.ConnectError, httpx.Timeout) as e:
+            except (httpx.ConnectError, httpx.TimeoutException) as e:
                 last_error = e
+                log_error_details(
+                    logger,
+                    f"Connection error (attempt {attempt}/{self.max_retries})",
+                    exc_info=False,
+                    extra={
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "attempt": attempt,
+                    },
+                )
                 if attempt == self.max_retries:
                     yield self._error_chunk(
                         f"Connection failed after {self.max_retries} attempts.\n"
@@ -122,6 +157,14 @@ class ApiClient:
                     )
                     return
             except RuntimeError as e:
+                log_error_details(
+                    logger,
+                    f"API request failed",
+                    exc_info=False,
+                    extra={
+                        "error": str(e),
+                    },
+                )
                 yield self._error_chunk(
                     f"API request failed.\n"
                     f"Error: {type(e).__name__}: {e}\n"
@@ -130,6 +173,16 @@ class ApiClient:
                 return
             except httpx.HTTPError as e:
                 last_error = e
+                log_error_details(
+                    logger,
+                    f"HTTP error (attempt {attempt}/{self.max_retries})",
+                    exc_info=False,
+                    extra={
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "attempt": attempt,
+                    },
+                )
                 if attempt == self.max_retries:
                     yield self._error_chunk(
                         f"HTTP error after {self.max_retries} attempts.\n"
@@ -209,9 +262,18 @@ class ApiClient:
 
         response = await self._client.post(url, json=payload, headers=headers)
         if response.status_code != 200:
-            raise RuntimeError(
-                f"API error {response.status_code}: {response.text}"
+            error_msg = f"API error {response.status_code}: {response.text}"
+            log_error_details(
+                logger,
+                error_msg,
+                exc_info=False,
+                extra={
+                    "model": self.model,
+                    "url": url,
+                    "status_code": response.status_code,
+                },
             )
+            raise RuntimeError(error_msg)
         return response.json()
 
     async def close(self):
