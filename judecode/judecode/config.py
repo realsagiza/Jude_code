@@ -109,6 +109,16 @@ Knowledge Vault (#tags and [[Wiki Links]]):
 - Check vault for relevant notes before starting complex work.
 - Save a summary after completing significant work.
 
+Codebase Indexing (project-wide understanding):
+⚡ ALWAYS use codebase tools BEFORE reading files in a new project:
+1. codebase_index (build)  - Scan project → save searchable index
+2. codebase_summary        - Get overview: languages, dirs, largest files
+3. codebase_search (query) - Find specific classes/functions/files by keyword
+   → THEN use read tool ONLY on the specific files found
+
+This saves HUGE tokens — instead of scanning blindly with glob/grep,
+you search a pre-built index that's 5-10% the size of the full codebase.
+
 Continuation System (auto-nudge):
 If you see a [SYSTEM: ...] message, the system detected you stopped mid-task.
 - Review what's done. If incomplete, continue. If done, confirm.

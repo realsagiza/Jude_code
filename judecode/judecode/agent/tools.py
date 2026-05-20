@@ -28,6 +28,14 @@ from judecode.knowledge.search import (
 )
 from judecode.knowledge.vault import get_vault_structure
 
+# ── Codebase Indexer (Claude Code-style indexing) ──
+from judecode.utils.codebase_indexer import (
+    build_index,
+    load_index,
+    search_index,
+    get_project_summary,
+)
+
 # ── Cowork-style tools ──
 from judecode.utils.pdf_tools import read_pdf, pdf_info
 from judecode.utils.spreadsheet_tools import (
@@ -666,6 +674,51 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "recursive": {"type": "boolean", "description": "If True, search subdirectories (default: false)"}
                 },
                 "required": ["directory", "output_file"]
+            }
+        }
+    },
+
+    # ── ⚡ Codebase Indexer (Claude Code-style) ──
+    {
+        "type": "function",
+        "function": {
+            "name": "codebase_index",
+            "description": "Build or rebuild the codebase index. Scans the project, extracts classes, functions, imports, and file structure. Saves a searchable cache. Use this FIRST when starting work on a new project.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "root": {"type": "string", "description": "Project root directory (default: current directory)"},
+                    "force": {"type": "boolean", "description": "If True, rebuild even if cache exists (default: false)"}
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "codebase_search",
+            "description": "Search the codebase index for files, classes, functions, or imports matching the query. Much faster and cheaper than reading files blindly. Use this to find relevant code before reading.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Keywords to search for (e.g. 'database config', 'user auth', 'api route')"},
+                    "root": {"type": "string", "description": "Project root directory (default: current directory)"},
+                    "max_results": {"type": "integer", "description": "Maximum results to return (default: 20)"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "codebase_summary",
+            "description": "Get a high-level summary of the project structure: file counts, languages, directories, largest files, classes, and functions. Great for onboarding or understanding a new project.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "root": {"type": "string", "description": "Project root directory (default: current directory)"}
+                }
             }
         }
     },
@@ -1352,6 +1405,37 @@ def execute_tool(
                 separator=tool_params.get("separator", "\n\n---\n\n"),
                 recursive=tool_params.get("recursive", False),
             )
+
+        # ── ⚡ Codebase Indexer Tools ──
+        elif tool_name == "codebase_index":
+            result = build_index(
+                root=tool_params.get("root", "."),
+                force=tool_params.get("force", False),
+            )
+            if "error" in result:
+                return f"Error building index: {result['error']}"
+            stats = result.get("stats", {})
+            return (
+                f"✅ Codebase indexed successfully!\n"
+                f"   Project: {result.get('project_name', 'unknown')}\n"
+                f"   Files: {stats.get('total_files', 0)} | "
+                f"Lines: {stats.get('total_lines', 0)} | "
+                f"Classes: {stats.get('total_classes', 0)} | "
+                f"Functions: {stats.get('total_functions', 0)}\n"
+                f"   Languages: {', '.join(stats.get('languages', {}).keys())}\n"
+                f"   Cache saved to: .judecode/codebase_index.json\n\n"
+                f"💡 Now try `codebase_summary` for an overview or `codebase_search` to find specific code."
+            )
+
+        elif tool_name == "codebase_search":
+            return search_index(
+                query=tool_params["query"],
+                root=tool_params.get("root", "."),
+                max_results=tool_params.get("max_results", 20),
+            )
+
+        elif tool_name == "codebase_summary":
+            return get_project_summary(root=tool_params.get("root", "."))
 
         # ── Computer Use Tools ──
         elif tool_name == "screenshot":
