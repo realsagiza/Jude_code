@@ -557,8 +557,9 @@ class AgentEngine:
 
     async def chat(self, user_message: str) -> None:
         """Send a user message and handle streaming + tool calls."""
-        # Reset continuation tracker for new user message
+        # Reset for new user message
         self.continuation.reset(user_message)
+        self._turn_count = 0
 
         self.messages.append({"role": "user", "content": user_message})
 

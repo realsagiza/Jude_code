@@ -1,0 +1,5308 @@
+{
+  "project_root": "/Users/thanapholsodawichit/Code/Jude_code",
+  "project_name": "Jude_code",
+  "indexed_at": 1779271248.347074,
+  "index_version": 2,
+  "files": {
+    "agent-identity-jude-code-จดโคด.md": {
+      "path": "agent-identity-jude-code-จดโคด.md",
+      "language": "markdown",
+      "size": 1726,
+      "lines": 30,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "bug-report-terminal-input-hanging-in-judecode-app.md": {
+      "path": "bug-report-terminal-input-hanging-in-judecode-app.md",
+      "language": "markdown",
+      "size": 1780,
+      "lines": 35,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "workflow-plan-first-execution-protocol.md": {
+      "path": "workflow-plan-first-execution-protocol.md",
+      "language": "markdown",
+      "size": 5900,
+      "lines": 107,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "coding-rule-frequent-git-commits.md": {
+      "path": "coding-rule-frequent-git-commits.md",
+      "language": "markdown",
+      "size": 2362,
+      "lines": 34,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode-protocol-kanban-workflow.md": {
+      "path": "judecode-protocol-kanban-workflow.md",
+      "language": "markdown",
+      "size": 5909,
+      "lines": 157,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    ".gitignore": {
+      "path": ".gitignore",
+      "language": "text",
+      "size": 248,
+      "lines": 29,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "system-preference-always-show-thinking-process.md": {
+      "path": "system-preference-always-show-thinking-process.md",
+      "language": "markdown",
+      "size": 1567,
+      "lines": 30,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "kanban-workflow-readme.md": {
+      "path": "kanban-workflow-readme.md",
+      "language": "markdown",
+      "size": 3481,
+      "lines": 84,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "task_manager/requirements.txt": {
+      "path": "task_manager/requirements.txt",
+      "language": "text",
+      "size": 40,
+      "lines": 4,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "task_manager/__init__.py": {
+      "path": "task_manager/__init__.py",
+      "language": "python",
+      "size": 651,
+      "lines": 32,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "models.task.Task",
+          "alias": null,
+          "module": "models.task",
+          "line": 9
+        },
+        {
+          "name": "models.task.TaskStatus",
+          "alias": null,
+          "module": "models.task",
+          "line": 9
+        },
+        {
+          "name": "models.task.TaskPriority",
+          "alias": null,
+          "module": "models.task",
+          "line": 9
+        },
+        {
+          "name": "utils.storage.TaskStorage",
+          "alias": null,
+          "module": "utils.storage",
+          "line": 10
+        },
+        {
+          "name": "utils.helpers.filter_by_status",
+          "alias": null,
+          "module": "utils.helpers",
+          "line": 11
+        },
+        {
+          "name": "utils.helpers.filter_by_priority",
+          "alias": null,
+          "module": "utils.helpers",
+          "line": 11
+        },
+        {
+          "name": "utils.helpers.filter_by_tag",
+          "alias": null,
+          "module": "utils.helpers",
+          "line": 11
+        },
+        {
+          "name": "utils.helpers.sort_tasks",
+          "alias": null,
+          "module": "utils.helpers",
+          "line": 11
+        },
+        {
+          "name": "utils.helpers.get_bangkok_now",
+          "alias": null,
+          "module": "utils.helpers",
+          "line": 11
+        },
+        {
+          "name": "utils.helpers.truncate_text",
+          "alias": null,
+          "module": "utils.helpers",
+          "line": 11
+        }
+      ],
+      "classes": [],
+      "functions": [],
+      "variables": [
+        {
+          "name": "__all__",
+          "line": 20
+        }
+      ],
+      "errors": []
+    },
+    "task_manager/manager.py": {
+      "path": "task_manager/manager.py",
+      "language": "python",
+      "size": 10365,
+      "lines": 339,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "os",
+          "alias": null,
+          "line": 14
+        },
+        {
+          "name": "json",
+          "alias": null,
+          "line": 15
+        },
+        {
+          "name": "datetime.datetime",
+          "alias": null,
+          "module": "datetime",
+          "line": 16
+        },
+        {
+          "name": "pathlib.Path",
+          "alias": null,
+          "module": "pathlib",
+          "line": 17
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 18
+        },
+        {
+          "name": "models.task.Task",
+          "alias": null,
+          "module": "models.task",
+          "line": 20
+        },
+        {
+          "name": "models.task.TaskStatus",
+          "alias": null,
+          "module": "models.task",
+          "line": 20
+        },
+        {
+          "name": "models.task.TaskPriority",
+          "alias": null,
+          "module": "models.task",
+          "line": 20
+        },
+        {
+          "name": "utils.storage.TaskStorage",
+          "alias": null,
+          "module": "utils.storage",
+          "line": 21
+        },
+        {
+          "name": "utils.helpers.filter_by_status",
+          "alias": null,
+          "module": "utils.helpers",
+          "line": 22
+        },
+        {
+          "name": "utils.helpers.filter_by_priority",
+          "alias": null,
+          "module": "utils.helpers",
+          "line": 22
+        },
+        {
+          "name": "utils.helpers.filter_by_tag",
+          "alias": null,
+          "module": "utils.helpers",
+          "line": 22
+        },
+        {
+          "name": "utils.helpers.sort_tasks",
+          "alias": null,
+          "module": "utils.helpers",
+          "line": 22
+        },
+        {
+          "name": "utils.helpers.get_bangkok_now",
+          "alias": null,
+          "module": "utils.helpers",
+          "line": 22
+        },
+        {
+          "name": "utils.helpers.truncate_text",
+          "alias": null,
+          "module": "utils.helpers",
+          "line": 22
+        }
+      ],
+      "classes": [
+        {
+          "name": "TaskManager",
+          "line": 32,
+          "docstring": "Central facade for task operations.\nIntegrates storage, filtering, queuing, and kanban tracking.",
+          "bases": [],
+          "methods": [
+            {
+              "name": "__init__",
+              "line": 38,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "_load",
+              "line": 46,
+              "docstring": "Load tasks from storage.",
+              "decorators": []
+            },
+            {
+              "name": "_save",
+              "line": 51,
+              "docstring": "Persist tasks to storage.",
+              "decorators": []
+            },
+            {
+              "name": "_next_id",
+              "line": 55,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "add_task",
+              "line": 62,
+              "docstring": "Create and add a new task.",
+              "decorators": []
+            },
+            {
+              "name": "get_task",
+              "line": 81,
+              "docstring": "Get a task by ID.",
+              "decorators": []
+            },
+            {
+              "name": "get_all_tasks",
+              "line": 88,
+              "docstring": "Return all tasks.",
+              "decorators": []
+            },
+            {
+              "name": "update_task",
+              "line": 92,
+              "docstring": "Update fields of an existing task.",
+              "decorators": []
+            },
+            {
+              "name": "delete_task",
+              "line": 116,
+              "docstring": "Delete a task by ID.",
+              "decorators": []
+            },
+            {
+              "name": "start_task",
+              "line": 127,
+              "docstring": "Mark a task as in_progress.",
+              "decorators": []
+            },
+            {
+              "name": "complete_task",
+              "line": 135,
+              "docstring": "Mark a task as done.",
+              "decorators": []
+            },
+            {
+              "name": "cancel_task",
+              "line": 143,
+              "docstring": "Cancel a task.",
+              "decorators": []
+            },
+            {
+              "name": "list_tasks",
+              "line": 153,
+              "docstring": "List tasks with optional filters and sorting.",
+              "decorators": []
+            },
+            {
+              "name": "count",
+              "line": 174,
+              "docstring": "Count tasks, optionally filtered by status.",
+              "decorators": []
+            },
+            {
+              "name": "build_queue",
+              "line": 182,
+              "docstring": "Build a prioritized task queue.\nReturns tasks sorted for sequential execution.",
+              "decorators": []
+            },
+            {
+              "name": "next_task",
+              "line": 208,
+              "docstring": "Get the next pending task from the queue.\nIf there's an in_progress task, return that first.",
+              "decorators": []
+            },
+            {
+              "name": "advance_queue",
+              "line": 225,
+              "docstring": "Mark current task complete and move to next.",
+              "decorators": []
+            },
+            {
+              "name": "reset_queue",
+              "line": 233,
+              "docstring": "Reset all in_progress tasks back to pending.",
+              "decorators": []
+            },
+            {
+              "name": "clear_done",
+              "line": 243,
+              "docstring": "Remove all completed tasks. Returns count removed.",
+              "decorators": []
+            },
+            {
+              "name": "clear_cancelled",
+              "line": 250,
+              "docstring": "Remove all cancelled tasks.",
+              "decorators": []
+            },
+            {
+              "name": "clear_all",
+              "line": 257,
+              "docstring": "Remove all tasks.",
+              "decorators": []
+            },
+            {
+              "name": "add_pomodoro",
+              "line": 264,
+              "docstring": "Register a pomodoro session for a task.",
+              "decorators": []
+            },
+            {
+              "name": "export_tasks",
+              "line": 274,
+              "docstring": "Export all tasks to a JSON file.",
+              "decorators": []
+            },
+            {
+              "name": "import_tasks",
+              "line": 278,
+              "docstring": "Import tasks from a JSON file.",
+              "decorators": []
+            },
+            {
+              "name": "summary",
+              "line": 289,
+              "docstring": "Return a summary of task statistics.",
+              "decorators": []
+            },
+            {
+              "name": "summary_text",
+              "line": 323,
+              "docstring": "Return a human-readable summary.",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        }
+      ],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "task_manager/utils/__init__.py": {
+      "path": "task_manager/utils/__init__.py",
+      "language": "python",
+      "size": 270,
+      "lines": 12,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "helpers.filter_by_status",
+          "alias": null,
+          "module": "helpers",
+          "line": 2
+        },
+        {
+          "name": "helpers.filter_by_priority",
+          "alias": null,
+          "module": "helpers",
+          "line": 2
+        },
+        {
+          "name": "helpers.filter_by_tag",
+          "alias": null,
+          "module": "helpers",
+          "line": 2
+        },
+        {
+          "name": "helpers.sort_tasks",
+          "alias": null,
+          "module": "helpers",
+          "line": 2
+        },
+        {
+          "name": "storage.TaskStorage",
+          "alias": null,
+          "module": "storage",
+          "line": 3
+        }
+      ],
+      "classes": [],
+      "functions": [],
+      "variables": [
+        {
+          "name": "__all__",
+          "line": 5
+        }
+      ],
+      "errors": []
+    },
+    "task_manager/utils/storage.py": {
+      "path": "task_manager/utils/storage.py",
+      "language": "python",
+      "size": 1449,
+      "lines": 43,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "json",
+          "alias": null,
+          "line": 4
+        },
+        {
+          "name": "os",
+          "alias": null,
+          "line": 5
+        },
+        {
+          "name": "typing.List",
+          "alias": null,
+          "module": "typing",
+          "line": 6
+        },
+        {
+          "name": "models.task.Task",
+          "alias": null,
+          "module": "models.task",
+          "line": 7
+        }
+      ],
+      "classes": [
+        {
+          "name": "TaskStorage",
+          "line": 10,
+          "docstring": "",
+          "bases": [],
+          "methods": [
+            {
+              "name": "__init__",
+              "line": 11,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "load",
+              "line": 19,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "save",
+              "line": 29,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "export",
+              "line": 34,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "import_",
+              "line": 39,
+              "docstring": "",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        }
+      ],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "task_manager/utils/helpers.py": {
+      "path": "task_manager/utils/helpers.py",
+      "language": "python",
+      "size": 1745,
+      "lines": 53,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "datetime.datetime",
+          "alias": null,
+          "module": "datetime",
+          "line": 4
+        },
+        {
+          "name": "typing.List",
+          "alias": null,
+          "module": "typing",
+          "line": 5
+        },
+        {
+          "name": "models.task.Task",
+          "alias": null,
+          "module": "models.task",
+          "line": 6
+        },
+        {
+          "name": "datetime.timezone",
+          "alias": null,
+          "module": "datetime",
+          "line": 44
+        },
+        {
+          "name": "datetime.timedelta",
+          "alias": null,
+          "module": "datetime",
+          "line": 44
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "filter_by_status",
+          "line": 9,
+          "docstring": "",
+          "decorators": []
+        },
+        {
+          "name": "filter_by_priority",
+          "line": 15,
+          "docstring": "",
+          "decorators": []
+        },
+        {
+          "name": "filter_by_tag",
+          "line": 21,
+          "docstring": "",
+          "decorators": []
+        },
+        {
+          "name": "sort_tasks",
+          "line": 27,
+          "docstring": "",
+          "decorators": []
+        },
+        {
+          "name": "get_bangkok_now",
+          "line": 43,
+          "docstring": "",
+          "decorators": []
+        },
+        {
+          "name": "truncate_text",
+          "line": 49,
+          "docstring": "",
+          "decorators": []
+        }
+      ],
+      "variables": [],
+      "errors": []
+    },
+    "task_manager/models/task.py": {
+      "path": "task_manager/models/task.py",
+      "language": "python",
+      "size": 2769,
+      "lines": 93,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "dataclasses.dataclass",
+          "alias": null,
+          "module": "dataclasses",
+          "line": 4
+        },
+        {
+          "name": "dataclasses.field",
+          "alias": null,
+          "module": "dataclasses",
+          "line": 4
+        },
+        {
+          "name": "dataclasses.asdict",
+          "alias": null,
+          "module": "dataclasses",
+          "line": 4
+        },
+        {
+          "name": "datetime.datetime",
+          "alias": null,
+          "module": "datetime",
+          "line": 5
+        },
+        {
+          "name": "enum.Enum",
+          "alias": null,
+          "module": "enum",
+          "line": 6
+        },
+        {
+          "name": "json",
+          "alias": null,
+          "line": 7
+        }
+      ],
+      "classes": [
+        {
+          "name": "TaskStatus",
+          "line": 10,
+          "docstring": "",
+          "bases": [
+            "str",
+            "Enum"
+          ],
+          "methods": [],
+          "decorators": []
+        },
+        {
+          "name": "TaskPriority",
+          "line": 17,
+          "docstring": "",
+          "bases": [
+            "str",
+            "Enum"
+          ],
+          "methods": [],
+          "decorators": []
+        },
+        {
+          "name": "Task",
+          "line": 25,
+          "docstring": "",
+          "bases": [],
+          "methods": [
+            {
+              "name": "__post_init__",
+              "line": 37,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "to_dict",
+              "line": 43,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "from_dict",
+              "line": 58,
+              "docstring": "",
+              "decorators": [
+                "classmethod"
+              ]
+            },
+            {
+              "name": "complete",
+              "line": 72,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "start",
+              "line": 77,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "cancel",
+              "line": 82,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "add_pomodoro",
+              "line": 86,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "update_priority",
+              "line": 90,
+              "docstring": "",
+              "decorators": []
+            }
+          ],
+          "decorators": [
+            "dataclass"
+          ]
+        }
+      ],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "task_manager/models/__init__.py": {
+      "path": "task_manager/models/__init__.py",
+      "language": "python",
+      "size": 125,
+      "lines": 5,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "task.Task",
+          "alias": null,
+          "module": "task",
+          "line": 2
+        },
+        {
+          "name": "task.TaskStatus",
+          "alias": null,
+          "module": "task",
+          "line": 2
+        },
+        {
+          "name": "task.TaskPriority",
+          "alias": null,
+          "module": "task",
+          "line": 2
+        }
+      ],
+      "classes": [],
+      "functions": [],
+      "variables": [
+        {
+          "name": "__all__",
+          "line": 4
+        }
+      ],
+      "errors": []
+    },
+    "judecode/BUILD_WINDOWS.md": {
+      "path": "judecode/BUILD_WINDOWS.md",
+      "language": "markdown",
+      "size": 5952,
+      "lines": 136,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/requirements.txt": {
+      "path": "judecode/requirements.txt",
+      "language": "text",
+      "size": 764,
+      "lines": 23,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/installer_windows.iss": {
+      "path": "judecode/installer_windows.iss",
+      "language": "text",
+      "size": 4602,
+      "lines": 131,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/build_windows.bat": {
+      "path": "judecode/build_windows.bat",
+      "language": "batch",
+      "size": 6223,
+      "lines": 197,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/pyproject.toml": {
+      "path": "judecode/pyproject.toml",
+      "language": "toml",
+      "size": 1269,
+      "lines": 47,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/runtime_hook_windows.py": {
+      "path": "judecode/runtime_hook_windows.py",
+      "language": "python",
+      "size": 2886,
+      "lines": 80,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "os",
+          "alias": null,
+          "line": 11
+        },
+        {
+          "name": "sys",
+          "alias": null,
+          "line": 12
+        },
+        {
+          "name": "platform",
+          "alias": null,
+          "line": 13
+        },
+        {
+          "name": "configparser",
+          "alias": null,
+          "line": 35
+        },
+        {
+          "name": "ctypes",
+          "alias": null,
+          "line": 20
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "_setup_windows_console",
+          "line": 16,
+          "docstring": "Enable ANSI color support on Windows.",
+          "decorators": []
+        },
+        {
+          "name": "_load_config_ini",
+          "line": 32,
+          "docstring": "Load config from config.ini next to the executable.",
+          "decorators": []
+        }
+      ],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/README.md": {
+      "path": "judecode/README.md",
+      "language": "markdown",
+      "size": 3440,
+      "lines": 146,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/setup.py": {
+      "path": "judecode/setup.py",
+      "language": "python",
+      "size": 1347,
+      "lines": 43,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "setuptools.setup",
+          "alias": null,
+          "module": "setuptools",
+          "line": 1
+        },
+        {
+          "name": "setuptools.find_packages",
+          "alias": null,
+          "module": "setuptools",
+          "line": 1
+        }
+      ],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/.gitignore": {
+      "path": "judecode/.gitignore",
+      "language": "text",
+      "size": 88,
+      "lines": 11,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/.env.example": {
+      "path": "judecode/.env.example",
+      "language": "text",
+      "size": 1690,
+      "lines": 42,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/fibonacci.py": {
+      "path": "judecode/fibonacci.py",
+      "language": "python",
+      "size": 1081,
+      "lines": 37,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [
+        {
+          "name": "fibonacci",
+          "line": 1,
+          "docstring": "คำนวณค่า Fibonacci ลำดับที่ n แบบมี memoization\n\nArgs:\n    n: ตำแหน่งที่ต้องการ (ตั้งแต่ 0)\n    memo: dictionary เก็บค่าที่คำนวณแล้ว\n\nReturns:\n    ค่า Fibonacci ลำดับที่ n",
+          "decorators": []
+        }
+      ],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/.judecode/codebase_index.json": {
+      "path": "judecode/.judecode/codebase_index.json",
+      "language": "json",
+      "size": 127776,
+      "lines": 4483,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode.egg-info/PKG-INFO": {
+      "path": "judecode/judecode.egg-info/PKG-INFO",
+      "language": "text",
+      "size": 4595,
+      "lines": 178,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode.egg-info/SOURCES.txt": {
+      "path": "judecode/judecode.egg-info/SOURCES.txt",
+      "language": "text",
+      "size": 1131,
+      "lines": 43,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode.egg-info/entry_points.txt": {
+      "path": "judecode/judecode.egg-info/entry_points.txt",
+      "language": "text",
+      "size": 59,
+      "lines": 3,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode.egg-info/requires.txt": {
+      "path": "judecode/judecode.egg-info/requires.txt",
+      "language": "text",
+      "size": 184,
+      "lines": 15,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode.egg-info/top_level.txt": {
+      "path": "judecode/judecode.egg-info/top_level.txt",
+      "language": "text",
+      "size": 9,
+      "lines": 2,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode.egg-info/dependency_links.txt": {
+      "path": "judecode/judecode.egg-info/dependency_links.txt",
+      "language": "text",
+      "size": 1,
+      "lines": 2,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/plugins/kanban_automation.py": {
+      "path": "judecode/plugins/kanban_automation.py",
+      "language": "python",
+      "size": 13410,
+      "lines": 467,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "os",
+          "alias": null,
+          "line": 12
+        },
+        {
+          "name": "json",
+          "alias": null,
+          "line": 13
+        },
+        {
+          "name": "datetime.datetime",
+          "alias": null,
+          "module": "datetime",
+          "line": 14
+        },
+        {
+          "name": "pathlib.Path",
+          "alias": null,
+          "module": "pathlib",
+          "line": 15
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 16
+        },
+        {
+          "name": "re",
+          "alias": null,
+          "line": 28
+        },
+        {
+          "name": "re",
+          "alias": null,
+          "line": 318
+        },
+        {
+          "name": "sys",
+          "alias": null,
+          "line": 434
+        },
+        {
+          "name": "re",
+          "alias": null,
+          "line": 246
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "slugify",
+          "line": 26,
+          "docstring": "Convert title to safe filename.",
+          "decorators": []
+        },
+        {
+          "name": "create_kanban",
+          "line": 36,
+          "docstring": "Create a new Kanban board note in the vault.\n\nArgs:\n    title: Project/task name\n    backlog: List of backlog items (สิ่งที่ต้องทำ)\n    todo: List of items for this round (เลือกมาทำรอบนี้)\n    context: Additional context/notes\n    tags: Optional list of tags\n\nReturns:\n    The filename of the created note",
+          "decorators": []
+        },
+        {
+          "name": "update_session_context",
+          "line": 115,
+          "docstring": "Update the session-context-active note.\n\nArgs:\n    goal: Main goal of the session\n    original_request: Original user request text\n    progress: List of dicts with keys: task, status, notes\n    key_decisions: List of important decisions made\n    files_modified: List of files changed\n    remaining_tasks: List of remaining tasks\n    next_action: What to do next\n    status: 🟢 Active / 🟡 Paused / 🔴 Error / ✅ Complete",
+          "decorators": []
+        },
+        {
+          "name": "save_checkpoint",
+          "line": 203,
+          "docstring": "Save a checkpoint to the resume log.",
+          "decorators": []
+        },
+        {
+          "name": "read_checkpoint",
+          "line": 305,
+          "docstring": "Read the latest checkpoint for resume.\nReturns dict with resume info or None if no checkpoint exists.",
+          "decorators": []
+        },
+        {
+          "name": "get_kanban_status",
+          "line": 335,
+          "docstring": "Get the current status of a kanban board.",
+          "decorators": []
+        },
+        {
+          "name": "move_card",
+          "line": 367,
+          "docstring": "Move a task card between kanban columns.\n\nArgs:\n    title: Kanban board title\n    task: Task text to move\n    from_col: Source column name\n    to_col: Target column name",
+          "decorators": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "_DEFAULT_VAULT",
+          "line": 21
+        },
+        {
+          "name": "VAULT_PATH",
+          "line": 22
+        }
+      ],
+      "errors": []
+    },
+    "judecode/tests/test_file_ops.py": {
+      "path": "judecode/tests/test_file_ops.py",
+      "language": "python",
+      "size": 4509,
+      "lines": 141,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "os",
+          "alias": null,
+          "line": 3
+        },
+        {
+          "name": "tempfile",
+          "alias": null,
+          "line": 4
+        },
+        {
+          "name": "pathlib.Path",
+          "alias": null,
+          "module": "pathlib",
+          "line": 5
+        },
+        {
+          "name": "pytest",
+          "alias": null,
+          "line": 7
+        },
+        {
+          "name": "judecode.utils.file_ops.read_file",
+          "alias": null,
+          "module": "judecode.utils.file_ops",
+          "line": 9
+        },
+        {
+          "name": "judecode.utils.file_ops.write_file",
+          "alias": null,
+          "module": "judecode.utils.file_ops",
+          "line": 9
+        },
+        {
+          "name": "judecode.utils.file_ops.edit_file",
+          "alias": null,
+          "module": "judecode.utils.file_ops",
+          "line": 9
+        },
+        {
+          "name": "judecode.utils.file_ops.delete_file",
+          "alias": null,
+          "module": "judecode.utils.file_ops",
+          "line": 9
+        },
+        {
+          "name": "judecode.utils.file_ops.list_directory",
+          "alias": null,
+          "module": "judecode.utils.file_ops",
+          "line": 9
+        }
+      ],
+      "classes": [
+        {
+          "name": "TestReadFile",
+          "line": 18,
+          "docstring": "",
+          "bases": [],
+          "methods": [
+            {
+              "name": "test_read_existing_file",
+              "line": 19,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "test_read_with_offset_and_limit",
+              "line": 29,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "test_read_file_not_found",
+              "line": 39,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "test_read_directory_raises",
+              "line": 43,
+              "docstring": "",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        },
+        {
+          "name": "TestWriteFile",
+          "line": 49,
+          "docstring": "",
+          "bases": [],
+          "methods": [
+            {
+              "name": "test_write_new_file",
+              "line": 50,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "test_write_creates_directories",
+              "line": 56,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "test_overwrite_existing_file",
+              "line": 63,
+              "docstring": "",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        },
+        {
+          "name": "TestEditFile",
+          "line": 74,
+          "docstring": "",
+          "bases": [],
+          "methods": [
+            {
+              "name": "test_edit_unique_string",
+              "line": 75,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "test_edit_nonexistent_text",
+              "line": 85,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "test_edit_non_unique_raises",
+              "line": 95,
+              "docstring": "",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        },
+        {
+          "name": "TestDeleteFile",
+          "line": 106,
+          "docstring": "",
+          "bases": [],
+          "methods": [
+            {
+              "name": "test_delete_existing_file",
+              "line": 107,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "test_delete_nonexistent_raises",
+              "line": 114,
+              "docstring": "",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        },
+        {
+          "name": "TestListDirectory",
+          "line": 119,
+          "docstring": "",
+          "bases": [],
+          "methods": [
+            {
+              "name": "test_list_current_directory",
+              "line": 120,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "test_list_not_a_directory",
+              "line": 128,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "test_list_empty_directory",
+              "line": 137,
+              "docstring": "",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        }
+      ],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/tests/__init__.py": {
+      "path": "judecode/tests/__init__.py",
+      "language": "python",
+      "size": 0,
+      "lines": 1,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/tests/test_shell.py": {
+      "path": "judecode/tests/test_shell.py",
+      "language": "python",
+      "size": 772,
+      "lines": 25,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "judecode.utils.shell.execute_shell",
+          "alias": null,
+          "module": "judecode.utils.shell",
+          "line": 3
+        }
+      ],
+      "classes": [
+        {
+          "name": "TestExecuteShell",
+          "line": 6,
+          "docstring": "",
+          "bases": [],
+          "methods": [
+            {
+              "name": "test_simple_command",
+              "line": 7,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "test_exit_code_failure",
+              "line": 12,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "test_stderr_capture",
+              "line": 16,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "test_chaining_commands",
+              "line": 20,
+              "docstring": "",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        }
+      ],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/config.py": {
+      "path": "judecode/judecode/config.py",
+      "language": "python",
+      "size": 6067,
+      "lines": 142,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "os",
+          "alias": null,
+          "line": 18
+        },
+        {
+          "name": "dotenv.load_dotenv",
+          "alias": null,
+          "module": "dotenv",
+          "line": 19
+        },
+        {
+          "name": "warnings",
+          "alias": null,
+          "line": 46
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "_env",
+          "line": 25,
+          "docstring": "Get config from environment variable, with fallback to default.",
+          "decorators": []
+        },
+        {
+          "name": "_env_int",
+          "line": 31,
+          "docstring": "Get int config from environment variable.",
+          "decorators": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "DEEPSEEK_BASE_URL",
+          "line": 43
+        },
+        {
+          "name": "_DEFAULT_KEY",
+          "line": 44
+        },
+        {
+          "name": "DEEPSEEK_API_KEY",
+          "line": 53
+        },
+        {
+          "name": "DEEPSEEK_MODEL",
+          "line": 54
+        },
+        {
+          "name": "VISION_BASE_URL",
+          "line": 63
+        },
+        {
+          "name": "VISION_API_KEY",
+          "line": 64
+        },
+        {
+          "name": "VISION_MODEL",
+          "line": 65
+        },
+        {
+          "name": "BASE_URL",
+          "line": 68
+        },
+        {
+          "name": "API_KEY",
+          "line": 69
+        },
+        {
+          "name": "MODEL",
+          "line": 70
+        },
+        {
+          "name": "MAX_TOKENS",
+          "line": 72
+        },
+        {
+          "name": "TEMPERATURE",
+          "line": 73
+        },
+        {
+          "name": "VAULT_PATH",
+          "line": 76
+        },
+        {
+          "name": "MAX_CONTINUATIONS",
+          "line": 80
+        },
+        {
+          "name": "MAX_TURNS",
+          "line": 82
+        },
+        {
+          "name": "CONTINUE_ON_STREAM_ERROR",
+          "line": 84
+        },
+        {
+          "name": "CONTINUE_ON_INCOMPLETE_WORK",
+          "line": 88
+        },
+        {
+          "name": "CONTINUE_ON_TOOL_ERROR",
+          "line": 90
+        },
+        {
+          "name": "SYSTEM_PROMPT",
+          "line": 92
+        }
+      ],
+      "errors": []
+    },
+    "judecode/judecode/__init__.py": {
+      "path": "judecode/judecode/__init__.py",
+      "language": "python",
+      "size": 244,
+      "lines": 11,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "logging",
+          "alias": null,
+          "line": 3
+        },
+        {
+          "name": "judecode.utils.logger.setup_logger",
+          "alias": null,
+          "module": "judecode.utils.logger",
+          "line": 8
+        }
+      ],
+      "classes": [],
+      "functions": [],
+      "variables": [
+        {
+          "name": "__version__",
+          "line": 5
+        }
+      ],
+      "errors": []
+    },
+    "judecode/judecode/.env.example": {
+      "path": "judecode/judecode/.env.example",
+      "language": "text",
+      "size": 1420,
+      "lines": 37,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/__main__.py": {
+      "path": "judecode/judecode/__main__.py",
+      "language": "python",
+      "size": 441,
+      "lines": 17,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "sys",
+          "alias": null,
+          "line": 3
+        },
+        {
+          "name": "judecode.ui.terminal.main_cli",
+          "alias": null,
+          "module": "judecode.ui.terminal",
+          "line": 4
+        },
+        {
+          "name": "judecode.__version__",
+          "alias": null,
+          "module": "judecode",
+          "line": 10
+        }
+      ],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/ui/console.py": {
+      "path": "judecode/judecode/ui/console.py",
+      "language": "python",
+      "size": 2061,
+      "lines": 64,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "os",
+          "alias": null,
+          "line": 12
+        },
+        {
+          "name": "platform",
+          "alias": null,
+          "line": 13
+        },
+        {
+          "name": "sys",
+          "alias": null,
+          "line": 14
+        },
+        {
+          "name": "rich.console.Console",
+          "alias": null,
+          "module": "rich.console",
+          "line": 61
+        },
+        {
+          "name": "ctypes",
+          "alias": null,
+          "line": 26
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "_enable_windows_vt100",
+          "line": 17,
+          "docstring": "Enable VT100 escape sequence processing on Windows 10+.\n\nThis allows ANSI color codes to work in the legacy Windows console.\nWindows Terminal and modern terminals handle this automatically.",
+          "decorators": []
+        },
+        {
+          "name": "_fix_windows_encoding",
+          "line": 43,
+          "docstring": "Set UTF-8 encoding for stdout on Windows to support Unicode.",
+          "decorators": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "console",
+          "line": 63
+        }
+      ],
+      "errors": []
+    },
+    "judecode/judecode/ui/terminal.py": {
+      "path": "judecode/judecode/ui/terminal.py",
+      "language": "python",
+      "size": 13396,
+      "lines": 335,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "asyncio",
+          "alias": null,
+          "line": 14
+        },
+        {
+          "name": "sys",
+          "alias": null,
+          "line": 15
+        },
+        {
+          "name": "os",
+          "alias": null,
+          "line": 16
+        },
+        {
+          "name": "signal",
+          "alias": null,
+          "line": 17
+        },
+        {
+          "name": "rich.panel.Panel",
+          "alias": null,
+          "module": "rich.panel",
+          "line": 19
+        },
+        {
+          "name": "rich.markdown.Markdown",
+          "alias": null,
+          "module": "rich.markdown",
+          "line": 20
+        },
+        {
+          "name": "rich.text.Text",
+          "alias": null,
+          "module": "rich.text",
+          "line": 21
+        },
+        {
+          "name": "rich.align.Align",
+          "alias": null,
+          "module": "rich.align",
+          "line": 22
+        },
+        {
+          "name": "rich.rule.Rule",
+          "alias": null,
+          "module": "rich.rule",
+          "line": 23
+        },
+        {
+          "name": "rich.box.DOUBLE_EDGE",
+          "alias": null,
+          "module": "rich.box",
+          "line": 24
+        },
+        {
+          "name": "rich.box.HEAVY_EDGE",
+          "alias": null,
+          "module": "rich.box",
+          "line": 24
+        },
+        {
+          "name": "judecode.config.SYSTEM_PROMPT",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 26
+        },
+        {
+          "name": "judecode.config.MODEL",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 26
+        },
+        {
+          "name": "judecode.config.BASE_URL",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 26
+        },
+        {
+          "name": "judecode.config.MAX_CONTINUATIONS",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 26
+        },
+        {
+          "name": "judecode.api.client.ApiClient",
+          "alias": null,
+          "module": "judecode.api.client",
+          "line": 29
+        },
+        {
+          "name": "judecode.agent.engine.AgentEngine",
+          "alias": null,
+          "module": "judecode.agent.engine",
+          "line": 30
+        },
+        {
+          "name": "judecode.ui.console.console",
+          "alias": null,
+          "module": "judecode.ui.console",
+          "line": 31
+        },
+        {
+          "name": "rich.columns.Columns",
+          "alias": null,
+          "module": "rich.columns",
+          "line": 36
+        },
+        {
+          "name": "rich.rule.Rule",
+          "alias": null,
+          "module": "rich.rule",
+          "line": 37
+        },
+        {
+          "name": "sys",
+          "alias": null,
+          "line": 309
+        },
+        {
+          "name": "judecode.__version__",
+          "alias": null,
+          "module": "judecode",
+          "line": 315
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "print_greeting",
+          "line": 34,
+          "docstring": "Print a cool greeting similar to Claude Code.",
+          "decorators": []
+        },
+        {
+          "name": "print_goodbye",
+          "line": 111,
+          "docstring": "Print exit message.",
+          "decorators": []
+        },
+        {
+          "name": "print_thinking",
+          "line": 118,
+          "docstring": "Print a thinking indicator.",
+          "decorators": []
+        },
+        {
+          "name": "print_tool_call",
+          "line": 123,
+          "docstring": "Print when a tool is called.",
+          "decorators": []
+        },
+        {
+          "name": "print_response_header",
+          "line": 128,
+          "docstring": "Print a response header.",
+          "decorators": []
+        },
+        {
+          "name": "print_response_footer",
+          "line": 133,
+          "docstring": "Print a response footer.",
+          "decorators": []
+        },
+        {
+          "name": "render_markdown",
+          "line": 138,
+          "docstring": "Render markdown text. Used for final output if not streaming.",
+          "decorators": []
+        },
+        {
+          "name": "get_input_prompt",
+          "line": 143,
+          "docstring": "Return the styled input prompt.",
+          "decorators": []
+        },
+        {
+          "name": "main_cli",
+          "line": 307,
+          "docstring": "Entry point for `judecode` command.",
+          "decorators": []
+        }
+      ],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/ui/__init__.py": {
+      "path": "judecode/judecode/ui/__init__.py",
+      "language": "python",
+      "size": 0,
+      "lines": 1,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/utils/web_tools.py": {
+      "path": "judecode/judecode/utils/web_tools.py",
+      "language": "python",
+      "size": 5510,
+      "lines": 162,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "json",
+          "alias": null,
+          "line": 8
+        },
+        {
+          "name": "os",
+          "alias": null,
+          "line": 9
+        },
+        {
+          "name": "urllib.error",
+          "alias": null,
+          "line": 10
+        },
+        {
+          "name": "urllib.parse",
+          "alias": null,
+          "line": 11
+        },
+        {
+          "name": "urllib.request",
+          "alias": null,
+          "line": 12
+        },
+        {
+          "name": "html.unescape",
+          "alias": null,
+          "module": "html",
+          "line": 13
+        },
+        {
+          "name": "re.sub",
+          "alias": "re_sub",
+          "module": "re",
+          "line": 14
+        },
+        {
+          "name": "re",
+          "alias": null,
+          "line": 15
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "_get_tavily_key",
+          "line": 18,
+          "docstring": "Get Tavily API key from environment.",
+          "decorators": []
+        },
+        {
+          "name": "web_fetch",
+          "line": 23,
+          "docstring": "Fetch content from a URL.",
+          "decorators": []
+        },
+        {
+          "name": "_tavily_search",
+          "line": 48,
+          "docstring": "Perform a web search via Tavily AI Search API.\nRequires TAVILY_API_KEY in .env file.",
+          "decorators": []
+        },
+        {
+          "name": "_duckduckgo_search",
+          "line": 102,
+          "docstring": "Fallback search via DuckDuckGo HTML scraping.",
+          "decorators": []
+        },
+        {
+          "name": "web_search",
+          "line": 145,
+          "docstring": "Perform a web search.\n\nUses Tavily AI Search by default (requires TAVILY_API_KEY in .env).\nFalls back to DuckDuckGo HTML scraping if Tavily is not configured.\n\nReturns a formatted string of results.",
+          "decorators": []
+        }
+      ],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/utils/search_tools.py": {
+      "path": "judecode/judecode/utils/search_tools.py",
+      "language": "python",
+      "size": 3797,
+      "lines": 117,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "fnmatch",
+          "alias": null,
+          "line": 3
+        },
+        {
+          "name": "json",
+          "alias": null,
+          "line": 4
+        },
+        {
+          "name": "os",
+          "alias": null,
+          "line": 5
+        },
+        {
+          "name": "re",
+          "alias": null,
+          "line": 6
+        },
+        {
+          "name": "shutil",
+          "alias": null,
+          "line": 7
+        },
+        {
+          "name": "subprocess",
+          "alias": null,
+          "line": 8
+        },
+        {
+          "name": "pathlib.Path",
+          "alias": null,
+          "module": "pathlib",
+          "line": 9
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 10
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "_has_ripgrep",
+          "line": 13,
+          "docstring": "",
+          "decorators": []
+        },
+        {
+          "name": "glob_search",
+          "line": 17,
+          "docstring": "Find files matching a glob pattern.",
+          "decorators": []
+        },
+        {
+          "name": "grep_search",
+          "line": 27,
+          "docstring": "Search file contents with regex.\nTries to use ripgrep first, falls back to Python regex.",
+          "decorators": []
+        },
+        {
+          "name": "_grep_fallback",
+          "line": 82,
+          "docstring": "",
+          "decorators": []
+        }
+      ],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/utils/automation.py": {
+      "path": "judecode/judecode/utils/automation.py",
+      "language": "python",
+      "size": 12537,
+      "lines": 415,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "os",
+          "alias": null,
+          "line": 3
+        },
+        {
+          "name": "shutil",
+          "alias": null,
+          "line": 4
+        },
+        {
+          "name": "re",
+          "alias": null,
+          "line": 5
+        },
+        {
+          "name": "time",
+          "alias": null,
+          "line": 6
+        },
+        {
+          "name": "pathlib.Path",
+          "alias": null,
+          "module": "pathlib",
+          "line": 7
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 8
+        },
+        {
+          "name": "hashlib",
+          "alias": null,
+          "line": 234
+        },
+        {
+          "name": "collections.defaultdict",
+          "alias": null,
+          "module": "collections",
+          "line": 235
+        },
+        {
+          "name": "pyperclip",
+          "alias": null,
+          "line": 328
+        },
+        {
+          "name": "pyperclip",
+          "alias": null,
+          "line": 347
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "batch_rename",
+          "line": 11,
+          "docstring": "Rename multiple files matching a pattern.\n\nArgs:\n    directory: Directory to operate in\n    pattern: Regex pattern to match in filenames\n    replacement: Replacement string (can use \\1, \\2 etc.)\n    dry_run: If True, only show what would be renamed\n    recursive: If True, search subdirectories\n\nReturns:\n    Summary of operations",
+          "decorators": []
+        },
+        {
+          "name": "batch_copy",
+          "line": 62,
+          "docstring": "Copy multiple files matching a pattern.\n\nArgs:\n    source_dir: Source directory\n    dest_dir: Destination directory\n    pattern: Optional glob pattern to filter files\n    recursive: If True, search subdirectories\n    dry_run: If True, only show what would be copied\n\nReturns:\n    Summary of operations",
+          "decorators": []
+        },
+        {
+          "name": "batch_delete",
+          "line": 114,
+          "docstring": "Delete multiple files matching a glob pattern.\n\nArgs:\n    directory: Directory to operate in\n    pattern: Glob pattern (e.g. \"*.tmp\", \"*.log\")\n    dry_run: If True, only show what would be deleted\n    recursive: If True, search subdirectories\n\nReturns:\n    Summary of operations",
+          "decorators": []
+        },
+        {
+          "name": "organize_by_extension",
+          "line": 156,
+          "docstring": "Organize files into folders by their extension.\n\nArgs:\n    directory: Directory to organize\n    dry_run: If True, only show what would be moved\n    recursive: If True, also organize files in subdirectories\n\nReturns:\n    Summary of operations",
+          "decorators": []
+        },
+        {
+          "name": "find_duplicates",
+          "line": 219,
+          "docstring": "Find duplicate files in a directory.\n\nArgs:\n    directory: Directory to search\n    by_content: If True, compare by file content (slower but accurate)\n                If False, compare by filename and size\n\nReturns:\n    List of duplicate files",
+          "decorators": []
+        },
+        {
+          "name": "export_directory_tree",
+          "line": 280,
+          "docstring": "Export the directory tree structure as text.\n\nArgs:\n    directory: Directory to scan\n    max_depth: Maximum depth to traverse\n    show_size: If True, show file sizes\n\nReturns:\n    Tree structure as formatted text",
+          "decorators": []
+        },
+        {
+          "name": "clipboard_get",
+          "line": 326,
+          "docstring": "Get text from clipboard.",
+          "decorators": []
+        },
+        {
+          "name": "clipboard_set",
+          "line": 338,
+          "docstring": "Set text to clipboard.\n\nArgs:\n    text: Text to copy to clipboard\n\nReturns:\n    Confirmation",
+          "decorators": []
+        },
+        {
+          "name": "wait_for",
+          "line": 355,
+          "docstring": "Wait for a specified number of seconds. Useful in multi-step workflows.\n\nArgs:\n    seconds: Number of seconds to wait\n\nReturns:\n    Confirmation",
+          "decorators": []
+        },
+        {
+          "name": "merge_text_files",
+          "line": 368,
+          "docstring": "Merge multiple text files into one.\n\nArgs:\n    directory: Directory containing files to merge\n    output_file: Output file path\n    pattern: Glob pattern to match files\n    separator: Separator between file contents\n    recursive: If True, search subdirectories\n\nReturns:\n    Summary of operation",
+          "decorators": []
+        }
+      ],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/utils/shell.py": {
+      "path": "judecode/judecode/utils/shell.py",
+      "language": "python",
+      "size": 3878,
+      "lines": 135,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "platform",
+          "alias": null,
+          "line": 3
+        },
+        {
+          "name": "subprocess",
+          "alias": null,
+          "line": 4
+        },
+        {
+          "name": "sys",
+          "alias": null,
+          "line": 5
+        },
+        {
+          "name": "threading",
+          "alias": null,
+          "line": 6
+        },
+        {
+          "name": "time",
+          "alias": null,
+          "line": 7
+        },
+        {
+          "name": "queue.Queue",
+          "alias": null,
+          "module": "queue",
+          "line": 8
+        },
+        {
+          "name": "queue.Empty",
+          "alias": null,
+          "module": "queue",
+          "line": 8
+        },
+        {
+          "name": "typing.Iterator",
+          "alias": null,
+          "module": "typing",
+          "line": 9
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 9
+        },
+        {
+          "name": "shutil",
+          "alias": null,
+          "line": 18
+        },
+        {
+          "name": "shutil",
+          "alias": null,
+          "line": 26
+        },
+        {
+          "name": "shutil",
+          "alias": null,
+          "line": 33
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "_get_shell_args",
+          "line": 12,
+          "docstring": "Return the shell executable and flag for the current OS.",
+          "decorators": []
+        },
+        {
+          "name": "execute_shell",
+          "line": 39,
+          "docstring": "Execute a shell command safely.\nReturns a dict with stdout, stderr, exit_code.",
+          "decorators": []
+        },
+        {
+          "name": "_enqueue_stream",
+          "line": 65,
+          "docstring": "Helper to read lines from a stream and put them into a queue.",
+          "decorators": []
+        },
+        {
+          "name": "execute_shell_stream",
+          "line": 76,
+          "docstring": "Execute a shell command streaming stdout/stderr.\nYields lines of output as they arrive (tagged as 'stdout' or 'stderr').\nFinally yields {\"type\": \"return\", \"exit_code\": int}.\nCross-platform replacement for select-based streaming.",
+          "decorators": []
+        }
+      ],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/utils/file_ops.py": {
+      "path": "judecode/judecode/utils/file_ops.py",
+      "language": "python",
+      "size": 2337,
+      "lines": 81,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "pathlib.Path",
+          "alias": null,
+          "module": "pathlib",
+          "line": 3
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 4
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "read_file",
+          "line": 7,
+          "docstring": "Read file contents with optional line offset and limit.",
+          "decorators": []
+        },
+        {
+          "name": "write_file",
+          "line": 27,
+          "docstring": "Write content to a file, creating directories if needed.",
+          "decorators": []
+        },
+        {
+          "name": "edit_file",
+          "line": 35,
+          "docstring": "Search and replace text in a file.\nRaises ValueError if old_string is not unique.",
+          "decorators": []
+        },
+        {
+          "name": "delete_file",
+          "line": 61,
+          "docstring": "Delete a file.",
+          "decorators": []
+        },
+        {
+          "name": "list_directory",
+          "line": 70,
+          "docstring": "List directory contents.",
+          "decorators": []
+        }
+      ],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/utils/__init__.py": {
+      "path": "judecode/judecode/utils/__init__.py",
+      "language": "python",
+      "size": 27,
+      "lines": 2,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/utils/task_tools.py": {
+      "path": "judecode/judecode/utils/task_tools.py",
+      "language": "python",
+      "size": 10671,
+      "lines": 315,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "json",
+          "alias": null,
+          "line": 13
+        },
+        {
+          "name": "os",
+          "alias": null,
+          "line": 14
+        },
+        {
+          "name": "sys",
+          "alias": null,
+          "line": 15
+        },
+        {
+          "name": "pathlib.Path",
+          "alias": null,
+          "module": "pathlib",
+          "line": 16
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 17
+        },
+        {
+          "name": "task_manager.manager.TaskManager",
+          "alias": null,
+          "module": "task_manager.manager",
+          "line": 37
+        },
+        {
+          "name": "task_manager.models.task.TaskStatus",
+          "alias": null,
+          "module": "task_manager.models.task",
+          "line": 38
+        },
+        {
+          "name": "task_manager.models.task.TaskPriority",
+          "alias": null,
+          "module": "task_manager.models.task",
+          "line": 38
+        },
+        {
+          "name": "task_manager",
+          "alias": null,
+          "line": 22
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "_get_manager",
+          "line": 45,
+          "docstring": "",
+          "decorators": []
+        },
+        {
+          "name": "_safe",
+          "line": 53,
+          "docstring": "Convert to pretty JSON string.",
+          "decorators": []
+        },
+        {
+          "name": "task_add",
+          "line": 65,
+          "docstring": "Add a new task.",
+          "decorators": []
+        },
+        {
+          "name": "task_list",
+          "line": 76,
+          "docstring": "List tasks with optional filters.",
+          "decorators": []
+        },
+        {
+          "name": "task_get",
+          "line": 106,
+          "docstring": "Get details of a specific task.",
+          "decorators": []
+        },
+        {
+          "name": "task_update",
+          "line": 126,
+          "docstring": "Update a task's fields.",
+          "decorators": []
+        },
+        {
+          "name": "task_delete",
+          "line": 153,
+          "docstring": "Delete a task.",
+          "decorators": []
+        },
+        {
+          "name": "task_start",
+          "line": 161,
+          "docstring": "Start a task (mark as in_progress).",
+          "decorators": []
+        },
+        {
+          "name": "task_complete",
+          "line": 170,
+          "docstring": "Complete a task.",
+          "decorators": []
+        },
+        {
+          "name": "task_cancel",
+          "line": 179,
+          "docstring": "Cancel a task.",
+          "decorators": []
+        },
+        {
+          "name": "task_next",
+          "line": 188,
+          "docstring": "Get the next task in the queue.",
+          "decorators": []
+        },
+        {
+          "name": "task_queue",
+          "line": 200,
+          "docstring": "Show the full task execution queue.",
+          "decorators": []
+        },
+        {
+          "name": "task_advance",
+          "line": 216,
+          "docstring": "Complete current task and advance to next.",
+          "decorators": []
+        },
+        {
+          "name": "task_summary",
+          "line": 232,
+          "docstring": "Show task statistics summary.",
+          "decorators": []
+        },
+        {
+          "name": "task_clear_done",
+          "line": 238,
+          "docstring": "Remove all completed tasks.",
+          "decorators": []
+        },
+        {
+          "name": "task_reset_queue",
+          "line": 245,
+          "docstring": "Reset all in_progress tasks back to pending.",
+          "decorators": []
+        },
+        {
+          "name": "task_import",
+          "line": 252,
+          "docstring": "Import tasks from a JSON file.",
+          "decorators": []
+        },
+        {
+          "name": "task_export",
+          "line": 262,
+          "docstring": "Export tasks to a JSON file.",
+          "decorators": []
+        },
+        {
+          "name": "task_add_pomodoro",
+          "line": 272,
+          "docstring": "Add a pomodoro session to a task.",
+          "decorators": []
+        },
+        {
+          "name": "execute_task_tool",
+          "line": 306,
+          "docstring": "Dispatch a task tool call to the right function.",
+          "decorators": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "TASK_TOOL_FUNCTIONS",
+          "line": 285
+        }
+      ],
+      "errors": []
+    },
+    "judecode/judecode/utils/logger.py": {
+      "path": "judecode/judecode/utils/logger.py",
+      "language": "python",
+      "size": 4602,
+      "lines": 141,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "os",
+          "alias": null,
+          "line": 8
+        },
+        {
+          "name": "sys",
+          "alias": null,
+          "line": 9
+        },
+        {
+          "name": "logging",
+          "alias": null,
+          "line": 10
+        },
+        {
+          "name": "pathlib.Path",
+          "alias": null,
+          "module": "pathlib",
+          "line": 11
+        },
+        {
+          "name": "logging.handlers.RotatingFileHandler",
+          "alias": null,
+          "module": "logging.handlers",
+          "line": 12
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "setup_logger",
+          "line": 39,
+          "docstring": "Set up and return a logger with file + optional console handler.\n\nArgs:\n    name: Logger name (default: 'judecode')\n    level: Logging level (default: logging.INFO)\n    log_file: Path to log file (default: ~/.judecode/logs/judecode.log)\n    max_bytes: Max log file size before rotation\n    backup_count: Number of rotated backup files to keep\n    console_debug: If True, also log to stderr at the same level\n\nReturns:\n    Configured logger instance",
+          "decorators": []
+        },
+        {
+          "name": "get_logger",
+          "line": 101,
+          "docstring": "Get the default application logger (lazy-init).",
+          "decorators": []
+        },
+        {
+          "name": "log_error_details",
+          "line": 110,
+          "docstring": "Log an error with full details including traceback and extra context.\n\nArgs:\n    logger: Logger instance\n    message: Error message\n    exc_info: Include exception traceback (default: True)\n    extra: Optional dict of extra context to include",
+          "decorators": []
+        },
+        {
+          "name": "reset_logger",
+          "line": 133,
+          "docstring": "Remove all handlers from a logger (useful for testing).",
+          "decorators": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "_XDG_DATA_HOME",
+          "line": 16
+        },
+        {
+          "name": "_LOG_FILE",
+          "line": 23
+        },
+        {
+          "name": "_FILE_FORMAT",
+          "line": 26
+        },
+        {
+          "name": "_CONSOLE_FORMAT",
+          "line": 29
+        },
+        {
+          "name": "_file_formatter",
+          "line": 32
+        },
+        {
+          "name": "_console_formatter",
+          "line": 36
+        }
+      ],
+      "errors": []
+    },
+    "judecode/judecode/utils/spreadsheet_tools.py": {
+      "path": "judecode/judecode/utils/spreadsheet_tools.py",
+      "language": "python",
+      "size": 7468,
+      "lines": 241,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "csv",
+          "alias": null,
+          "line": 3
+        },
+        {
+          "name": "io",
+          "alias": null,
+          "line": 4
+        },
+        {
+          "name": "os",
+          "alias": null,
+          "line": 5
+        },
+        {
+          "name": "pathlib.Path",
+          "alias": null,
+          "module": "pathlib",
+          "line": 6
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 7
+        },
+        {
+          "name": "openpyxl",
+          "alias": null,
+          "line": 99
+        },
+        {
+          "name": "xlsxwriter",
+          "alias": null,
+          "line": 192
+        },
+        {
+          "name": "openpyxl",
+          "alias": null,
+          "line": 232
+        },
+        {
+          "name": "openpyxl",
+          "alias": null,
+          "line": 12
+        },
+        {
+          "name": "xlsxwriter",
+          "alias": null,
+          "line": 20
+        },
+        {
+          "name": "openpyxl",
+          "alias": null,
+          "line": 185
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "_has_openpyxl",
+          "line": 10,
+          "docstring": "",
+          "decorators": []
+        },
+        {
+          "name": "_has_xlsxwriter",
+          "line": 18,
+          "docstring": "",
+          "decorators": []
+        },
+        {
+          "name": "read_csv",
+          "line": 26,
+          "docstring": "Read a CSV file and return as formatted text/table.\n\nArgs:\n    csv_path: Path to CSV file\n    delimiter: Field delimiter (default: comma)\n    has_header: Whether the first row is a header\n    max_rows: Maximum number of rows to read (None = all)\n\nReturns:\n    Formatted text representation of the CSV",
+          "decorators": []
+        },
+        {
+          "name": "read_excel",
+          "line": 77,
+          "docstring": "Read an Excel file and return as formatted text.\n\nArgs:\n    excel_path: Path to .xlsx/.xls file\n    sheet_name: Specific sheet to read (None = first sheet)\n    max_rows: Maximum rows to read per sheet\n\nReturns:\n    Formatted text representation",
+          "decorators": []
+        },
+        {
+          "name": "write_csv",
+          "line": 145,
+          "docstring": "Write data to a CSV file.\n\nArgs:\n    csv_path: Path to write CSV file\n    data: Data as text (rows separated by newlines, cells by delimiter)\n    delimiter: Field delimiter (default: comma)\n\nReturns:\n    Confirmation message",
+          "decorators": []
+        },
+        {
+          "name": "write_excel",
+          "line": 169,
+          "docstring": "Write data to an Excel file.\n\nArgs:\n    excel_path: Path to write .xlsx file\n    data: Data as text (rows by newlines, cells by tabs or pipes)\n    sheet_name: Name of the sheet\n\nReturns:\n    Confirmation message",
+          "decorators": []
+        },
+        {
+          "name": "list_excel_sheets",
+          "line": 223,
+          "docstring": "List all sheet names in an Excel file.",
+          "decorators": []
+        }
+      ],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/utils/computer_tools.py": {
+      "path": "judecode/judecode/utils/computer_tools.py",
+      "language": "python",
+      "size": 49278,
+      "lines": 1317,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "base64",
+          "alias": null,
+          "line": 48
+        },
+        {
+          "name": "hashlib",
+          "alias": null,
+          "line": 49
+        },
+        {
+          "name": "io",
+          "alias": null,
+          "line": 50
+        },
+        {
+          "name": "json",
+          "alias": null,
+          "line": 51
+        },
+        {
+          "name": "os",
+          "alias": null,
+          "line": 52
+        },
+        {
+          "name": "subprocess",
+          "alias": null,
+          "line": 53
+        },
+        {
+          "name": "shutil",
+          "alias": null,
+          "line": 54
+        },
+        {
+          "name": "platform",
+          "alias": null,
+          "line": 55
+        },
+        {
+          "name": "tempfile",
+          "alias": null,
+          "line": 56
+        },
+        {
+          "name": "time",
+          "alias": null,
+          "line": 57
+        },
+        {
+          "name": "urllib.request",
+          "alias": null,
+          "line": 58
+        },
+        {
+          "name": "urllib.error",
+          "alias": null,
+          "line": 59
+        },
+        {
+          "name": "pathlib.Path",
+          "alias": null,
+          "module": "pathlib",
+          "line": 60
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 61
+        },
+        {
+          "name": "judecode.config.VISION_BASE_URL",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 63
+        },
+        {
+          "name": "judecode.config.VISION_API_KEY",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 63
+        },
+        {
+          "name": "judecode.config.VISION_MODEL",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 63
+        },
+        {
+          "name": "PIL.Image",
+          "alias": "PILImage",
+          "module": "PIL",
+          "line": 582
+        },
+        {
+          "name": "pyautogui",
+          "alias": "_pg",
+          "line": 98
+        },
+        {
+          "name": "mss",
+          "alias": null,
+          "line": 672
+        },
+        {
+          "name": "mss.tools",
+          "alias": null,
+          "line": 673
+        },
+        {
+          "name": "playwright.sync_api.sync_playwright",
+          "alias": null,
+          "module": "playwright.sync_api",
+          "line": 160
+        },
+        {
+          "name": "PIL.Image",
+          "alias": "PILImage",
+          "module": "PIL",
+          "line": 681
+        },
+        {
+          "name": "shutil",
+          "alias": null,
+          "line": 1130
+        },
+        {
+          "name": "pygetwindow",
+          "alias": "gw",
+          "line": 1222
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "_get_pyautogui",
+          "line": 72,
+          "docstring": "Lazy-import pyautogui and configure safety settings.\n\nReturns the pyautogui module, or raises RuntimeError with a\nhelpful message if the display / GUI is not available.",
+          "decorators": []
+        },
+        {
+          "name": "get_browser_accessibility_snapshot",
+          "line": 130,
+          "docstring": "Get an accessibility tree snapshot of the current browser page.\n\nThis is the FASTEST approach for browser automation.\nInstead of sending a screenshot to a vision model, we get a\nstructured text tree of all UI elements with their labels,\nroles, and reference IDs.\n\nThe LLM can read this tree directly and decide what to click\nwithout needing a vision model at all!\n\nUses Playwright's accessibility tree snapshot mode\n(accessibility.snapshot() in Chromium).\n\nArgs:\n    url: Optional URL to navigate to first\n    task_description: Optional context for what the user wants to do\n\nReturns:\n    Structured text description of the page's accessibility tree\n    with element references that can be used for clicking/typing",
+          "decorators": []
+        },
+        {
+          "name": "_flatten_accessibility_tree",
+          "line": 274,
+          "docstring": "Flatten a Playwright accessibility tree into readable text lines.\n\nEach line has the format:\n  [role ref=ID] \"name\" [state1, state2]  (children: N)\n\nThis format is designed for LLMs to easily parse and understand\nwhat elements are available and how to reference them.\n\nArgs:\n    node: A node from Playwright's accessibility.snapshot()\n    depth: Current recursion depth\n    max_depth: Maximum depth to traverse\n    max_children: Maximum children to show per node\n\nReturns:\n    List of text lines representing the tree",
+          "decorators": []
+        },
+        {
+          "name": "get_desktop_accessibility_tree",
+          "line": 401,
+          "docstring": "Get the accessibility tree of the current desktop/active window.\n\nThis is the FASTEST approach for desktop app automation on macOS.\nUses the macOS Accessibility API (AXUIElement) via AppleScript\nto get structured information about UI elements.\n\nNo screenshot needed, no vision API call.\n10-50x faster than vision-based analysis.\n\nArgs:\n    task_description: Optional context for what the user wants to do\n\nReturns:\n    Structured text description of the active window's UI elements",
+          "decorators": []
+        },
+        {
+          "name": "_resize_screenshot",
+          "line": 568,
+          "docstring": "Resize a screenshot to reduce token costs while preserving readability.\n\nUses Lanczos resampling for high quality.\nMaintains aspect ratio.\nOnly resizes if width > max_width.\n\nArgs:\n    img: PIL Image object\n    max_width: Maximum width in pixels (default: 800)\n\nReturns:\n    Tuple of (resized_image, original_size, resized_size)",
+          "decorators": []
+        },
+        {
+          "name": "_get_screenshot_hash",
+          "line": 601,
+          "docstring": "Compute SHA1 hash of screenshot bytes for deduplication.\n\nArgs:\n    img_bytes: Raw image bytes\n\nReturns:\n    SHA1 hex digest",
+          "decorators": []
+        },
+        {
+          "name": "_is_duplicate_screenshot",
+          "line": 613,
+          "docstring": "Check if this screenshot has been seen before (deduplication).\n\nArgs:\n    img_hash: SHA1 hash of the screenshot\n\nReturns:\n    True if this screenshot was already analyzed",
+          "decorators": []
+        },
+        {
+          "name": "_prune_screenshot_history",
+          "line": 628,
+          "docstring": "Keep only the most recent screenshots in history.",
+          "decorators": []
+        },
+        {
+          "name": "get_screen_size",
+          "line": 635,
+          "docstring": "Get the screen resolution.",
+          "decorators": []
+        },
+        {
+          "name": "screenshot",
+          "line": 645,
+          "docstring": "Take a screenshot and optionally analyze it with a vision model.\n\n⚡ OPTIMIZED: Screenshots are resized to 800px max width\n   to reduce token costs by 60-75%.\n   Duplicate screenshots are detected and skipped (SHA1 hash cache).\n   History is pruned to keep only the 3 most recent.\n\nArgs:\n    vision_model: Optional model name (configured via JUDECODE_VISION_MODEL in .env).\n                  If provided, the screenshot will be analyzed.\n                  ⚠️ Consider using get_browser_accessibility_snapshot()\n                  or get_desktop_accessibility_tree() instead - they're\n                  10-50x faster and don't need a vision model!\n    task_description: Optional context for the vision model to focus on.\n    save_path: Optional path to save the screenshot file.\n\nReturns:\n    If vision_model is provided: Description of the screen contents\n    If not: Confirmation that screenshot was taken",
+          "decorators": []
+        },
+        {
+          "name": "_analyze_screenshot_sync",
+          "line": 776,
+          "docstring": "Send screenshot to vision model synchronously using urllib.\n\n⚡ The screenshot should already be resized to 800px max width\n   by the screenshot() function before calling this.",
+          "decorators": []
+        },
+        {
+          "name": "mouse_move",
+          "line": 854,
+          "docstring": "Move the mouse cursor to absolute screen coordinates (x, y).\n\nArgs:\n    x: X coordinate (0 = left edge of screen)\n    y: Y coordinate (0 = top edge of screen)\n    duration: Seconds to animate the movement (default: 0.5)\n\nReturns:\n    Confirmation",
+          "decorators": []
+        },
+        {
+          "name": "mouse_click",
+          "line": 885,
+          "docstring": "Click the mouse at current position or specified coordinates.\n\nArgs:\n    button: 'left', 'right', or 'middle' (default: 'left')\n    x: Optional X coordinate to move to before clicking\n    y: Optional Y coordinate to move to before clicking\n\nReturns:\n    Confirmation",
+          "decorators": []
+        },
+        {
+          "name": "mouse_double_click",
+          "line": 918,
+          "docstring": "Double-click at current position or specified coordinates.\n\nArgs:\n    x: Optional X coordinate\n    y: Optional Y coordinate\n\nReturns:\n    Confirmation",
+          "decorators": []
+        },
+        {
+          "name": "mouse_drag",
+          "line": 945,
+          "docstring": "Drag the mouse from one position to another (click and hold).\n\nArgs:\n    start_x: Starting X coordinate\n    start_y: Starting Y coordinate\n    end_x: Ending X coordinate\n    end_y: Ending Y coordinate\n    duration: Duration of the drag in seconds\n\nReturns:\n    Confirmation",
+          "decorators": []
+        },
+        {
+          "name": "keyboard_type",
+          "line": 971,
+          "docstring": "Type text at the current cursor position.\n\nArgs:\n    text: The text to type\n    interval: Seconds between each key press (default: 0.05)\n\nReturns:\n    Confirmation",
+          "decorators": []
+        },
+        {
+          "name": "keyboard_press",
+          "line": 993,
+          "docstring": "Press a single key (e.g., 'enter', 'tab', 'escape', 'space').\n\nArgs:\n    key: Key name (see pyautogui.KEYBOARD_KEYS for full list)\n\nReturns:\n    Confirmation",
+          "decorators": []
+        },
+        {
+          "name": "keyboard_hotkey",
+          "line": 1012,
+          "docstring": "Press a keyboard shortcut combination.\n\nExamples:\n    keyboard_hotkey('command', 'c') -> Copy (Cmd+C)\n    keyboard_hotkey('command', 'v') -> Paste (Cmd+V)\n    keyboard_hotkey('alt', 'tab') -> Switch app\n    keyboard_hotkey('ctrl', 'shift', 'esc') -> Task Manager\n\nArgs:\n    *keys: Key names to press simultaneously\n\nReturns:\n    Confirmation",
+          "decorators": []
+        },
+        {
+          "name": "scroll",
+          "line": 1059,
+          "docstring": "Scroll the mouse wheel.\n\nArgs:\n    clicks: Number of scroll clicks. Positive = scroll up, Negative = scroll down.\n    x: Optional X position to scroll at\n    y: Optional Y position to scroll at\n\nReturns:\n    Confirmation",
+          "decorators": []
+        },
+        {
+          "name": "open_app",
+          "line": 1086,
+          "docstring": "Open an application by name.\n\nOn macOS: Uses 'open -a'\nOn Windows: Uses 'start'\nOn Linux: Uses 'xdg-open' or application name\n\nArgs:\n    app_name: Application name (e.g., 'Safari', 'Chrome', 'Terminal', 'Finder')\n\nReturns:\n    Confirmation",
+          "decorators": []
+        },
+        {
+          "name": "get_mouse_position",
+          "line": 1185,
+          "docstring": "Get the current mouse cursor position.",
+          "decorators": []
+        },
+        {
+          "name": "get_active_window_info",
+          "line": 1197,
+          "docstring": "Get information about the currently active window.\n\nReturns:\n    Window title and position/size if available",
+          "decorators": []
+        },
+        {
+          "name": "list_running_apps",
+          "line": 1244,
+          "docstring": "List currently running applications with visible windows.",
+          "decorators": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "_PYAUTOGUI",
+          "line": 69
+        },
+        {
+          "name": "MAX_SCREENSHOT_WIDTH",
+          "line": 120
+        },
+        {
+          "name": "MAX_RECENT_SCREENSHOTS",
+          "line": 121
+        }
+      ],
+      "errors": []
+    },
+    "judecode/judecode/utils/codebase_indexer.py": {
+      "path": "judecode/judecode/utils/codebase_indexer.py",
+      "language": "python",
+      "size": 24917,
+      "lines": 729,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "ast",
+          "alias": null,
+          "line": 15
+        },
+        {
+          "name": "hashlib",
+          "alias": null,
+          "line": 16
+        },
+        {
+          "name": "json",
+          "alias": null,
+          "line": 17
+        },
+        {
+          "name": "os",
+          "alias": null,
+          "line": 18
+        },
+        {
+          "name": "re",
+          "alias": null,
+          "line": 19
+        },
+        {
+          "name": "time",
+          "alias": null,
+          "line": 20
+        },
+        {
+          "name": "pathlib.Path",
+          "alias": null,
+          "module": "pathlib",
+          "line": 21
+        },
+        {
+          "name": "typing.Any",
+          "alias": null,
+          "module": "typing",
+          "line": 22
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 22
+        },
+        {
+          "name": "fnmatch",
+          "alias": null,
+          "line": 163
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "_load_gitignore",
+          "line": 129,
+          "docstring": "Load .gitignore patterns if they exist.",
+          "decorators": []
+        },
+        {
+          "name": "_should_ignore",
+          "line": 145,
+          "docstring": "Check if a relative path should be ignored.",
+          "decorators": []
+        },
+        {
+          "name": "_parse_python_file",
+          "line": 176,
+          "docstring": "Parse a Python file and extract structure info.",
+          "decorators": []
+        },
+        {
+          "name": "_regex_extract_imports",
+          "line": 278,
+          "docstring": "Fallback: regex-based import extraction for syntactically broken files.",
+          "decorators": []
+        },
+        {
+          "name": "_regex_extract_functions",
+          "line": 294,
+          "docstring": "Fallback: regex-based function extraction.",
+          "decorators": []
+        },
+        {
+          "name": "_regex_extract_classes",
+          "line": 302,
+          "docstring": "Fallback: regex-based class extraction.",
+          "decorators": []
+        },
+        {
+          "name": "_index_file",
+          "line": 310,
+          "docstring": "Index a single file and return its structure info.",
+          "decorators": []
+        },
+        {
+          "name": "_compute_index_hash",
+          "line": 356,
+          "docstring": "Compute a hash of the file list + modification times for cache invalidation.",
+          "decorators": []
+        },
+        {
+          "name": "_get_index_cache_path",
+          "line": 368,
+          "docstring": "Get the cache file path for the codebase index.",
+          "decorators": []
+        },
+        {
+          "name": "build_index",
+          "line": 375,
+          "docstring": "Build (or rebuild) the codebase index for the project.\n\nArgs:\n    root: Project root directory\n    force: If True, rebuild even if cache is fresh\n    max_files: Maximum number of files to index\n    max_size_kb: Skip files larger than this (KB)\n\nReturns:\n    Index dict with files, stats, and project overview",
+          "decorators": []
+        },
+        {
+          "name": "load_index",
+          "line": 498,
+          "docstring": "Load the cached codebase index, or build if not found.",
+          "decorators": []
+        },
+        {
+          "name": "search_index",
+          "line": 513,
+          "docstring": "Search the codebase index for files/classes/functions matching the query.\n\nThis is a lightweight keyword search (no embeddings needed).\nSearches across:\n- File paths\n- Class names and docstrings\n- Function names and docstrings\n- Import names\n- Variable names\n\nArgs:\n    query: Search query (keywords separated by spaces)\n    root: Project root directory\n    max_results: Maximum results to return\n\nReturns:\n    Formatted search results string",
+          "decorators": []
+        },
+        {
+          "name": "get_project_summary",
+          "line": 654,
+          "docstring": "Get a high-level summary of the project structure from the index.",
+          "decorators": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "DEFAULT_IGNORE_DIRS",
+          "line": 25
+        },
+        {
+          "name": "DEFAULT_IGNORE_EXTS",
+          "line": 34
+        },
+        {
+          "name": "BINARY_EXTENSIONS",
+          "line": 47
+        },
+        {
+          "name": "INDEXABLE_EXTS",
+          "line": 59
+        }
+      ],
+      "errors": []
+    },
+    "judecode/judecode/utils/pdf_tools.py": {
+      "path": "judecode/judecode/utils/pdf_tools.py",
+      "language": "python",
+      "size": 8702,
+      "lines": 281,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "subprocess",
+          "alias": null,
+          "line": 3
+        },
+        {
+          "name": "shutil",
+          "alias": null,
+          "line": 4
+        },
+        {
+          "name": "tempfile",
+          "alias": null,
+          "line": 5
+        },
+        {
+          "name": "os",
+          "alias": null,
+          "line": 6
+        },
+        {
+          "name": "re",
+          "alias": null,
+          "line": 7
+        },
+        {
+          "name": "pathlib.Path",
+          "alias": null,
+          "module": "pathlib",
+          "line": 8
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 9
+        },
+        {
+          "name": "PyPDF2",
+          "alias": null,
+          "line": 57
+        },
+        {
+          "name": "pdfplumber",
+          "alias": null,
+          "line": 70
+        },
+        {
+          "name": "fitz",
+          "alias": null,
+          "line": 89
+        },
+        {
+          "name": "pdfminer.high_level.extract_text",
+          "alias": null,
+          "module": "pdfminer.high_level",
+          "line": 102
+        },
+        {
+          "name": "PyPDF2",
+          "alias": null,
+          "line": 20
+        },
+        {
+          "name": "pdfplumber",
+          "alias": null,
+          "line": 25
+        },
+        {
+          "name": "pdfminer",
+          "alias": null,
+          "line": 30
+        },
+        {
+          "name": "fitz",
+          "alias": null,
+          "line": 35
+        },
+        {
+          "name": "PyPDF2",
+          "alias": null,
+          "line": 252
+        },
+        {
+          "name": "pdfplumber",
+          "alias": null,
+          "line": 154
+        },
+        {
+          "name": "fitz",
+          "alias": null,
+          "line": 158
+        },
+        {
+          "name": "PyPDF2",
+          "alias": null,
+          "line": 162
+        },
+        {
+          "name": "pdfminer",
+          "alias": null,
+          "line": 166
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "_has_pdftotext",
+          "line": 12,
+          "docstring": "Check if pdftotext (poppler) is available.",
+          "decorators": []
+        },
+        {
+          "name": "_has_python_pdf_libs",
+          "line": 17,
+          "docstring": "Check if any Python PDF library is available.",
+          "decorators": []
+        },
+        {
+          "name": "_extract_with_pdftotext",
+          "line": 42,
+          "docstring": "Extract text using pdftotext (poppler-utils).",
+          "decorators": []
+        },
+        {
+          "name": "_extract_with_pypdf2",
+          "line": 55,
+          "docstring": "Extract text using PyPDF2.",
+          "decorators": []
+        },
+        {
+          "name": "_extract_with_pdfplumber",
+          "line": 68,
+          "docstring": "Extract text using pdfplumber (best for tables).",
+          "decorators": []
+        },
+        {
+          "name": "_extract_with_pymupdf",
+          "line": 87,
+          "docstring": "Extract text using PyMuPDF (fitz).",
+          "decorators": []
+        },
+        {
+          "name": "_extract_with_pdfminer",
+          "line": 100,
+          "docstring": "Extract text using pdfminer.six.",
+          "decorators": []
+        },
+        {
+          "name": "_format_table",
+          "line": 106,
+          "docstring": "Format extracted table as markdown-like text.",
+          "decorators": []
+        },
+        {
+          "name": "read_pdf",
+          "line": 132,
+          "docstring": "Read and extract text from a PDF file.\n\nArgs:\n    pdf_path: Path to the PDF file\n    pages: Optional page range, e.g. \"1-3,5\" (1-indexed)\n\nReturns:\n    Extracted text content",
+          "decorators": []
+        },
+        {
+          "name": "pdf_info",
+          "line": 239,
+          "docstring": "Get metadata and info about a PDF file.",
+          "decorators": []
+        }
+      ],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/utils/extra/__init__.py": {
+      "path": "judecode/judecode/utils/extra/__init__.py",
+      "language": "python",
+      "size": 138,
+      "lines": 4,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/utils/extra/safe_except.py": {
+      "path": "judecode/judecode/utils/extra/safe_except.py",
+      "language": "python",
+      "size": 10850,
+      "lines": 287,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "sys",
+          "alias": null,
+          "line": 8
+        },
+        {
+          "name": "logging",
+          "alias": null,
+          "line": 9
+        },
+        {
+          "name": "typing.Union",
+          "alias": null,
+          "module": "typing",
+          "line": 10
+        },
+        {
+          "name": "typing.Tuple",
+          "alias": null,
+          "module": "typing",
+          "line": 10
+        },
+        {
+          "name": "typing.Type",
+          "alias": null,
+          "module": "typing",
+          "line": 10
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 10
+        },
+        {
+          "name": "typing.Any",
+          "alias": null,
+          "module": "typing",
+          "line": 10
+        },
+        {
+          "name": "functools",
+          "alias": null,
+          "line": 109
+        },
+        {
+          "name": "functools",
+          "alias": null,
+          "line": 175
+        }
+      ],
+      "classes": [
+        {
+          "name": "ExceptGuard",
+          "line": 132,
+          "docstring": "Context manager ที่ intercept TypeError จาก except ผิดพลาด\nและ log + fallback อย่างปลอดภัย\n\nวิธีใช้:\n    with ExceptGuard():\n        try:\n            do_something()\n        except some_var:   # ถ้าพัง → ไม่ตาย, log ไว้\n            handle()",
+          "bases": [],
+          "methods": [
+            {
+              "name": "__enter__",
+              "line": 144,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "__exit__",
+              "line": 147,
+              "docstring": "",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        }
+      ],
+      "functions": [
+        {
+          "name": "safe_except",
+          "line": 19,
+          "docstring": "ตรวจสอบว่า `exc` เป็น Exception class ที่ใช้ใน `except` ได้หรือไม่\nถ้าไม่ได้ → ใช้ fallback แทน (default = Exception)\n\nรองรับ:\n- ค่าเดียว: safe_except(ValueError)\n- list/tuple: safe_except([ValueError, TypeError, maybe_bad_value])\n- instance: safe_except(ValueError()) → fallback\n- None / string / int: safe_except(\"bad\") → fallback\n\nUsage:\n    try:\n        do_something()\n    except safe_except(some_value):\n        pass\n\n    try:\n        do_something()\n    except safe_except([ValueError, some_var, TypeError]):\n        pass",
+          "decorators": []
+        },
+        {
+          "name": "_to_safe_exception",
+          "line": 62,
+          "docstring": "แปลงค่าที่ไม่แน่นอนให้เป็น Exception class หรือ None",
+          "decorators": []
+        },
+        {
+          "name": "protect_except",
+          "line": 96,
+          "docstring": "Decorator ที่ patch __builtins__ ให้ except ปลอดภัยขึ้น\n(ใช้เทคนิค monkey-patch เฉพาะใน scope ของฟังก์ชัน)\n\nวิธีใช้:\n    @protect_except\n    def my_function():\n        try:\n            risky()\n        except some_var:   # ถ้า some_var ไม่ปลอดภัย → ใช้ Exception แทน\n            pass",
+          "decorators": []
+        },
+        {
+          "name": "safe_catch",
+          "line": 162,
+          "docstring": "Decorator ที่แทรก except guard อัตโนมัติ\n\nวิธีใช้:\n    @safe_catch\n    def process(data):\n        # ถ้ามี except ที่ผิด → log + continue (ไม่พัง)\n        try:\n            ...\n        except some_bad_var:\n            ...",
+          "decorators": []
+        },
+        {
+          "name": "is_valid_exception_class",
+          "line": 195,
+          "docstring": "ตรวจสอบว่าค่านี้ใช้ใน except clause ได้หรือไม่",
+          "decorators": []
+        },
+        {
+          "name": "assert_exception_class",
+          "line": 202,
+          "docstring": "Assert ว่าค่าเป็น exception class ถ้าไม่ใช่ → raise ValueError (ชัดเจน)",
+          "decorators": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "logger",
+          "line": 12
+        }
+      ],
+      "errors": []
+    },
+    "judecode/judecode/agent/tools.py": {
+      "path": "judecode/judecode/agent/tools.py",
+      "language": "python",
+      "size": 58648,
+      "lines": 1534,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "json",
+          "alias": null,
+          "line": 3
+        },
+        {
+          "name": "typing.Any",
+          "alias": null,
+          "module": "typing",
+          "line": 4
+        },
+        {
+          "name": "judecode.utils.file_ops.read_file",
+          "alias": null,
+          "module": "judecode.utils.file_ops",
+          "line": 6
+        },
+        {
+          "name": "judecode.utils.file_ops.write_file",
+          "alias": null,
+          "module": "judecode.utils.file_ops",
+          "line": 6
+        },
+        {
+          "name": "judecode.utils.file_ops.edit_file",
+          "alias": null,
+          "module": "judecode.utils.file_ops",
+          "line": 6
+        },
+        {
+          "name": "judecode.utils.file_ops.delete_file",
+          "alias": null,
+          "module": "judecode.utils.file_ops",
+          "line": 6
+        },
+        {
+          "name": "judecode.utils.file_ops.list_directory",
+          "alias": null,
+          "module": "judecode.utils.file_ops",
+          "line": 6
+        },
+        {
+          "name": "judecode.utils.shell.execute_shell",
+          "alias": null,
+          "module": "judecode.utils.shell",
+          "line": 7
+        },
+        {
+          "name": "judecode.utils.search_tools.glob_search",
+          "alias": null,
+          "module": "judecode.utils.search_tools",
+          "line": 8
+        },
+        {
+          "name": "judecode.utils.search_tools.grep_search",
+          "alias": null,
+          "module": "judecode.utils.search_tools",
+          "line": 8
+        },
+        {
+          "name": "judecode.utils.web_tools.web_fetch",
+          "alias": null,
+          "module": "judecode.utils.web_tools",
+          "line": 9
+        },
+        {
+          "name": "judecode.utils.web_tools.web_search",
+          "alias": null,
+          "module": "judecode.utils.web_tools",
+          "line": 9
+        },
+        {
+          "name": "judecode.utils.task_tools.execute_task_tool",
+          "alias": null,
+          "module": "judecode.utils.task_tools",
+          "line": 12
+        },
+        {
+          "name": "judecode.utils.task_tools.TASK_TOOL_FUNCTIONS",
+          "alias": null,
+          "module": "judecode.utils.task_tools",
+          "line": 12
+        },
+        {
+          "name": "judecode.knowledge.notes.create_note",
+          "alias": null,
+          "module": "judecode.knowledge.notes",
+          "line": 14
+        },
+        {
+          "name": "judecode.knowledge.notes.read_note",
+          "alias": null,
+          "module": "judecode.knowledge.notes",
+          "line": 14
+        },
+        {
+          "name": "judecode.knowledge.notes.update_note",
+          "alias": null,
+          "module": "judecode.knowledge.notes",
+          "line": 14
+        },
+        {
+          "name": "judecode.knowledge.notes.append_to_note",
+          "alias": null,
+          "module": "judecode.knowledge.notes",
+          "line": 14
+        },
+        {
+          "name": "judecode.knowledge.notes.delete_note",
+          "alias": null,
+          "module": "judecode.knowledge.notes",
+          "line": 14
+        },
+        {
+          "name": "judecode.knowledge.notes.list_notes",
+          "alias": null,
+          "module": "judecode.knowledge.notes",
+          "line": 14
+        },
+        {
+          "name": "judecode.knowledge.notes.get_backlinks",
+          "alias": null,
+          "module": "judecode.knowledge.notes",
+          "line": 14
+        },
+        {
+          "name": "judecode.knowledge.search.search_vault",
+          "alias": null,
+          "module": "judecode.knowledge.search",
+          "line": 23
+        },
+        {
+          "name": "judecode.knowledge.search.build_knowledge_graph",
+          "alias": null,
+          "module": "judecode.knowledge.search",
+          "line": 23
+        },
+        {
+          "name": "judecode.knowledge.search.get_related_notes",
+          "alias": null,
+          "module": "judecode.knowledge.search",
+          "line": 23
+        },
+        {
+          "name": "judecode.knowledge.search.get_notes_by_tag",
+          "alias": null,
+          "module": "judecode.knowledge.search",
+          "line": 23
+        },
+        {
+          "name": "judecode.knowledge.vault.get_vault_structure",
+          "alias": null,
+          "module": "judecode.knowledge.vault",
+          "line": 29
+        },
+        {
+          "name": "judecode.utils.codebase_indexer.build_index",
+          "alias": null,
+          "module": "judecode.utils.codebase_indexer",
+          "line": 32
+        },
+        {
+          "name": "judecode.utils.codebase_indexer.load_index",
+          "alias": null,
+          "module": "judecode.utils.codebase_indexer",
+          "line": 32
+        },
+        {
+          "name": "judecode.utils.codebase_indexer.search_index",
+          "alias": null,
+          "module": "judecode.utils.codebase_indexer",
+          "line": 32
+        },
+        {
+          "name": "judecode.utils.codebase_indexer.get_project_summary",
+          "alias": null,
+          "module": "judecode.utils.codebase_indexer",
+          "line": 32
+        },
+        {
+          "name": "judecode.utils.pdf_tools.read_pdf",
+          "alias": null,
+          "module": "judecode.utils.pdf_tools",
+          "line": 40
+        },
+        {
+          "name": "judecode.utils.pdf_tools.pdf_info",
+          "alias": null,
+          "module": "judecode.utils.pdf_tools",
+          "line": 40
+        },
+        {
+          "name": "judecode.utils.spreadsheet_tools.read_csv",
+          "alias": null,
+          "module": "judecode.utils.spreadsheet_tools",
+          "line": 41
+        },
+        {
+          "name": "judecode.utils.spreadsheet_tools.read_excel",
+          "alias": null,
+          "module": "judecode.utils.spreadsheet_tools",
+          "line": 41
+        },
+        {
+          "name": "judecode.utils.spreadsheet_tools.write_csv",
+          "alias": null,
+          "module": "judecode.utils.spreadsheet_tools",
+          "line": 41
+        },
+        {
+          "name": "judecode.utils.spreadsheet_tools.write_excel",
+          "alias": null,
+          "module": "judecode.utils.spreadsheet_tools",
+          "line": 41
+        },
+        {
+          "name": "judecode.utils.spreadsheet_tools.list_excel_sheets",
+          "alias": null,
+          "module": "judecode.utils.spreadsheet_tools",
+          "line": 41
+        },
+        {
+          "name": "judecode.utils.automation.batch_rename",
+          "alias": null,
+          "module": "judecode.utils.automation",
+          "line": 44
+        },
+        {
+          "name": "judecode.utils.automation.batch_copy",
+          "alias": null,
+          "module": "judecode.utils.automation",
+          "line": 44
+        },
+        {
+          "name": "judecode.utils.automation.batch_delete",
+          "alias": null,
+          "module": "judecode.utils.automation",
+          "line": 44
+        },
+        {
+          "name": "judecode.utils.automation.organize_by_extension",
+          "alias": null,
+          "module": "judecode.utils.automation",
+          "line": 44
+        },
+        {
+          "name": "judecode.utils.automation.find_duplicates",
+          "alias": null,
+          "module": "judecode.utils.automation",
+          "line": 44
+        },
+        {
+          "name": "judecode.utils.automation.export_directory_tree",
+          "alias": null,
+          "module": "judecode.utils.automation",
+          "line": 44
+        },
+        {
+          "name": "judecode.utils.automation.clipboard_get",
+          "alias": null,
+          "module": "judecode.utils.automation",
+          "line": 44
+        },
+        {
+          "name": "judecode.utils.automation.clipboard_set",
+          "alias": null,
+          "module": "judecode.utils.automation",
+          "line": 44
+        },
+        {
+          "name": "judecode.utils.automation.wait_for",
+          "alias": null,
+          "module": "judecode.utils.automation",
+          "line": 44
+        },
+        {
+          "name": "judecode.utils.automation.merge_text_files",
+          "alias": null,
+          "module": "judecode.utils.automation",
+          "line": 44
+        },
+        {
+          "name": "judecode.utils.computer_tools.screenshot",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        },
+        {
+          "name": "judecode.utils.computer_tools.get_screen_size",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        },
+        {
+          "name": "judecode.utils.computer_tools.get_mouse_position",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        },
+        {
+          "name": "judecode.utils.computer_tools.get_active_window_info",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        },
+        {
+          "name": "judecode.utils.computer_tools.mouse_move",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        },
+        {
+          "name": "judecode.utils.computer_tools.mouse_click",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        },
+        {
+          "name": "judecode.utils.computer_tools.mouse_double_click",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        },
+        {
+          "name": "judecode.utils.computer_tools.mouse_drag",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        },
+        {
+          "name": "judecode.utils.computer_tools.keyboard_type",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        },
+        {
+          "name": "judecode.utils.computer_tools.keyboard_press",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        },
+        {
+          "name": "judecode.utils.computer_tools.keyboard_hotkey",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        },
+        {
+          "name": "judecode.utils.computer_tools.scroll",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        },
+        {
+          "name": "judecode.utils.computer_tools.open_app",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        },
+        {
+          "name": "judecode.utils.computer_tools.list_running_apps",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        },
+        {
+          "name": "judecode.utils.computer_tools.get_browser_accessibility_snapshot",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        },
+        {
+          "name": "judecode.utils.computer_tools.get_desktop_accessibility_tree",
+          "alias": null,
+          "module": "judecode.utils.computer_tools",
+          "line": 52
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "execute_tool",
+          "line": 1189,
+          "docstring": "",
+          "decorators": []
+        }
+      ],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/agent/__init__.py": {
+      "path": "judecode/judecode/agent/__init__.py",
+      "language": "python",
+      "size": 30,
+      "lines": 2,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/agent/continuation.py": {
+      "path": "judecode/judecode/agent/continuation.py",
+      "language": "python",
+      "size": 12370,
+      "lines": 357,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "json",
+          "alias": null,
+          "line": 16
+        },
+        {
+          "name": "re",
+          "alias": null,
+          "line": 17
+        },
+        {
+          "name": "datetime.datetime",
+          "alias": null,
+          "module": "datetime",
+          "line": 18
+        },
+        {
+          "name": "typing.Any",
+          "alias": null,
+          "module": "typing",
+          "line": 19
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 19
+        }
+      ],
+      "classes": [
+        {
+          "name": "ContinuationTracker",
+          "line": 300,
+          "docstring": "Tracks continuation state across the conversation.\nResets when the user sends a new message.",
+          "bases": [],
+          "methods": [
+            {
+              "name": "__init__",
+              "line": 306,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "reset",
+              "line": 325,
+              "docstring": "Reset when user sends a new message.",
+              "decorators": []
+            },
+            {
+              "name": "record_continuation",
+              "line": 335,
+              "docstring": "Record a continuation event.",
+              "decorators": []
+            },
+            {
+              "name": "can_continue",
+              "line": 345,
+              "docstring": "Check if we can continue.",
+              "decorators": []
+            },
+            {
+              "name": "get_summary",
+              "line": 349,
+              "docstring": "Get a summary of continuation history for the agent.",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        }
+      ],
+      "functions": [
+        {
+          "name": "detect_stream_interruption",
+          "line": 104,
+          "docstring": "Check if the last content from a stream suggests an interruption.",
+          "decorators": []
+        },
+        {
+          "name": "detect_token_limit_truncation",
+          "line": 112,
+          "docstring": "Check if the response was truncated due to token limit.",
+          "decorators": []
+        },
+        {
+          "name": "detect_tool_error",
+          "line": 122,
+          "docstring": "Check if a tool result indicates an error.",
+          "decorators": []
+        },
+        {
+          "name": "detect_incomplete_work",
+          "line": 134,
+          "docstring": "Check if the assistant's message + tool results suggest incomplete work.",
+          "decorators": []
+        },
+        {
+          "name": "detect_completion",
+          "line": 153,
+          "docstring": "Check if the assistant message indicates the task is complete.",
+          "decorators": []
+        },
+        {
+          "name": "should_continue",
+          "line": 163,
+          "docstring": "Decide if the agent should auto-continue.\n\nArgs:\n    finish_reason: The finish_reason from the API response (\"stop\", \"length\", etc.)\n    partial_arguments: Any partial tool call arguments that were truncated\n\nReturns:\n    (should_continue: bool, nudge_message: str)",
+          "decorators": []
+        },
+        {
+          "name": "generate_continuation_nudge",
+          "line": 250,
+          "docstring": "Generate a context-aware nudge message for the agent.",
+          "decorators": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "PARTIAL_CONTENT_INDICATORS",
+          "line": 24
+        },
+        {
+          "name": "TOOL_ERROR_INDICATORS",
+          "line": 32
+        },
+        {
+          "name": "TOKEN_LIMIT_INDICATORS",
+          "line": 44
+        },
+        {
+          "name": "INCOMPLETE_WORK_PATTERNS",
+          "line": 59
+        },
+        {
+          "name": "COMPLETION_INDICATORS",
+          "line": 81
+        }
+      ],
+      "errors": []
+    },
+    "judecode/judecode/agent/engine.py": {
+      "path": "judecode/judecode/agent/engine.py",
+      "language": "python",
+      "size": 24020,
+      "lines": 575,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "asyncio",
+          "alias": null,
+          "line": 3
+        },
+        {
+          "name": "json",
+          "alias": null,
+          "line": 4
+        },
+        {
+          "name": "logging",
+          "alias": null,
+          "line": 5
+        },
+        {
+          "name": "concurrent.futures.ThreadPoolExecutor",
+          "alias": null,
+          "module": "concurrent.futures",
+          "line": 6
+        },
+        {
+          "name": "typing.Any",
+          "alias": null,
+          "module": "typing",
+          "line": 7
+        },
+        {
+          "name": "judecode.api.client.ApiClient",
+          "alias": null,
+          "module": "judecode.api.client",
+          "line": 9
+        },
+        {
+          "name": "judecode.agent.tools.TOOL_DEFINITIONS",
+          "alias": null,
+          "module": "judecode.agent.tools",
+          "line": 10
+        },
+        {
+          "name": "judecode.agent.tools.execute_tool",
+          "alias": null,
+          "module": "judecode.agent.tools",
+          "line": 10
+        },
+        {
+          "name": "judecode.agent.continuation.ContinuationTracker",
+          "alias": null,
+          "module": "judecode.agent.continuation",
+          "line": 11
+        },
+        {
+          "name": "judecode.agent.continuation.detect_stream_interruption",
+          "alias": null,
+          "module": "judecode.agent.continuation",
+          "line": 11
+        },
+        {
+          "name": "judecode.agent.continuation.detect_incomplete_work",
+          "alias": null,
+          "module": "judecode.agent.continuation",
+          "line": 11
+        },
+        {
+          "name": "judecode.agent.continuation.detect_completion",
+          "alias": null,
+          "module": "judecode.agent.continuation",
+          "line": 11
+        },
+        {
+          "name": "judecode.agent.continuation.detect_token_limit_truncation",
+          "alias": null,
+          "module": "judecode.agent.continuation",
+          "line": 11
+        },
+        {
+          "name": "judecode.agent.continuation.generate_continuation_nudge",
+          "alias": null,
+          "module": "judecode.agent.continuation",
+          "line": 11
+        },
+        {
+          "name": "judecode.config.MAX_CONTINUATIONS",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 19
+        },
+        {
+          "name": "judecode.config.MAX_TURNS",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 19
+        },
+        {
+          "name": "judecode.config.CONTINUE_ON_STREAM_ERROR",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 19
+        },
+        {
+          "name": "judecode.config.CONTINUE_ON_INCOMPLETE_WORK",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 19
+        },
+        {
+          "name": "judecode.config.CONTINUE_ON_TOOL_ERROR",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 19
+        },
+        {
+          "name": "judecode.ui.console.console",
+          "alias": null,
+          "module": "judecode.ui.console",
+          "line": 26
+        },
+        {
+          "name": "judecode.utils.logger.get_logger",
+          "alias": null,
+          "module": "judecode.utils.logger",
+          "line": 27
+        },
+        {
+          "name": "judecode.utils.logger.log_error_details",
+          "alias": null,
+          "module": "judecode.utils.logger",
+          "line": 27
+        }
+      ],
+      "classes": [
+        {
+          "name": "AgentEngine",
+          "line": 32,
+          "docstring": "Main agent logic: stream completions, handle tool calls, iterate.",
+          "bases": [],
+          "methods": [
+            {
+              "name": "__init__",
+              "line": 35,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "_show_thinking",
+              "line": 60,
+              "docstring": "Show a thinking indicator before each model response turn.",
+              "decorators": []
+            },
+            {
+              "name": "_show_tool_call",
+              "line": 67,
+              "docstring": "Display tool call information.",
+              "decorators": []
+            },
+            {
+              "name": "_show_tool_result",
+              "line": 85,
+              "docstring": "Display a snippet of the tool result.",
+              "decorators": []
+            },
+            {
+              "name": "_show_continuation_nudge",
+              "line": 92,
+              "docstring": "Display a continuation nudge in the UI.",
+              "decorators": []
+            },
+            {
+              "name": "_execute_tool_safe",
+              "line": 107,
+              "docstring": "Execute a tool safely, catching TypeError and other exceptions.",
+              "decorators": []
+            },
+            {
+              "name": "_is_nudge_message",
+              "line": 124,
+              "docstring": "Check if a message is a system nudge (starts with [SYSTEM:).",
+              "decorators": []
+            },
+            {
+              "name": "request_stop",
+              "line": 128,
+              "docstring": "Request the agent to stop/pause after the current action.",
+              "decorators": []
+            },
+            {
+              "name": "reset_stop",
+              "line": 135,
+              "docstring": "Clear the stop/pause flag (e.g. after user redirects).",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        }
+      ],
+      "functions": [],
+      "variables": [
+        {
+          "name": "logger",
+          "line": 29
+        }
+      ],
+      "errors": []
+    },
+    "judecode/judecode/knowledge/__init__.py": {
+      "path": "judecode/judecode/knowledge/__init__.py",
+      "language": "python",
+      "size": 0,
+      "lines": 1,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/knowledge/notes.py": {
+      "path": "judecode/judecode/knowledge/notes.py",
+      "language": "python",
+      "size": 8043,
+      "lines": 259,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "re",
+          "alias": null,
+          "line": 12
+        },
+        {
+          "name": "os",
+          "alias": null,
+          "line": 13
+        },
+        {
+          "name": "json",
+          "alias": null,
+          "line": 14
+        },
+        {
+          "name": "datetime.datetime",
+          "alias": null,
+          "module": "datetime",
+          "line": 15
+        },
+        {
+          "name": "pathlib.Path",
+          "alias": null,
+          "module": "pathlib",
+          "line": 16
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 17
+        },
+        {
+          "name": "judecode.knowledge.vault.get_vault_path",
+          "alias": null,
+          "module": "judecode.knowledge.vault",
+          "line": 19
+        },
+        {
+          "name": "judecode.knowledge.vault.get_note_path",
+          "alias": null,
+          "module": "judecode.knowledge.vault",
+          "line": 19
+        },
+        {
+          "name": "judecode.knowledge.vault.slugify",
+          "alias": null,
+          "module": "judecode.knowledge.vault",
+          "line": 19
+        },
+        {
+          "name": "judecode.knowledge.vault.note_exists",
+          "alias": null,
+          "module": "judecode.knowledge.vault",
+          "line": 19
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "_parse_frontmatter",
+          "line": 30,
+          "docstring": "Parse YAML-like frontmatter from markdown content.\n\nReturns dict with keys: title, created, tags, links, updated, status\nAll fields are optional - returns what's found.",
+          "decorators": []
+        },
+        {
+          "name": "_extract_tags_from_content",
+          "line": 71,
+          "docstring": "Extract all #tags from markdown content (excluding frontmatter).",
+          "decorators": []
+        },
+        {
+          "name": "_extract_links_from_content",
+          "line": 78,
+          "docstring": "Extract all [[links]] from markdown content.",
+          "decorators": []
+        },
+        {
+          "name": "_build_frontmatter",
+          "line": 84,
+          "docstring": "Build a consistent frontmatter block.",
+          "decorators": []
+        },
+        {
+          "name": "_build_tag_line",
+          "line": 113,
+          "docstring": "Build a line of inline #tags for the content body.",
+          "decorators": []
+        },
+        {
+          "name": "create_note",
+          "line": 123,
+          "docstring": "Create a new note. Tags go to frontmatter AND as inline #tags.",
+          "decorators": []
+        },
+        {
+          "name": "read_note",
+          "line": 152,
+          "docstring": "Read a note by title. Returns content or error message.",
+          "decorators": []
+        },
+        {
+          "name": "update_note",
+          "line": 160,
+          "docstring": "Overwrite a note's content (keeping frontmatter).",
+          "decorators": []
+        },
+        {
+          "name": "append_to_note",
+          "line": 176,
+          "docstring": "Append content to an existing note.",
+          "decorators": []
+        },
+        {
+          "name": "delete_note",
+          "line": 187,
+          "docstring": "Delete a note by title.",
+          "decorators": []
+        },
+        {
+          "name": "list_notes",
+          "line": 196,
+          "docstring": "List all notes in the vault with metadata.\n\nTags are gathered from TWO sources and merged:\n1. Frontmatter YAML 'tags' field (primary)\n2. Inline #tag syntax in content body (secondary)",
+          "decorators": []
+        },
+        {
+          "name": "extract_tags",
+          "line": 237,
+          "docstring": "Extract all #tags from content body (inline syntax).",
+          "decorators": []
+        },
+        {
+          "name": "extract_links",
+          "line": 242,
+          "docstring": "Extract all [[links]] from content body.",
+          "decorators": []
+        },
+        {
+          "name": "get_backlinks",
+          "line": 247,
+          "docstring": "Find all notes that link TO this note.",
+          "decorators": []
+        }
+      ],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/knowledge/vault.py": {
+      "path": "judecode/judecode/knowledge/vault.py",
+      "language": "python",
+      "size": 1357,
+      "lines": 51,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "os",
+          "alias": null,
+          "line": 3
+        },
+        {
+          "name": "re",
+          "alias": null,
+          "line": 4
+        },
+        {
+          "name": "pathlib.Path",
+          "alias": null,
+          "module": "pathlib",
+          "line": 5
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 6
+        },
+        {
+          "name": "judecode.config.VAULT_PATH",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 8
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "get_vault_path",
+          "line": 13,
+          "docstring": "Get the vault path, creating it if necessary.",
+          "decorators": []
+        },
+        {
+          "name": "get_vault_structure",
+          "line": 20,
+          "docstring": "Return the current vault structure as a tree.",
+          "decorators": []
+        },
+        {
+          "name": "slugify",
+          "line": 34,
+          "docstring": "Convert a title to a safe filename.",
+          "decorators": []
+        },
+        {
+          "name": "note_exists",
+          "line": 41,
+          "docstring": "Check if a note file already exists.",
+          "decorators": []
+        },
+        {
+          "name": "get_note_path",
+          "line": 48,
+          "docstring": "Get the full path for a note title.",
+          "decorators": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "DEFAULT_VAULT_PATH",
+          "line": 10
+        }
+      ],
+      "errors": []
+    },
+    "judecode/judecode/knowledge/search.py": {
+      "path": "judecode/judecode/knowledge/search.py",
+      "language": "python",
+      "size": 4634,
+      "lines": 148,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "re",
+          "alias": null,
+          "line": 3
+        },
+        {
+          "name": "collections.defaultdict",
+          "alias": null,
+          "module": "collections",
+          "line": 4
+        },
+        {
+          "name": "pathlib.Path",
+          "alias": null,
+          "module": "pathlib",
+          "line": 5
+        },
+        {
+          "name": "typing.Any",
+          "alias": null,
+          "module": "typing",
+          "line": 6
+        },
+        {
+          "name": "judecode.knowledge.vault.get_vault_path",
+          "alias": null,
+          "module": "judecode.knowledge.vault",
+          "line": 8
+        }
+      ],
+      "classes": [],
+      "functions": [
+        {
+          "name": "search_vault",
+          "line": 11,
+          "docstring": "Search notes by title, content, or tag.",
+          "decorators": []
+        },
+        {
+          "name": "build_knowledge_graph",
+          "line": 56,
+          "docstring": "Build a graph of all notes, their links, and tags.",
+          "decorators": []
+        },
+        {
+          "name": "get_related_notes",
+          "line": 97,
+          "docstring": "Find notes related to a given note (by shared tags or direct links).",
+          "decorators": []
+        },
+        {
+          "name": "get_notes_by_tag",
+          "line": 138,
+          "docstring": "Get all notes that have a specific tag.",
+          "decorators": []
+        }
+      ],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/judecode/api/client.py": {
+      "path": "judecode/judecode/api/client.py",
+      "language": "python",
+      "size": 12993,
+      "lines": 318,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "json",
+          "alias": null,
+          "line": 7
+        },
+        {
+          "name": "logging",
+          "alias": null,
+          "line": 8
+        },
+        {
+          "name": "typing.AsyncGenerator",
+          "alias": null,
+          "module": "typing",
+          "line": 9
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 9
+        },
+        {
+          "name": "httpx",
+          "alias": null,
+          "line": 11
+        },
+        {
+          "name": "judecode.config.BASE_URL",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 13
+        },
+        {
+          "name": "judecode.config.API_KEY",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 13
+        },
+        {
+          "name": "judecode.config.MODEL",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 13
+        },
+        {
+          "name": "judecode.config.MAX_TOKENS",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 13
+        },
+        {
+          "name": "judecode.config.TEMPERATURE",
+          "alias": null,
+          "module": "judecode.config",
+          "line": 13
+        },
+        {
+          "name": "judecode.utils.logger.get_logger",
+          "alias": null,
+          "module": "judecode.utils.logger",
+          "line": 14
+        },
+        {
+          "name": "judecode.utils.logger.log_error_details",
+          "alias": null,
+          "module": "judecode.utils.logger",
+          "line": 14
+        }
+      ],
+      "classes": [
+        {
+          "name": "ApiClient",
+          "line": 19,
+          "docstring": "Client for DeepSeek API (OpenAI-compatible) chat completions.",
+          "bases": [],
+          "methods": [
+            {
+              "name": "__init__",
+              "line": 22,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "_build_headers",
+              "line": 42,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "_extract_content",
+              "line": 219,
+              "docstring": "Best-effort extract text content from a chunk.",
+              "decorators": [
+                "staticmethod"
+              ]
+            },
+            {
+              "name": "_extract_reasoning",
+              "line": 228,
+              "docstring": "Extract reasoning/thinking content from a chunk if present.\n\nDifferent models use different field names:\n- DeepSeek R1: delta.reasoning\n- Qwen: delta.reasoning_content\n- Some models: delta.thinking",
+              "decorators": [
+                "staticmethod"
+              ]
+            },
+            {
+              "name": "_error_chunk",
+              "line": 249,
+              "docstring": "Build a synthetic assistant chunk that carries an error message.",
+              "decorators": [
+                "staticmethod"
+              ]
+            }
+          ],
+          "decorators": []
+        }
+      ],
+      "functions": [],
+      "variables": [
+        {
+          "name": "logger",
+          "line": 16
+        }
+      ],
+      "errors": []
+    },
+    "judecode/judecode/api/__init__.py": {
+      "path": "judecode/judecode/api/__init__.py",
+      "language": "python",
+      "size": 88,
+      "lines": 6,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "judecode.api.client.ApiClient",
+          "alias": null,
+          "module": "judecode.api.client",
+          "line": 3
+        }
+      ],
+      "classes": [],
+      "functions": [],
+      "variables": [
+        {
+          "name": "__all__",
+          "line": 5
+        }
+      ],
+      "errors": []
+    },
+    "judecode/examples/safe_except.py": {
+      "path": "judecode/examples/safe_except.py",
+      "language": "python",
+      "size": 10850,
+      "lines": 287,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "sys",
+          "alias": null,
+          "line": 8
+        },
+        {
+          "name": "logging",
+          "alias": null,
+          "line": 9
+        },
+        {
+          "name": "typing.Union",
+          "alias": null,
+          "module": "typing",
+          "line": 10
+        },
+        {
+          "name": "typing.Tuple",
+          "alias": null,
+          "module": "typing",
+          "line": 10
+        },
+        {
+          "name": "typing.Type",
+          "alias": null,
+          "module": "typing",
+          "line": 10
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 10
+        },
+        {
+          "name": "typing.Any",
+          "alias": null,
+          "module": "typing",
+          "line": 10
+        },
+        {
+          "name": "functools",
+          "alias": null,
+          "line": 109
+        },
+        {
+          "name": "functools",
+          "alias": null,
+          "line": 175
+        }
+      ],
+      "classes": [
+        {
+          "name": "ExceptGuard",
+          "line": 132,
+          "docstring": "Context manager ที่ intercept TypeError จาก except ผิดพลาด\nและ log + fallback อย่างปลอดภัย\n\nวิธีใช้:\n    with ExceptGuard():\n        try:\n            do_something()\n        except some_var:   # ถ้าพัง → ไม่ตาย, log ไว้\n            handle()",
+          "bases": [],
+          "methods": [
+            {
+              "name": "__enter__",
+              "line": 144,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "__exit__",
+              "line": 147,
+              "docstring": "",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        }
+      ],
+      "functions": [
+        {
+          "name": "safe_except",
+          "line": 19,
+          "docstring": "ตรวจสอบว่า `exc` เป็น Exception class ที่ใช้ใน `except` ได้หรือไม่\nถ้าไม่ได้ → ใช้ fallback แทน (default = Exception)\n\nรองรับ:\n- ค่าเดียว: safe_except(ValueError)\n- list/tuple: safe_except([ValueError, TypeError, maybe_bad_value])\n- instance: safe_except(ValueError()) → fallback\n- None / string / int: safe_except(\"bad\") → fallback\n\nUsage:\n    try:\n        do_something()\n    except safe_except(some_value):\n        pass\n\n    try:\n        do_something()\n    except safe_except([ValueError, some_var, TypeError]):\n        pass",
+          "decorators": []
+        },
+        {
+          "name": "_to_safe_exception",
+          "line": 62,
+          "docstring": "แปลงค่าที่ไม่แน่นอนให้เป็น Exception class หรือ None",
+          "decorators": []
+        },
+        {
+          "name": "protect_except",
+          "line": 96,
+          "docstring": "Decorator ที่ patch __builtins__ ให้ except ปลอดภัยขึ้น\n(ใช้เทคนิค monkey-patch เฉพาะใน scope ของฟังก์ชัน)\n\nวิธีใช้:\n    @protect_except\n    def my_function():\n        try:\n            risky()\n        except some_var:   # ถ้า some_var ไม่ปลอดภัย → ใช้ Exception แทน\n            pass",
+          "decorators": []
+        },
+        {
+          "name": "safe_catch",
+          "line": 162,
+          "docstring": "Decorator ที่แทรก except guard อัตโนมัติ\n\nวิธีใช้:\n    @safe_catch\n    def process(data):\n        # ถ้ามี except ที่ผิด → log + continue (ไม่พัง)\n        try:\n            ...\n        except some_bad_var:\n            ...",
+          "decorators": []
+        },
+        {
+          "name": "is_valid_exception_class",
+          "line": 195,
+          "docstring": "ตรวจสอบว่าค่านี้ใช้ใน except clause ได้หรือไม่",
+          "decorators": []
+        },
+        {
+          "name": "assert_exception_class",
+          "line": 202,
+          "docstring": "Assert ว่าค่าเป็น exception class ถ้าไม่ใช่ → raise ValueError (ชัดเจน)",
+          "decorators": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "logger",
+          "line": 12
+        }
+      ],
+      "errors": []
+    },
+    "judecode/examples/production_example.py": {
+      "path": "judecode/examples/production_example.py",
+      "language": "python",
+      "size": 13030,
+      "lines": 361,
+      "shebang": "",
+      "imports": [
+        {
+          "name": "sys",
+          "alias": null,
+          "line": 6
+        },
+        {
+          "name": "os",
+          "alias": null,
+          "line": 7
+        },
+        {
+          "name": "logging",
+          "alias": null,
+          "line": 8
+        },
+        {
+          "name": "typing.Any",
+          "alias": null,
+          "module": "typing",
+          "line": 9
+        },
+        {
+          "name": "typing.Dict",
+          "alias": null,
+          "module": "typing",
+          "line": 9
+        },
+        {
+          "name": "typing.Optional",
+          "alias": null,
+          "module": "typing",
+          "line": 9
+        },
+        {
+          "name": "safe_except.safe_except",
+          "alias": null,
+          "module": "safe_except",
+          "line": 13
+        },
+        {
+          "name": "safe_except.assert_exception_class",
+          "alias": null,
+          "module": "safe_except",
+          "line": 13
+        },
+        {
+          "name": "safe_except.ExceptGuard",
+          "alias": null,
+          "module": "safe_except",
+          "line": 13
+        },
+        {
+          "name": "safe_except.is_valid_exception_class",
+          "alias": null,
+          "module": "safe_except",
+          "line": 13
+        },
+        {
+          "name": "random",
+          "alias": null,
+          "line": 156
+        }
+      ],
+      "classes": [
+        {
+          "name": "APIErrorHandler",
+          "line": 26,
+          "docstring": "ใช้จัดการ exception จาก API response แบบ dynamic\nโดยไม่เสี่ยง TypeError",
+          "bases": [],
+          "methods": [
+            {
+              "name": "__init__",
+              "line": 42,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "_validate_error_map",
+              "line": 46,
+              "docstring": "ตรวจสอบว่าทุกค่าใน ERROR_MAP เป็น Exception class ที่ใช้ได้",
+              "decorators": []
+            },
+            {
+              "name": "handle",
+              "line": 52,
+              "docstring": "จับ exception ตาม error_code แบบปลอดภัย\n\nArgs:\n    error_code: คีย์ใน ERROR_MAP (เช่น \"validation\", \"auth\")\n    fallback: exception class ที่จะใช้ถ้า error_code ไม่มีใน map\n\nใช้กับ except:\n    try:\n        ...\n    except handler.handle(\"validation\"):\n        ...",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        },
+        {
+          "name": "PluginException",
+          "line": 74,
+          "docstring": "⚠️ จำลองว่า third-party plugin ส่ง exception instance มาผิด",
+          "bases": [],
+          "methods": [],
+          "decorators": []
+        },
+        {
+          "name": "PluginLoader",
+          "line": 79,
+          "docstring": "โหลด plugin จากภายนอก โดยไม่ให้ exception ที่ผิดพลาดทำระบบพัง",
+          "bases": [],
+          "methods": [
+            {
+              "name": "__init__",
+              "line": 84,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "register_plugin",
+              "line": 87,
+              "docstring": "ลงทะเบียน plugin พร้อม exception handler ที่ปลอดภัย",
+              "decorators": []
+            },
+            {
+              "name": "execute_plugin",
+              "line": 97,
+              "docstring": "รัน plugin action โดยใช้ ExceptGuard ป้องกันการพัง",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        },
+        {
+          "name": "DatabasePool",
+          "line": 122,
+          "docstring": "Connection pool ที่ retryable exception classes\nมาจาก configuration (อาจผิดพลาดได้)",
+          "bases": [],
+          "methods": [
+            {
+              "name": "__init__",
+              "line": 128,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "execute_with_retry",
+              "line": 134,
+              "docstring": "รัน query พร้อม retry logic ที่ปลอดภัย",
+              "decorators": []
+            },
+            {
+              "name": "_execute",
+              "line": 154,
+              "docstring": "",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        },
+        {
+          "name": "DatabaseError",
+          "line": 162,
+          "docstring": "Custom database exception",
+          "bases": [
+            "Exception"
+          ],
+          "methods": [],
+          "decorators": []
+        },
+        {
+          "name": "WebMiddleware",
+          "line": 171,
+          "docstring": "Middleware ที่ ensure ว่า request handler\nไม่พังจาก exception class ที่ผิดพลาด",
+          "bases": [],
+          "methods": [
+            {
+              "name": "__init__",
+              "line": 177,
+              "docstring": "",
+              "decorators": []
+            },
+            {
+              "name": "register_route",
+              "line": 180,
+              "docstring": "ลงทะเบียน route พร้อม error classes ที่ปลอดภัย\n\nsafe_except() จะถูก apply ตอน runtime",
+              "decorators": []
+            },
+            {
+              "name": "dispatch",
+              "line": 195,
+              "docstring": "Dispatch request ไปยัง handler ที่ลงทะเบียนไว้",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        },
+        {
+          "name": "BadPlugin",
+          "line": 244,
+          "docstring": "Plugin ที่ส่ง exception instance มาผิด",
+          "bases": [],
+          "methods": [
+            {
+              "name": "handle_process",
+              "line": 248,
+              "docstring": "",
+              "decorators": []
+            }
+          ],
+          "decorators": []
+        },
+        {
+          "name": "NonException",
+          "line": 322,
+          "docstring": "class ที่ไม่ inherit จาก BaseException",
+          "bases": [],
+          "methods": [],
+          "decorators": []
+        }
+      ],
+      "functions": [
+        {
+          "name": "test_api_error_handler",
+          "line": 216,
+          "docstring": "ทดสอบ API Error Handler",
+          "decorators": []
+        },
+        {
+          "name": "test_plugin_loader",
+          "line": 237,
+          "docstring": "ทดสอบ Plugin Loader",
+          "decorators": []
+        },
+        {
+          "name": "test_database_pool",
+          "line": 265,
+          "docstring": "ทดสอบ Database Pool",
+          "decorators": []
+        },
+        {
+          "name": "test_web_middleware",
+          "line": 287,
+          "docstring": "ทดสอบ Web Middleware",
+          "decorators": []
+        },
+        {
+          "name": "test_validation_utility",
+          "line": 316,
+          "docstring": "ทดสอบ utility functions",
+          "decorators": []
+        }
+      ],
+      "variables": [
+        {
+          "name": "logger",
+          "line": 19
+        }
+      ],
+      "errors": []
+    },
+    "judecode/scripts/install.sh": {
+      "path": "judecode/scripts/install.sh",
+      "language": "shell",
+      "size": 24197,
+      "lines": 485,
+      "shebang": "#!/usr/bin/env bash",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/scripts/install.ps1": {
+      "path": "judecode/scripts/install.ps1",
+      "language": "powershell",
+      "size": 10798,
+      "lines": 280,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/scripts/install.bat": {
+      "path": "judecode/scripts/install.bat",
+      "language": "batch",
+      "size": 1556,
+      "lines": 52,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    },
+    "judecode/.github/workflows/build-windows.yml": {
+      "path": "judecode/.github/workflows/build-windows.yml",
+      "language": "yaml",
+      "size": 4964,
+      "lines": 130,
+      "shebang": "",
+      "imports": [],
+      "classes": [],
+      "functions": [],
+      "variables": [],
+      "errors": []
+    }
+  },
+  "stats": {
+    "total_files": 75,
+    "total_lines": 17020,
+    "languages": {
+      "markdown": 9,
+      "text": 13,
+      "python": 46,
+      "batch": 2,
+      "toml": 1,
+      "json": 1,
+      "shell": 1,
+      "powershell": 1,
+      "yaml": 1
+    },
+    "total_classes": 24,
+    "total_functions": 182,
+    "largest_files": [
+      {
+        "path": "judecode/.judecode/codebase_index.json",
+        "lines": 4483,
+        "language": "json"
+      },
+      {
+        "path": "judecode/judecode/agent/tools.py",
+        "lines": 1534,
+        "language": "python"
+      },
+      {
+        "path": "judecode/judecode/utils/computer_tools.py",
+        "lines": 1317,
+        "language": "python"
+      },
+      {
+        "path": "judecode/judecode/utils/codebase_indexer.py",
+        "lines": 729,
+        "language": "python"
+      },
+      {
+        "path": "judecode/judecode/agent/engine.py",
+        "lines": 575,
+        "language": "python"
+      },
+      {
+        "path": "judecode/scripts/install.sh",
+        "lines": 485,
+        "language": "shell"
+      },
+      {
+        "path": "judecode/plugins/kanban_automation.py",
+        "lines": 467,
+        "language": "python"
+      },
+      {
+        "path": "judecode/judecode/utils/automation.py",
+        "lines": 415,
+        "language": "python"
+      },
+      {
+        "path": "judecode/examples/production_example.py",
+        "lines": 361,
+        "language": "python"
+      },
+      {
+        "path": "judecode/judecode/agent/continuation.py",
+        "lines": 357,
+        "language": "python"
+      }
+    ]
+  }
+}

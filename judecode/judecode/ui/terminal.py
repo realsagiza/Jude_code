@@ -239,6 +239,7 @@ The agent can use tools like shell, read, write, edit, grep, web_search, etc.
             if user_input.lower() == "/clear":
                 agent.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
                 agent.reset_stop()
+                agent._turn_count = 0
                 console.print("  [dim]Conversation cleared[/dim]\n", style="cyan")
                 continue
 
