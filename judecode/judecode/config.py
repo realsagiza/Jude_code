@@ -19,7 +19,8 @@ import os
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+# ใช้ override=True เพื่อให้ .env มีผลเสมอ (ไม่ถูก shell env shadow)
+load_dotenv(override=True)
 
 
 def _env(key: str, default: str) -> str:
