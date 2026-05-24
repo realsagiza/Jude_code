@@ -16,11 +16,14 @@ This allows the Windows .exe to be configured via config.ini
 """
 
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-# ใช้ override=True เพื่อให้ .env มีผลเสมอ (ไม่ถูก shell env shadow)
-load_dotenv(override=True)
+# ชี้ไปที่ .env ใน project root (2 level up จาก config.py)
+# เพื่อให้เจอตัวที่ user แก้ไข ไม่ใช่ตัวใน package
+_env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(_env_path, override=True)
 
 
 def _env(key: str, default: str) -> str:
