@@ -316,7 +316,7 @@ class AgentEngine:
             # Store the assistant message so far, then stop
             msg: dict[str, Any] = {
                 "role": "assistant",
-                "content": full_content or None,
+                "content": full_content,  # Keep "" instead of None — API requires content or tool_calls
             }
             if full_reasoning:
                 msg["reasoning_content"] = full_reasoning
@@ -327,7 +327,7 @@ class AgentEngine:
         if not has_tool_calls:
             msg: dict[str, Any] = {
                 "role": "assistant",
-                "content": full_content or None,
+                "content": full_content,  # Keep "" instead of None — API requires content or tool_calls
             }
             if full_reasoning:
                 msg["reasoning_content"] = full_reasoning

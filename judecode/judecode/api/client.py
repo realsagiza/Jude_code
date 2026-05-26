@@ -58,9 +58,20 @@ class ApiClient:
         If all retries exhausted, yields a synthetic error chunk
         so the agent can recover gracefully instead of crashing.
         """
+        # ── Sanitize messages: ensure assistant messages always have content or tool_calls ──
+        sanitized = []
+        for msg in messages:
+            if msg.get("role") == "assistant":
+                has_content = bool(msg.get("content"))
+                has_tool_calls = bool(msg.get("tool_calls"))
+                if not has_content and not has_tool_calls:
+                    # API rejects assistant messages with neither content nor tool_calls
+                    msg = {**msg, "content": ""}  # Set empty string as fallback
+            sanitized.append(msg)
+
         payload = {
             "model": self.model,
-            "messages": messages,
+            "messages": sanitized,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
             "stream": stream,
@@ -268,9 +279,19 @@ class ApiClient:
         tools: Optional[list[dict]] = None,
     ) -> dict:
         """Non-streaming completion. Returns the final response dict."""
+        # ── Sanitize messages: ensure assistant messages always have content or tool_calls ──
+        sanitized = []
+        for msg in messages:
+            if msg.get("role") == "assistant":
+                has_content = bool(msg.get("content"))
+                has_tool_calls = bool(msg.get("tool_calls"))
+                if not has_content and not has_tool_calls:
+                    msg = {**msg, "content": ""}
+            sanitized.append(msg)
+
         payload = {
             "model": self.model,
-            "messages": messages,
+            "messages": sanitized,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
             "stream": False,
