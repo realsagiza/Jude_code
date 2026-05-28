@@ -31,6 +31,29 @@ from judecode.agent.engine import AgentEngine
 from judecode.ui.console import console
 
 
+def safe_input(prompt: str = "") -> str:
+    """Wrapper around input() that handles encoding errors gracefully.
+
+    Falls back to reading raw bytes + replacing invalid UTF-8 sequences
+    if the built-in input() raises UnicodeDecodeError.
+    """
+    try:
+        return input(prompt)
+    except UnicodeDecodeError:
+        # If stdin contains invalid UTF-8 bytes, fall back to reading raw bytes
+        # and decoding with error replacement
+        if prompt:
+            sys.stdout.write(prompt)
+            sys.stdout.flush()
+        try:
+            raw = sys.stdin.buffer.readline()
+            if not raw:
+                return ""
+            return raw.decode("utf-8", errors="replace").rstrip("\n")
+        except Exception:
+            return ""
+
+
 def print_greeting() -> None:
     """Print a cool greeting similar to Claude Code."""
     from rich.columns import Columns
@@ -147,6 +170,12 @@ def get_input_prompt() -> str:
 
 async def run_agent_interactive() -> None:
     """Main interactive agent loop with multi-line input support."""
+    # ── Ensure stdin handles encoding errors gracefully ──
+    try:
+        sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass  # stdin might not be reconfigureable in some environments
+
     api_client = ApiClient()
     agent = AgentEngine(SYSTEM_PROMPT, api_client)
 
@@ -179,7 +208,7 @@ async def run_agent_interactive() -> None:
             try:
                 console.print("\n  \u254b[bold cyan]\u256d[/bold cyan] ", end="")
                 loop = asyncio.get_running_loop()
-                first_line = await loop.run_in_executor(None, input)
+                first_line = await loop.run_in_executor(None, safe_input)
                 if not first_line:
                     continue
 
@@ -196,7 +225,7 @@ async def run_agent_interactive() -> None:
                     lines = [first_line]
                     while True:
                         try:
-                            line = await loop.run_in_executor(None, input)
+                            line = await loop.run_in_executor(None, safe_input)
                             if not line:
                                 break
                             lines.append(line)
