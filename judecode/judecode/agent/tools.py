@@ -99,13 +99,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "read",
-            "description": "Read the contents of a file",
+            "description": "Read the contents of a file. ⚠️ CRITICAL: For files >200 lines, ALWAYS use offset+limit to read in chunks (max 200-300 lines per read). Use `wc -l <file>` first to check size. NEVER read huge files in one shot — it will crash the context window.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "The file path to read"},
-                    "offset": {"type": "integer", "description": "Line number to start from (1-indexed, default 1)"},
-                    "limit": {"type": "integer", "description": "Maximum number of lines to read"}
+                    "offset": {"type": "integer", "description": "Line number to start from (1-indexed, default 1). REQUIRED for files >200 lines."},
+                    "limit": {"type": "integer", "description": "Maximum number of lines to read. ALWAYS set to 100-300 for large files. REQUIRED for files >200 lines."}
                 },
                 "required": ["path"]
             }
@@ -413,12 +413,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "read_pdf",
-            "description": "Read and extract text content from a PDF file. Supports both text-based PDFs and can extract tables.",
+            "description": "Read and extract text content from a PDF file. Supports both text-based PDFs and can extract tables. ⚠️ For large PDFs, use 'pages' parameter to read specific pages only (e.g., '1-5'). Use pdf_info first to check page count.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "pdf_path": {"type": "string", "description": "Path to the PDF file"},
-                    "pages": {"type": "string", "description": "Optional page range, e.g. '1-3,5' (1-indexed). Leave empty for all pages."}
+                    "pages": {"type": "string", "description": "Page range, e.g. '1-3,5' (1-indexed). ALWAYS use this for PDFs >10 pages to avoid context overflow."}
                 },
                 "required": ["pdf_path"]
             }
@@ -444,14 +444,14 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "read_csv",
-            "description": "Read a CSV file and display as a formatted table.",
+            "description": "Read a CSV file and display as a formatted table. ⚠️ ALWAYS use max_rows (e.g., max_rows=50) for large CSV files to avoid context overflow.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "csv_path": {"type": "string", "description": "Path to CSV file"},
                     "delimiter": {"type": "string", "description": "Field delimiter (default: ','). Use '\\t' for tab-separated."},
                     "has_header": {"type": "boolean", "description": "Whether the first row is a header (default: true)"},
-                    "max_rows": {"type": "integer", "description": "Maximum number of rows to read (default: all)"}
+                    "max_rows": {"type": "integer", "description": "Maximum number of rows to read (ALWAYS set to 50-100 for large files)"}
                 },
                 "required": ["csv_path"]
             }
@@ -461,13 +461,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "read_excel",
-            "description": "Read an Excel (.xlsx) file and display as a formatted table.",
+            "description": "Read an Excel (.xlsx) file and display as a formatted table. ⚠️ ALWAYS use max_rows (e.g., max_rows=50) and sheet_name for large workbooks to avoid context overflow.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "excel_path": {"type": "string", "description": "Path to .xlsx file"},
-                    "sheet_name": {"type": "string", "description": "Specific sheet to read (default: first sheet)"},
-                    "max_rows": {"type": "integer", "description": "Maximum rows to read per sheet (default: all)"}
+                    "sheet_name": {"type": "string", "description": "Specific sheet to read (default: first sheet). Use list_excel_sheets first."},
+                    "max_rows": {"type": "integer", "description": "Maximum rows to read per sheet (ALWAYS set to 50-100 for large sheets)"}
                 },
                 "required": ["excel_path"]
             }

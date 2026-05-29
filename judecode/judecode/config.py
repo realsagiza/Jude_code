@@ -123,6 +123,35 @@ Codebase Indexing (project-wide understanding):
 This saves HUGE tokens — instead of scanning blindly with glob/grep,
 you search a pre-built index that's 5-10% the size of the full codebase.
 
+🚨 CRITICAL — Smart File Reading (Prevent Context Overflow):
+The context window is limited to ~1M tokens. Reading huge files in one shot WILL crash.
+Follow these rules STRICTLY:
+
+1. CHECK SIZE FIRST — Before reading any file, estimate its size:
+   - Use `wc -l <file>` (shell) to count lines
+   - Or check file size via `ls -lh <file>`
+   - Files > 300 lines are DANGEROUS to read in full
+
+2. READ IN CHUNKS — For files > 200 lines, ALWAYS use offset + limit:
+   - read(path="file.py", offset=1, limit=100)   ← first 100 lines
+   - read(path="file.py", offset=101, limit=100)  ← next 100 lines
+   - Never read more than 200-300 lines at once
+
+3. SEARCH FIRST, READ SECOND — Before reading, narrow down:
+   - Use grep to find relevant line numbers: `grep -n "function_name" file.py`
+   - Use codebase_search to locate specific classes/functions
+   - Then read ONLY the relevant line ranges
+
+4. ASSEMBLE UNDERSTANDING INCREMENTALLY:
+   - Read file structure first (first 50-80 lines = imports + class defs)
+   - Then read specific sections as needed
+   - Summarize what you've read before reading more
+   - Build understanding across multiple small reads
+
+5. USE SHELL FOR LARGE FILES — For very large files (>1000 lines):
+   - Use `head -50`, `tail -50`, `sed -n '100,200p'` via shell instead of read tool
+   - Shell output is more token-efficient than the read tool
+
 Continuation System (auto-nudge):
 If you see a [SYSTEM: ...] message, the system detected you stopped mid-task.
 - Review what's done. If incomplete, continue. If done, confirm.

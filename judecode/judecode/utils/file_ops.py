@@ -3,9 +3,16 @@
 from pathlib import Path
 from typing import Optional
 
+# Maximum recommended lines per read to avoid context overflow
+MAX_RECOMMENDED_LINES = 300
+
 
 def read_file(path: str, offset: int = 1, limit: Optional[int] = None) -> str:
-    """Read file contents with optional line offset and limit."""
+    """Read file contents with optional line offset and limit.
+    
+    If no limit is specified and the file is large (>MAX_RECOMMENDED_LINES lines),
+    a warning is appended to the output recommending chunked reading.
+    """
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"File not found: {path}")
@@ -15,13 +22,27 @@ def read_file(path: str, offset: int = 1, limit: Optional[int] = None) -> str:
     with open(p, "r", encoding="utf-8", errors="replace") as f:
         lines = f.readlines()
 
+    total_lines = len(lines)
     start = max(0, offset - 1)
-    end = len(lines)
+    end = total_lines
     if limit is not None:
-        end = start + limit
+        end = min(start + limit, total_lines)
 
     result = lines[start:end]
-    return "".join(result)
+    output = "".join(result)
+    
+    # Warn if reading a large file without limit
+    if limit is None and total_lines > MAX_RECOMMENDED_LINES:
+        warning = (
+            f"\n\n⚠️  WARNING: This file has {total_lines} lines total. "
+            f"You read ALL of it at once! This wastes context tokens.\n"
+            f"Next time, use offset+limit to read in chunks:\n"
+            f"  read(path=\"{path}\", offset=1, limit=200)\n"
+            f"  read(path=\"{path}\", offset=201, limit=200)\n"
+        )
+        output += warning
+    
+    return output
 
 
 def write_file(path: str, content: str) -> None:

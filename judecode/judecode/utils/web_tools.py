@@ -20,8 +20,8 @@ def _get_tavily_key() -> str:
     return os.environ.get("TAVILY_API_KEY", "") or os.environ.get("JUDECODE_TAVILY_API_KEY", "")
 
 
-def web_fetch(url: str, timeout: int = 30) -> str:
-    """Fetch content from a URL."""
+def web_fetch(url: str, timeout: int = 30, max_chars: int = 50000) -> str:
+    """Fetch content from a URL. Truncated to max_chars to avoid context overflow."""
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -36,7 +36,11 @@ def web_fetch(url: str, timeout: int = 30) -> str:
             charset = "utf-8"
             if "charset=" in content_type:
                 charset = content_type.split("charset=")[1].split(";")[0].strip()
-            return response.read().decode(charset, errors="replace")
+            content = response.read().decode(charset, errors="replace")
+            if len(content) > max_chars:
+                content = content[:max_chars]
+                content += f"\n\n⚠️ [Truncated to {max_chars} chars. Full page may be larger.]"
+            return content
     except urllib.error.HTTPError as e:
         return f"Error: HTTP {e.code} - {e.reason} for URL {url}"
     except urllib.error.URLError as e:

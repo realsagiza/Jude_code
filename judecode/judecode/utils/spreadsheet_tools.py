@@ -23,14 +23,14 @@ def _has_xlsxwriter() -> bool:
         return False
 
 
-def read_csv(csv_path: str, delimiter: str = ",", has_header: bool = True, max_rows: Optional[int] = None) -> str:
+def read_csv(csv_path: str, delimiter: str = ",", has_header: bool = True, max_rows: Optional[int] = 100) -> str:
     """Read a CSV file and return as formatted text/table.
 
     Args:
         csv_path: Path to CSV file
         delimiter: Field delimiter (default: comma)
         has_header: Whether the first row is a header
-        max_rows: Maximum number of rows to read (None = all)
+        max_rows: Maximum number of rows to read (default: 100). Set higher if needed.
 
     Returns:
         Formatted text representation of the CSV
@@ -46,8 +46,11 @@ def read_csv(csv_path: str, delimiter: str = ",", has_header: bool = True, max_r
     if not rows:
         return "Empty CSV file."
 
-    if max_rows and len(rows) > max_rows + 1:
-        rows = rows[:max_rows + 1]
+    total_rows = len(rows)
+    truncated = False
+    if max_rows and len(rows) > max_rows + (1 if has_header else 0):
+        rows = rows[:max_rows + (1 if has_header else 0)]
+        truncated = True
 
     # Calculate column widths
     col_widths = []
@@ -67,20 +70,20 @@ def read_csv(csv_path: str, delimiter: str = ",", has_header: bool = True, max_r
             lines.append("-+-".join("-" * w for w in col_widths))
 
     result = "\n".join(lines)
-    result += f"\n\n({len(rows)} rows x {max(len(r) for r in rows)} columns)"
-    if max_rows and len(rows) > max_rows:
-        result += f" [showing first {max_rows} rows]"
+    result += f"\n\n({len(rows)} rows shown of {total_rows} total, {max(len(r) for r in rows)} columns)"
+    if truncated:
+        result += f" ⚠️ Truncated to {max_rows} rows. Use max_rows=N to read more."
 
     return result
 
 
-def read_excel(excel_path: str, sheet_name: Optional[str] = None, max_rows: Optional[int] = None) -> str:
+def read_excel(excel_path: str, sheet_name: Optional[str] = None, max_rows: Optional[int] = 100) -> str:
     """Read an Excel file and return as formatted text.
 
     Args:
         excel_path: Path to .xlsx/.xls file
         sheet_name: Specific sheet to read (None = first sheet)
-        max_rows: Maximum rows to read per sheet
+        max_rows: Maximum rows to read per sheet (default: 100). Set higher if needed.
 
     Returns:
         Formatted text representation
@@ -135,7 +138,9 @@ def read_excel(excel_path: str, sheet_name: Optional[str] = None, max_rows: Opti
             if ri == 0:
                 lines.append("-+-".join("-" * w for w in col_widths))
 
-        lines.append(f"({len(rows)} rows x {max(len(r) for r in rows)} columns)")
+        lines.append(f"({len(rows)} rows shown, {max(len(r) for r in rows)} columns)")
+        if max_rows and len(rows) >= max_rows:
+            lines.append(f"⚠️ May have more rows. Use max_rows=N to read more.")
         output_parts.append("\n".join(lines))
 
     wb.close()
