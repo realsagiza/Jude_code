@@ -1,15 +1,27 @@
 """Configuration for Jude Code.
 
-Config values can be overridden via environment variables:
-    JUDECODE_BASE_URL
-    JUDECODE_API_KEY
-    JUDECODE_MODEL
-    JUDECODE_VISION_MODEL
-    JUDECODE_MAX_TOKENS
-    JUDECODE_TEMPERATURE
-    JUDECODE_MAX_CONTINUATIONS
-    JUDECODE_MAX_TURNS
-    JUDECODE_VAULT
+Multi-Provider Support:
+    Jude Code supports multiple LLM providers. Set JUDECODE_PROVIDER to choose:
+      - "deepseek"  : DeepSeek API (default, OpenAI-compatible)
+      - "anthropic" : Anthropic Claude API (native Messages API)
+
+    Provider-specific env vars:
+      # DeepSeek
+      JUDECODE_DEEPSEEK_API_KEY=...
+      JUDECODE_DEEPSEEK_MODEL=deepseek-chat
+      JUDECODE_DEEPSEEK_BASE_URL=https://api.deepseek.com
+
+      # Anthropic
+      JUDECODE_ANTHROPIC_API_KEY=...
+      JUDECODE_ANTHROPIC_MODEL=claude-sonnet-4-20250514
+
+    Other config values:
+      JUDECODE_VISION_MODEL
+      JUDECODE_MAX_TOKENS
+      JUDECODE_TEMPERATURE
+      JUDECODE_MAX_CONTINUATIONS
+      JUDECODE_MAX_TURNS
+      JUDECODE_VAULT
 
 This allows the Windows .exe to be configured via config.ini
 (loaded by runtime_hook_windows.py before this module is imported).
@@ -40,22 +52,42 @@ def _env_int(key: str, default: int) -> int:
         return default
 
 
-# ── DeepSeek API (Main Model) ──
+# ── Provider Selection ──
+# "deepseek" (default) or "anthropic"
+PROVIDER = _env("PROVIDER", "deepseek").lower().strip()
+
+# ── DeepSeek API (OpenAI-compatible) ──
 # ใช้ DeepSeek API โดยตรง (ไม่ผ่าน Ollama)
 # รองรับ deepseek-v4-flash (default, มี thinking mode) และ deepseek-v4-pro
 # ⚠️ ต้องตั้งค่า JUDECODE_DEEPSEEK_API_KEY environment variable
 DEEPSEEK_BASE_URL = _env("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-_DEFAULT_KEY = _env("DEEPSEEK_API_KEY", "")
-if not _DEFAULT_KEY:
+_DEEPSEEK_KEY = _env("DEEPSEEK_API_KEY", "")
+DEEPSEEK_API_KEY = _DEEPSEEK_KEY
+DEEPSEEK_MODEL = _env("DEEPSEEK_MODEL", "deepseek-chat")
+
+# ── Anthropic API (Claude) ──
+# ใช้ Anthropic Messages API โดยตรง (native protocol)
+# ⚠️ ต้องตั้งค่า JUDECODE_ANTHROPIC_API_KEY environment variable
+ANTHROPIC_API_KEY = _env("ANTHROPIC_API_KEY", "")
+ANTHROPIC_MODEL = _env("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+
+# ── Active provider config (used by the app) ──
+if PROVIDER == "anthropic":
+    _ACTIVE_KEY = ANTHROPIC_API_KEY
+    _ACTIVE_MODEL = ANTHROPIC_MODEL
+else:
+    _ACTIVE_KEY = DEEPSEEK_API_KEY
+    _ACTIVE_MODEL = DEEPSEEK_MODEL
+
+if not _ACTIVE_KEY:
     import warnings
     warnings.warn(
-        "⚠️  JUDECODE_DEEPSEEK_API_KEY ไม่ได้ตั้งค่า กรุณาตั้ง environment variable ก่อนใช้งาน\n"
-        "   export JUDECODE_DEEPSEEK_API_KEY='sk-your-key-here'",
+        f"⚠️  JUDECODE_{PROVIDER.upper()}_API_KEY ไม่ได้ตั้งค่า "
+        f"กรุณาตั้ง environment variable ก่อนใช้งาน\n"
+        f"   export JUDECODE_{PROVIDER.upper()}_API_KEY='your-key-here'",
         RuntimeWarning,
         stacklevel=2,
     )
-DEEPSEEK_API_KEY = _DEFAULT_KEY
-DEEPSEEK_MODEL = _env("DEEPSEEK_MODEL", "deepseek-chat")
 
 # ── Vision API (Screenshot Analysis) ──
 # รองรับทั้ง Ollama (local) และ Cloud API เช่น DashScope/Qwen, OpenAI Vision
@@ -69,9 +101,15 @@ VISION_API_KEY = _env("VISION_API_KEY", "ollama")
 VISION_MODEL = _env("VISION_MODEL", "llava")
 
 # ── Shared API Config (for backward compatibility) ──
-BASE_URL = DEEPSEEK_BASE_URL
-API_KEY = DEEPSEEK_API_KEY
-MODEL = DEEPSEEK_MODEL
+# These reflect the active provider's settings
+if PROVIDER == "anthropic":
+    BASE_URL = "https://api.anthropic.com/v1"
+    API_KEY = ANTHROPIC_API_KEY
+    MODEL = ANTHROPIC_MODEL
+else:
+    BASE_URL = DEEPSEEK_BASE_URL
+    API_KEY = DEEPSEEK_API_KEY
+    MODEL = DEEPSEEK_MODEL
 # deepseek-v4-flash output limit ~8K tokens
 MAX_TOKENS = _env_int("MAX_TOKENS", 8192)
 TEMPERATURE = float(_env("TEMPERATURE", "0.7"))

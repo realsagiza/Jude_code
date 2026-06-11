@@ -120,15 +120,18 @@ def detect_token_limit_truncation(last_content: str, finish_reason: str = "") ->
 
 
 def detect_tool_error(tool_result: str) -> bool:
-    """Check if a tool result indicates an error."""
+    """Check if a tool result indicates a GENUINE error.
+
+    IMPORTANT: We only treat a result as an error when it *starts* with the
+    dispatcher's error prefix ("Error executing tool ..."). Substring matching
+    is intentionally avoided here because normal tool output (e.g. `read`/`grep`
+    returning source code, or a shell command printing the word "timeout") can
+    legitimately contain these keywords without being an actual failure.
+    """
     if not tool_result:
         return False
-    lower = tool_result.lower()
-    # Check for known error patterns
-    for indicator in TOOL_ERROR_INDICATORS:
-        if indicator in lower:
-            return True
-    return False
+    stripped = tool_result.lstrip().lower()
+    return stripped.startswith("error executing tool")
 
 
 def detect_incomplete_work(

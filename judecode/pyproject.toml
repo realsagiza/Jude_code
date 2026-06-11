@@ -36,7 +36,16 @@ dependencies = [
 
 [project.optional-dependencies]
 browser = ["playwright>=1.50.0"]
-full = ["playwright>=1.50.0", "pyppeteer>=0.0.25"]
+docs = ["openpyxl>=3.1.0", "xlsxwriter>=3.1.0", "pdfplumber>=0.10.0", "PyMuPDF>=1.23.0"]
+dev = ["pytest>=8.0.0", "pytest-asyncio>=0.23.0"]
+full = [
+    "playwright>=1.50.0",
+    "pyppeteer>=0.0.25",
+    "openpyxl>=3.1.0",
+    "xlsxwriter>=3.1.0",
+    "pdfplumber>=0.10.0",
+    "PyMuPDF>=1.23.0",
+]
 
 [project.scripts]
 judecode = "judecode.ui.terminal:main_cli"
@@ -44,3 +53,8 @@ judecode = "judecode.ui.terminal:main_cli"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["judecode*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"

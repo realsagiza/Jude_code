@@ -24,9 +24,9 @@ from rich.rule import Rule
 from rich.box import DOUBLE_EDGE, HEAVY_EDGE
 
 from judecode.config import (
-    SYSTEM_PROMPT, MODEL, BASE_URL, MAX_CONTINUATIONS,
+    SYSTEM_PROMPT, MODEL, BASE_URL, MAX_CONTINUATIONS, PROVIDER,
 )
-from judecode.api.client import ApiClient
+from judecode.api import create_api_client
 from judecode.agent.engine import AgentEngine
 from judecode.ui.console import console
 
@@ -84,6 +84,8 @@ def print_greeting() -> None:
 
     # Info panel
     info = Text()
+    info.append(f"Provider: ", style="dim")
+    info.append(f"{PROVIDER.upper()}\n", style="bold green")
     info.append(f"Model: ", style="dim")
     info.append(f"{MODEL}\n", style="bold cyan")
     info.append(f"API: ", style="dim")
@@ -176,7 +178,7 @@ async def run_agent_interactive() -> None:
     except Exception:
         pass  # stdin might not be reconfigureable in some environments
 
-    api_client = ApiClient()
+    api_client = create_api_client()
     agent = AgentEngine(SYSTEM_PROMPT, api_client)
 
     # ── Interrupt/Pause signal handling ──
@@ -273,6 +275,7 @@ The agent can use tools like shell, read, write, edit, grep, web_search, etc.
                 continue
 
             if user_input.lower() == "/model":
+                console.print(f"  [dim]Provider: {PROVIDER.upper()}[/dim]", style="bold green")
                 console.print(f"  [dim]Model: {MODEL}[/dim]", style="cyan")
                 console.print(f"  [dim]API: {BASE_URL}[/dim]\n", style="dim")
                 continue

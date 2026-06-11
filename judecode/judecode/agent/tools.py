@@ -3,6 +3,12 @@
 import json
 from typing import Any
 
+# ── Sentinel prefix for genuine tool execution errors ──
+# Used so the continuation system can distinguish a REAL tool failure from
+# normal tool output that merely *contains* the words "error executing tool"
+# (e.g. when `read`/`grep` returns source code that includes that phrase).
+TOOL_ERROR_PREFIX = "Error executing tool"
+
 from judecode.utils.file_ops import read_file, write_file, edit_file, delete_file, list_directory
 from judecode.utils.shell import execute_shell
 from judecode.utils.search_tools import glob_search, grep_search

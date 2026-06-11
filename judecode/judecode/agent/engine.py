@@ -10,10 +10,8 @@ from judecode.api.client import ApiClient
 from judecode.agent.tools import TOOL_DEFINITIONS, execute_tool
 from judecode.agent.continuation import (
     ContinuationTracker,
-    detect_stream_interruption,
     detect_incomplete_work,
     detect_completion,
-    detect_token_limit_truncation,
     generate_continuation_nudge,
 )
 from judecode.config import (
@@ -512,10 +510,15 @@ class AgentEngine:
             not self._is_nudge_message(full_content)
             and self.continuation.can_continue()
         ):
+            # ── Detect GENUINE tool errors only ──
+            # A real tool failure is returned by the dispatcher as a string that
+            # *starts* with the error prefix. We must NOT use substring matching
+            # here, otherwise normal tool output that merely contains the phrase
+            # (e.g. `read`/`grep` returning source code with "Error executing
+            # tool" in it) would trigger a false-positive continuation nudge.
             has_tool_error = any(
-                detect_stream_interruption(r) for r in tool_results
-            ) or any(
-                "error executing tool" in r.lower() for r in tool_results
+                r.lstrip().lower().startswith("error executing tool")
+                for r in tool_results
             )
             work_incomplete = detect_incomplete_work(full_content, tool_results)
 
