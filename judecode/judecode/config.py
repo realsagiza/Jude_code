@@ -114,6 +114,15 @@ else:
 MAX_TOKENS = _env_int("MAX_TOKENS", 8192)
 TEMPERATURE = float(_env("TEMPERATURE", "0.7"))
 
+# ── Telegram Bot ──
+# ตั้งค่าเพื่อให้ Jude Code รับข้อความและตอบกลับผ่าน Telegram
+# 1. สร้าง bot กับ @BotFather แล้วเอา token มาใส่
+# 2. เอา Telegram User ID ของคุณใส่ใน TELEGRAM_ALLOWED_USERS (คั่นด้วย ,)
+# ดู user_id ได้จาก @userinfobot
+TELEGRAM_BOT_TOKEN = _env("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_ALLOWED_USERS = _env("TELEGRAM_ALLOWED_USERS", "")
+TELEGRAM_MAX_MESSAGE_LENGTH = _env_int("TELEGRAM_MAX_MESSAGE_LENGTH", 4000)
+
 # ── Knowledge Vault ──
 VAULT_PATH = _env("VAULT", os.path.expanduser("~/.judecode/vault"))
 

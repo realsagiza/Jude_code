@@ -37,6 +37,7 @@ dependencies = [
 [project.optional-dependencies]
 browser = ["playwright>=1.50.0"]
 docs = ["openpyxl>=3.1.0", "xlsxwriter>=3.1.0", "pdfplumber>=0.10.0", "PyMuPDF>=1.23.0"]
+telegram = ["python-telegram-bot>=20.0"]
 dev = ["pytest>=8.0.0", "pytest-asyncio>=0.23.0"]
 full = [
     "playwright>=1.50.0",
@@ -45,6 +46,7 @@ full = [
     "xlsxwriter>=3.1.0",
     "pdfplumber>=0.10.0",
     "PyMuPDF>=1.23.0",
+    "python-telegram-bot>=20.0",
 ]
 
 [project.scripts]
