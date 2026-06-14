@@ -340,11 +340,12 @@ The agent can use tools like shell, read, write, edit, grep, web_search, etc.
 def main_cli() -> None:
     """Entry point for `judecode` command.
 
-    Default: Textual TUI with fixed split layout (AI output top + input bottom).
-    Use --legacy for old single-thread mode.
-    Use --simple for async mode without TUI.
+    v2.1 — Default: async mode.
     """
     import sys
+
+    # DEBUG: uncomment to verify version
+    # print("DEBUG: terminal.py v2.1 async-default", file=sys.stderr)
 
     if len(sys.argv) > 1:
         arg = sys.argv[1]
