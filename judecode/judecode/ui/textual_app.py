@@ -141,46 +141,34 @@ class JudeCodeTUI(App):
     CSS = """
     Screen {
         layout: vertical;
-        background: $surface;
     }
 
     #output-container {
         height: 1fr;
-        border-bottom: solid $primary;
+        border-bottom: solid white;
     }
 
     #output {
         height: 100%;
         border: none;
         padding: 0 1;
-        background: $surface;
     }
 
     #bottom-area {
         height: auto;
-        background: $panel;
-        border-top: solid $primary;
+        border-top: solid white;
     }
 
     #status-bar {
         height: 1;
         padding: 0 1;
-        background: $primary-darken-2;
-        color: $text;
-        text-style: bold;
+        color: white;
     }
 
     #input {
         border: none;
         padding: 0 1;
-        background: $panel;
         height: auto;
-    }
-
-    Header {
-        dock: top;
-        background: $primary-darken-2;
-        color: $text;
     }
     """
 
