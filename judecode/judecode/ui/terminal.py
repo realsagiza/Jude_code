@@ -340,14 +340,12 @@ The agent can use tools like shell, read, write, edit, grep, web_search, etc.
 def main_cli() -> None:
     """Entry point for `judecode` command.
 
-    Uses the async concurrent terminal by default (input/output on
-    separate threads so you can type while AI works).
-
-    Use --legacy for the old single-thread mode.
+    Default: Textual TUI with fixed split layout (AI output top + input bottom).
+    Use --legacy for old single-thread mode.
+    Use --simple for async mode without TUI.
     """
     import sys
 
-    # Handle --version and --help flags
     if len(sys.argv) > 1:
         arg = sys.argv[1]
         if arg in ("--version", "-v"):
@@ -363,17 +361,25 @@ def main_cli() -> None:
             print("  --version, -v   Show version and exit")
             print("  --help, -h      Show this help message and exit")
             print("  --legacy        Use legacy single-thread mode")
+            print("  --simple        Use async mode without Textual TUI")
             print()
-            print("Without arguments, starts the interactive chat session")
-            print("with concurrent input/output (Type while AI works!)")
+            print("Default: Textual TUI with fixed split layout")
             return
         if arg == "--legacy":
             asyncio.run(run_agent_interactive())
             return
+        if arg == "--simple":
+            from judecode.ui.async_terminal import main_cli as async_main
+            async_main()
+            return
 
-    # Default: use async concurrent terminal
-    from judecode.ui.async_terminal import main_cli as async_main
-    async_main()
+    # Default: try Textual TUI, fall back to simple async
+    try:
+        from judecode.ui.textual_app import main_cli as tui_main
+        tui_main()
+    except ImportError:
+        from judecode.ui.async_terminal import main_cli as async_main
+        async_main()
 
 
 if __name__ == "__main__":
