@@ -1,6 +1,6 @@
 """API Client for communicating with DeepSeek API (OpenAI-compatible).
 
-ใช้ DeepSeek API โดยตรง (ไม่ผ่าน Ollama)
+ใช้ Cloud AI API โดยตรง (DeepSeek, Z.AI, Anthropic)
 Endpoint: https://api.deepseek.com/chat/completions
 """
 

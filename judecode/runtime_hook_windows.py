@@ -56,7 +56,7 @@ def _load_config_ini():
                 if 'DeepSeekModel' in section:
                     os.environ['JUDECODE_DEEPSEEK_MODEL'] = section['DeepSeekModel']
 
-                # ── Ollama Vision ──
+                # ── Vision API ──
                 if 'VisionBaseURL' in section:
                     os.environ['JUDECODE_VISION_BASE_URL'] = section['VisionBaseURL']
                 if 'VisionModel' in section:

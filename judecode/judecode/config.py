@@ -64,7 +64,7 @@ def _env_int(key: str, default: int) -> int:
 PROVIDER = _env("PROVIDER", "deepseek").lower().strip()
 
 # ── DeepSeek API (OpenAI-compatible) ──
-# ใช้ DeepSeek API โดยตรง (ไม่ผ่าน Ollama)
+# ใช้ DeepSeek Cloud API โดยตรง
 # รองรับ deepseek-v4-flash (default, มี thinking mode) และ deepseek-v4-pro
 # ⚠️ ต้องตั้งค่า JUDECODE_DEEPSEEK_API_KEY environment variable
 DEEPSEEK_BASE_URL = _env("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
@@ -109,15 +109,25 @@ if not _ACTIVE_KEY:
     )
 
 # ── Vision API (Screenshot Analysis) ──
-# รองรับทั้ง Ollama (local) และ Cloud API เช่น DashScope/Qwen, OpenAI Vision
+# รองรับ Cloud API เช่น DashScope/Qwen, OpenAI Vision
 # DeepSeek Cloud API ยังไม่รองรับ vision/multimodal mode
-# ตั้งค่าผ่าน .env หรือ environment variables:
+# ⚠️ ต้องตั้งค่าผ่าน .env ทั้ง 3 ตัวแปร ไม่มี default fallback:
 #   JUDECODE_VISION_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
 #   JUDECODE_VISION_API_KEY=sk-your-key-here
-#   JUDECODE_VISION_MODEL=qwen3.6-flash-2026-04-16
-VISION_BASE_URL = _env("VISION_BASE_URL", "http://127.0.0.1:11434/v1")
-VISION_API_KEY = _env("VISION_API_KEY", "ollama")
-VISION_MODEL = _env("VISION_MODEL", "llava")
+#   JUDECODE_VISION_MODEL=qwen-vl-max
+#
+# Example with DashScope (Alibaba Cloud Qwen):
+#   JUDECODE_VISION_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+#   JUDECODE_VISION_API_KEY=sk-your-dashscope-key-here
+#   JUDECODE_VISION_MODEL=qwen-vl-max
+#
+# Example with OpenAI:
+#   JUDECODE_VISION_BASE_URL=https://api.openai.com/v1
+#   JUDECODE_VISION_API_KEY=sk-your-openai-key-here
+#   JUDECODE_VISION_MODEL=gpt-4o-mini
+VISION_BASE_URL = _env("VISION_BASE_URL", "")
+VISION_API_KEY = _env("VISION_API_KEY", "")
+VISION_MODEL = _env("VISION_MODEL", "")
 
 # ── Shared API Config (for backward compatibility) ──
 # These reflect the active provider's settings

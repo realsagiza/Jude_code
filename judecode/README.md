@@ -4,7 +4,7 @@ Your AI coding assistant that runs in the terminal — inspired by Claude Code b
 
 ## Overview
 
-Jude Code is a terminal-based CLI application that provides an agentic coding experience. It connects to an Ollama-compatible LLM API and provides tools like shell execution, file operations, web search, and more.
+Jude Code is a terminal-based CLI application that provides an agentic coding experience. It connects to a Cloud AI API (DeepSeek, Anthropic, or Z.AI/GLM) and provides tools like shell execution, file operations, web search, and more.
 
 ## Installation
 
@@ -82,15 +82,15 @@ While in the CLI:
 
 ## Configuration
 
-Jude Code connects to the Ollama-compatible API at:
+Jude Code connects to a Cloud AI API (DeepSeek, Anthropic, or Z.AI/GLM):
 
 ```python
-BASE_URL = "https://toolsai.klangfrozen.com/v1"
-MODEL = "kimi-k2.6:cloud"
-API_KEY = "ollama"
+BASE_URL = "https://api.deepseek.com"
+MODEL = "deepseek-chat"
+API_KEY = "your-api-key-here"
 ```
 
-These values are configured in `judecode/config.py`.
+These values are configured in `judecode/config.py` and `.env`.
 
 ## Project Structure
 
@@ -122,8 +122,8 @@ pyproject.toml
 
 ## API Behavior
 
-The API client uses Ollama-style tool calls (OpenAI compatible):
-- `model`: kimi-k2.6:cloud
+The API client uses OpenAI-compatible tool calls:
+- `model`: configured via .env (e.g., deepseek-chat, GLM-5.1)
 - `messages`: full conversation history (system + user + assistant + tool)
 - `tools`: function definitions for the agent
 - `stream`: enabled (SSE streaming)

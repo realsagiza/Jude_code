@@ -33,8 +33,7 @@ TIER 3 (FALLBACK - original behavior):
   - Only used when Tier 1 & 2 are not applicable
 
 Requires: pyautogui, pillow, playwright (optional, for browser accessibility)
-Vision requires: A vision-capable model via any OpenAI-compatible API.
-  - Local: Ollama with llava, bakllava, qwen2-vl, etc.
+Vision requires: A vision-capable model via any OpenAI-compatible Cloud API.
   - Cloud: DashScope (Qwen), OpenAI Vision, Anthropic, etc.
   Configure via .env:
     JUDECODE_VISION_BASE_URL=<your-api-url>/v1
@@ -765,11 +764,23 @@ def screenshot(
         result += f"🔍 Vision Analysis (using {vision_model}):\n{description}"
         return result
     except Exception as e:
+        error_msg = str(e)
+        # แยกกรณี: config ไม่ถูกตั้งค่า vs connection error
+        if "Vision API not configured" in error_msg:
+            help_msg = (
+                f"⚠️ Vision API not configured.\n"
+                f"   Set JUDECODE_VISION_BASE_URL, JUDECODE_VISION_API_KEY, and\n"
+                f"   JUDECODE_VISION_MODEL in your .env file."
+            )
+        else:
+            help_msg = (
+                f"⚠️ Vision analysis failed: {type(e).__name__}: {e}\n"
+                f"   Make sure the vision model '{vision_model}' is accessible."
+            )
         return (
             f"📸 Screenshot taken ({file_size / 1024:.1f} KB)\n"
             f"   Saved to: {img_path}\n\n"
-            f"⚠️ Vision analysis failed: {type(e).__name__}: {e}\n"
-            f"   Make sure the vision model '{vision_model}' is running.\n\n"
+            f"{help_msg}\n\n"
             f"💡 TIP: Try get_browser_accessibility_snapshot() instead -\n"
             f"   it's 10-50x faster and doesn't need a vision model!"
         )
@@ -781,6 +792,23 @@ def _analyze_screenshot_sync(image_path: str, model: str, task_description: Opti
     ⚡ The screenshot should already be resized to 800px max width
        by the screenshot() function before calling this.
     """
+    # Validate Vision API configuration
+    if not VISION_BASE_URL or not VISION_API_KEY or not VISION_MODEL:
+        missing = []
+        if not VISION_BASE_URL:
+            missing.append("JUDECODE_VISION_BASE_URL")
+        if not VISION_API_KEY:
+            missing.append("JUDECODE_VISION_API_KEY")
+        if not VISION_MODEL:
+            missing.append("JUDECODE_VISION_MODEL")
+        raise RuntimeError(
+            f"Vision API not configured. Missing: {', '.join(missing)}.\n"
+            f"Please set these in your .env file. Example:\n"
+            f"  JUDECODE_VISION_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1\n"
+            f"  JUDECODE_VISION_API_KEY=sk-your-key-here\n"
+            f"  JUDECODE_VISION_MODEL=qwen-vl-max"
+        )
+
     # Encode image to base64
     with open(image_path, "rb") as f:
         base64_image = base64.b64encode(f.read()).decode("utf-8")

@@ -8,7 +8,7 @@
 - `pip` เป็น package manager สำหรับ development ไม่ใช่ runtime dependency
 - `npm` / `node` เป็นของ JavaScript ecosystem — Jude Code เป็น Python app
 - PyInstaller รวม **Python interpreter + dependencies + โค้ด** ไว้ใน .exe ไฟล์เดียวอยู่แล้ว
-- Jude Code ใช้ **Ollama API** ซึ่งเป็น external service ไม่ได้ฝัง AI model ไว้ในตัว
+- Jude Code ใช้ **Cloud AI API** (DeepSeek, Anthropic, Z.AI) ซึ่งเป็น external service ไม่ได้ฝัง AI model ไว้ในตัว
 
 ---
 
@@ -58,7 +58,6 @@ installer นี้จะ:
 - ติดตั้ง judecode.exe ลงใน Program Files
 - เพิ่มใน Start Menu
 - สามารถเพิ่มใน PATH (รัน `judecode` จาก terminal ไหนก็ได้)
-- มีตัวเลือกให้ติดตั้ง Ollama อัตโนมัติ (ต้องดาวน์โหลด OllamaSetup.exe มาใส่ไว้)
 
 ---
 
@@ -86,16 +85,15 @@ docker run --rm -v $(pwd):/src -w /src cdrx/pyinstaller-windows:latest \
    ```batch
    judecode.exe
    ```
-3. Jude Code จะเชื่อมต่อไปยัง **Ollama** ที่ `http://127.0.0.1:11434`
-   - ต้องติดตั้ง Ollama ก่อน: https://ollama.com/
-   - และมี model ที่ใช้ เช่น `deepseek-v4-flash:cloud`
+3. Jude Code จะเชื่อมต่อไปยัง **Cloud AI API** (DeepSeek, Anthropic, หรือ Z.AI/GLM)
+   - ต้องตั้งค่า API Key ใน .env ก่อนใช้งาน
 
 ### การตั้งค่า:
 สร้างไฟล์ `config.ini` ข้างๆ judecode.exe:
 ```ini
 [JudeCode]
-BaseURL=http://127.0.0.1:11434
-Model=deepseek-v4-flash:cloud
+BaseURL=https://api.deepseek.com
+Model=deepseek-chat
 ```
 
 หรือใช้ environment variables:

@@ -1,7 +1,7 @@
 ;============================================================
 ;  Jude Code - Windows Installer (Inno Setup)
 ;  Creates a proper setup.exe that can optionally install
-;  Python + Ollama for a complete experience
+;  Python for a complete experience
 ;============================================================
 
 #define MyAppName "Jude Code"
@@ -40,16 +40,11 @@ Name: "thai"; MessagesFile: "compiler:Languages\Thai.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "addtopath"; Description: "Add Jude Code to system PATH"; GroupDescription: "System Configuration"; Flags: checkedonce
-Name: "installollama"; Description: "Install Ollama (required for AI models)"; GroupDescription: "AI Engine"; Flags: unchecked
 Name: "installpython"; Description: "Install Python 3.12 (if not already installed)"; GroupDescription: "Dependencies"; Flags: unchecked
 
 [Files]
 ; ── Main executable (built with PyInstaller) ──
 Source: "dist\judecode.exe"; DestDir: "{app}"; Flags: ignoreversion
-
-; ── Optional: Ollama installer ──
-; Download from: https://ollama.com/download/OllamaSetup.exe
-; Source: "redist\OllamaSetup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Tasks: installollama
 
 ; ── Optional: Embedded Python (if you want to bundle it) ──
 ; Source: "redist\python-3.12.0-embed-amd64.zip"; DestDir: "{tmp}"; Tasks: installpython
@@ -64,9 +59,6 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 ; ── Run after install ──
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 
-; ── Install Ollama if selected ──
-; Filename: "{tmp}\OllamaSetup.exe"; StatusMsg: "Installing Ollama..."; Tasks: installollama; Flags: skipifdoesntexist
-
 ; ── Add to PATH ──
 Filename: "setx"; Parameters: "PATH ""{app};%PATH%"""; StatusMsg: "Adding Jude Code to PATH..."; Tasks: addtopath; Flags: runhidden
 
@@ -77,7 +69,6 @@ Root: HKCU; Subkey: "Software\JudeCode"; ValueType: string; ValueName: "InstallP
 { ── Custom wizard page for AI model configuration ── }
 var
   ModelPage: TInputQueryWizardPage;
-  OllamaPage: TInputOptionWizardPage;
 
 procedure InitializeWizard;
 begin
@@ -86,12 +77,12 @@ begin
     wpSelectTasks,
     'AI Model Configuration',
     'Configure which AI model Jude Code will use',
-    'Leave defaults if you plan to use Ollama with default models.'
+    'Leave defaults if you plan to use DeepSeek API.'
   );
-  ModelPage.Add('Ollama API URL (default: http://127.0.0.1:11434):', False);
-  ModelPage.Add('Model name (default: deepseek-v4-flash:cloud):', False);
-  ModelPage.Values[0] := 'http://127.0.0.1:11434';
-  ModelPage.Values[1] := 'deepseek-v4-flash:cloud';
+  ModelPage.Add('API Base URL (default: https://api.deepseek.com):', False);
+  ModelPage.Add('Model name (default: deepseek-chat):', False);
+  ModelPage.Values[0] := 'https://api.deepseek.com';
+  ModelPage.Values[1] := 'deepseek-chat';
 end;
 
 function GetModelUrl: string;
