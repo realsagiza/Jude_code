@@ -56,6 +56,96 @@ class AgentEngine:
         # ── Turn counter (shared between chat() and continue_task()) ──
         self._turn_count = 0
 
+    # ── Context Management (Token Optimization) ──
+
+    # Maximum chars for a tool result stored in message history.
+    # Old tool results are truncated to save context tokens on every API call.
+    # The model has already processed the full result when it first arrived.
+    _MAX_TOOL_RESULT_IN_HISTORY = 4000
+
+    # Number of recent tool results to keep in full (not truncated)
+    _KEEP_FULL_RECENT_RESULTS = 3
+
+    # Maximum nudge messages to keep in history
+    _MAX_NUDGE_MESSAGES = 2
+
+    def _prune_context(self) -> None:
+        """Prune conversation history to reduce token usage without losing key context.
+
+        Optimizations applied:
+        1. Truncate old tool results (keep recent ones in full)
+        2. Remove old nudge messages (keep last 2)
+        3. Remove reasoning_content from old assistant messages
+        4. Replace old verbose tool results with short summaries
+
+        This is called before each API call to keep context lean.
+        """
+        messages = self.messages
+        if len(messages) <= 4:  # system + user + at least 1 exchange
+            return
+
+        # ── 1. Count recent tool results (from the end) to keep in full ──
+        recent_tool_ids = set()
+        tool_count = 0
+        for msg in reversed(messages):
+            if msg.get("role") == "tool":
+                tool_count += 1
+                if tool_count <= self._KEEP_FULL_RECENT_RESULTS:
+                    recent_tool_ids.add(msg.get("tool_call_id", ""))
+                else:
+                    break
+
+        # ── 2. Track nudge messages and keep only the last N ──
+        nudge_indices = []
+        for i, msg in enumerate(messages):
+            if msg.get("role") == "user" and self._is_nudge_message(msg.get("content", "")):
+                nudge_indices.append(i)
+
+        # Remove old nudges (keep last _MAX_NUDGE_MESSAGES)
+        indices_to_remove = set()
+        if len(nudge_indices) > self._MAX_NUDGE_MESSAGES:
+            for idx in nudge_indices[: -self._MAX_NUDGE_MESSAGES]:
+                indices_to_remove.add(idx)
+
+        # ── 3. Process messages ──
+        new_messages = []
+        for i, msg in enumerate(messages):
+            # Skip old nudge messages
+            if i in indices_to_remove:
+                continue
+
+            # Truncate old tool results
+            if msg.get("role") == "tool":
+                tool_id = msg.get("tool_call_id", "")
+                content = msg.get("content", "")
+                if (
+                    tool_id not in recent_tool_ids
+                    and len(content) > self._MAX_TOOL_RESULT_IN_HISTORY
+                ):
+                    head = content[: self._MAX_TOOL_RESULT_IN_HISTORY // 3]
+                    tail_len = self._MAX_TOOL_RESULT_IN_HISTORY // 2
+                    tail = content[-tail_len:]
+                    truncated = (
+                        f"{head}\n\n"
+                        f"... [{len(content):,} chars total, "
+                        f"truncated to save context] ...\n\n"
+                        f"{tail}"
+                    )
+                    msg = {**msg, "content": truncated}
+
+            # Remove reasoning from old assistant messages (keep last 2)
+            if msg.get("role") == "assistant" and "reasoning_content" in msg:
+                # Check if this is one of the last 2 assistant messages
+                assistant_count_after = sum(
+                    1 for m in messages[i:] if m.get("role") == "assistant"
+                )
+                if assistant_count_after > 2:
+                    msg = {k: v for k, v in msg.items() if k != "reasoning_content"}
+
+            new_messages.append(msg)
+
+        self.messages = new_messages
+
     def _show_thinking(self, turn: int) -> None:
         """Show a thinking indicator before each model response turn."""
         if turn == 1:
@@ -210,6 +300,10 @@ class AgentEngine:
 
         # Show thinking indicator
         self._show_thinking(turn_number)
+
+        # ── Prune context before API call to save tokens ──
+        # Truncates old tool results, removes old nudges, prunes old reasoning
+        self._prune_context()
 
         # Track whether the stream was aborted mid-flight by Ctrl+C
         stream_aborted = False

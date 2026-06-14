@@ -253,6 +253,7 @@ async def run_agent_interactive() -> None:
   [bold]/help[/bold]      - Show this help
   [bold]/quit[/bold]      - Exit Jude Code
   [bold]/clear[/bold]     - Clear the conversation history
+  [bold]/compact[/bold]  - Compact conversation (summarize old messages to save tokens)
   [bold]/model[/bold]     - Show current model info
   [bold]/continue[/bold]  - Manually trigger continuation (nudge agent to continue)
   [bold]/stop[/bold]      - Pause the agent after current action (same as Ctrl+C)
@@ -272,6 +273,55 @@ The agent can use tools like shell, read, write, edit, grep, web_search, etc.
                 agent.reset_stop()
                 agent._turn_count = 0
                 console.print("  [dim]Conversation cleared[/dim]\n", style="cyan")
+                continue
+
+            if user_input.lower() == "/compact":
+                # Compact conversation: keep system + last few exchanges,
+                # summarize the rest into a single context message
+                if len(agent.messages) <= 6:
+                    console.print("  [dim]Conversation is short, no need to compact.[/dim]\n", style="cyan")
+                    continue
+
+                # Build summary of old messages
+                old_msgs = agent.messages[1:-4]  # skip system, keep last 4
+                summary_parts = []
+                for msg in old_msgs:
+                    role = msg.get("role", "")
+                    content = msg.get("content", "")
+                    if not content:
+                        continue
+                    if role == "user":
+                        # Keep nudge messages short
+                        if content.strip().startswith("[SYSTEM:"):
+                            continue
+                        summary_parts.append(f"User asked: {content[:200]}")
+                    elif role == "assistant":
+                        summary_parts.append(f"Assistant did: {content[:200]}")
+                    elif role == "tool":
+                        summary_parts.append(f"Tool result: {content[:100]}...")
+
+                if summary_parts:
+                    summary = "Previous conversation summary:\n" + "\n".join(
+                        f"- {p}" for p in summary_parts[-15:]  # Keep last 15 items max
+                    )
+                    # Rebuild messages: system + summary + last 4
+                    last_4 = agent.messages[-4:]
+                    agent.messages = [
+                        agent.messages[0],  # system prompt
+                        {"role": "user", "content": "[CONTEXT SUMMARY] " + summary},
+                        {"role": "assistant", "content": "Understood, I have the context summary. Ready to continue."},
+                        *last_4,
+                    ]
+                else:
+                    # Just keep system + last 4
+                    agent.messages = [agent.messages[0]] + agent.messages[-4:]
+
+                agent._turn_count = 0
+                console.print(
+                    f"  [dim]Conversation compacted "
+                    f"({len(old_msgs)} old messages → summary)[/dim]\n",
+                    style="cyan",
+                )
                 continue
 
             if user_input.lower() == "/model":

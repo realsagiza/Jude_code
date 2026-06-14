@@ -95,11 +95,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "shell",
-            "description": "Execute a shell command in the terminal. Use this to run commands, install packages, check git status, etc.",
+            "description": "Execute a shell command.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "command": {"type": "string", "description": "The shell command to execute"}
+                    "command": {"type": "string", "description": "Shell command"}
                 },
                 "required": ["command"]
             }
@@ -109,13 +109,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "read",
-            "description": "Read the contents of a file. ⚠️ CRITICAL: For files >200 lines, ALWAYS use offset+limit to read in chunks (max 200-300 lines per read). Use `wc -l <file>` first to check size. NEVER read huge files in one shot — it will crash the context window.",
+            "description": "Read file. For >200 lines, use offset+limit. Check size with `wc -l` first.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "The file path to read"},
-                    "offset": {"type": "integer", "description": "Line number to start from (1-indexed, default 1). REQUIRED for files >200 lines."},
-                    "limit": {"type": "integer", "description": "Maximum number of lines to read. ALWAYS set to 100-300 for large files. REQUIRED for files >200 lines."}
+                    "path": {"type": "string", "description": "File path to read"},
+                    "offset": {"type": "integer", "description": "Start line (1-indexed). Required if >200 lines."},
+                    "limit": {"type": "integer", "description": "Max lines. Set 100-300 for large files. Required if >200 lines."}
                 },
                 "required": ["path"]
             }
@@ -129,8 +129,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "The file path to write to"},
-                    "content": {"type": "string", "description": "The content to write"}
+                    "path": {"type": "string", "description": "File path"},
+                    "content": {"type": "string", "description": "Content to write"}
                 },
                 "required": ["path", "content"]
             }
@@ -140,13 +140,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "edit",
-            "description": "Edit an existing file by replacing a specific string. The old_string must be unique in the file.",
+            "description": "Edit file by replacing a unique string.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "The file path to edit"},
-                    "old_string": {"type": "string", "description": "The exact text to replace (must be unique)"},
-                    "new_string": {"type": "string", "description": "The replacement text"}
+                    "path": {"type": "string", "description": "File path"},
+                    "old_string": {"type": "string", "description": "Text to replace (must be unique)"},
+                    "new_string": {"type": "string", "description": "Replacement text"}
                 },
                 "required": ["path", "old_string", "new_string"]
             }
@@ -160,7 +160,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "The file path to delete"}
+                    "path": {"type": "string", "description": "File path"}
                 },
                 "required": ["path"]
             }
@@ -174,8 +174,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "pattern": {"type": "string", "description": "Glob pattern to search for. Use **/* for recursive search."},
-                    "root": {"type": "string", "description": "Root directory to search in (default: current directory)"}
+                    "pattern": {"type": "string", "description": "Glob pattern (**/* for recursive)"},
+                    "root": {"type": "string", "description": "Root dir (default: .)"}
                 },
                 "required": ["pattern"]
             }
@@ -185,13 +185,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "grep",
-            "description": "Search file contents using regex (uses ripgrep if available, falls back to Python regex)",
+            "description": "Search file contents by regex (ripgrep or Python fallback)",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "pattern": {"type": "string", "description": "Regex pattern to search for"},
-                    "path": {"type": "string", "description": "File or directory to search in (default: current directory)"},
-                    "glob": {"type": "string", "description": "Glob filter for file names"}
+                    "pattern": {"type": "string", "description": "Regex pattern"},
+                    "path": {"type": "string", "description": "Search path (default: .)"},
+                    "glob": {"type": "string", "description": "Glob filter for filenames"}
                 },
                 "required": ["pattern"]
             }
@@ -205,7 +205,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string", "description": "The URL to fetch"}
+                    "url": {"type": "string", "description": "URL"}
                 },
                 "required": ["url"]
             }
@@ -219,8 +219,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "The search query"},
-                    "num_results": {"type": "integer", "description": "Number of results to return (default: 5)"}
+                    "query": {"type": "string", "description": "Search query"},
+                    "num_results": {"type": "integer", "description": "Num results (default: 5)"}
                 },
                 "required": ["query"]
             }
@@ -230,11 +230,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "think",
-            "description": "Use this tool to think through a complex problem step by step. This does not execute any action, just helps you reason.",
+            "description": "Think through a problem step by step. No action executed.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "thought": {"type": "string", "description": "Your step-by-step reasoning"}
+                    "thought": {"type": "string", "description": "Step-by-step reasoning"}
                 },
                 "required": ["thought"]
             }
@@ -248,7 +248,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Directory path (default: current directory)"}
+                    "path": {"type": "string", "description": "Dir path (default: .)"}
                 }
             }
         }
@@ -257,14 +257,14 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "vault_create_note",
-            "description": "Create a new note in the knowledge vault (Obsidian-style). Use this to store important information, summaries, decisions, or documentation for future reference.",
+            "description": "Create vault note (Obsidian-style).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "The title of the note (used as filename)"},
-                    "content": {"type": "string", "description": "The markdown content of the note"},
-                    "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional list of tags (without #)"},
-                    "links": {"type": "array", "items": {"type": "string"}, "description": "Optional list of linked note titles"}
+                    "title": {"type": "string", "description": "Note title (filename)"},
+                    "content": {"type": "string", "description": "Markdown content"},
+                    "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags (without #)"},
+                    "links": {"type": "array", "items": {"type": "string"}, "description": "Linked note titles"}
                 },
                 "required": ["title", "content"]
             }
@@ -278,7 +278,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "The title of the note to read"}
+                    "title": {"type": "string", "description": "Note title"}
                 },
                 "required": ["title"]
             }
@@ -288,12 +288,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "vault_update_note",
-            "description": "Overwrite a note's content (keeping frontmatter). Use this to update existing notes.",
+            "description": "Overwrite note content (keeps frontmatter).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "The title of the note to update"},
-                    "content": {"type": "string", "description": "The new markdown content"}
+                    "title": {"type": "string", "description": "Note title"},
+                    "content": {"type": "string", "description": "New markdown content"}
                 },
                 "required": ["title", "content"]
             }
@@ -307,8 +307,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "The title of the note"},
-                    "content": {"type": "string", "description": "The content to append"}
+                    "title": {"type": "string", "description": "Note title"},
+                    "content": {"type": "string", "description": "Content to append"}
                 },
                 "required": ["title", "content"]
             }
@@ -322,7 +322,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "The title of the note to delete"}
+                    "title": {"type": "string", "description": "Note title"}
                 },
                 "required": ["title"]
             }
@@ -343,11 +343,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "vault_search",
-            "description": "Search notes in the vault by title, content, or tag. Returns ranked results with snippets.",
+            "description": "Search vault notes by title/content/tag. Returns ranked snippets.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "The search query"}
+                    "query": {"type": "string", "description": "Search query"}
                 },
                 "required": ["query"]
             }
@@ -368,7 +368,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "vault_knowledge_graph",
-            "description": "Build a knowledge graph of all notes, their links, and tags. Shows how notes are connected.",
+            "description": "Build knowledge graph of notes, links, and tags.",
             "parameters": {
                 "type": "object",
                 "properties": {}
@@ -397,7 +397,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "The title of the note"}
+                    "title": {"type": "string", "description": "Note title"}
                 },
                 "required": ["title"]
             }
@@ -411,7 +411,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "tag": {"type": "string", "description": "The tag to search for (without #)"}
+                    "tag": {"type": "string", "description": "Tag (without #)"}
                 },
                 "required": ["tag"]
             }
@@ -423,12 +423,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "read_pdf",
-            "description": "Read and extract text content from a PDF file. Supports both text-based PDFs and can extract tables. ⚠️ For large PDFs, use 'pages' parameter to read specific pages only (e.g., '1-5'). Use pdf_info first to check page count.",
+            "description": "Read PDF text/tables. Use 'pages' for large PDFs, pdf_info first.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "pdf_path": {"type": "string", "description": "Path to the PDF file"},
-                    "pages": {"type": "string", "description": "Page range, e.g. '1-3,5' (1-indexed). ALWAYS use this for PDFs >10 pages to avoid context overflow."}
+                    "pdf_path": {"type": "string", "description": "PDF path"},
+                    "pages": {"type": "string", "description": "Page range, e.g. '1-3,5'. Use for PDFs >10 pages."}
                 },
                 "required": ["pdf_path"]
             }
@@ -438,11 +438,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "pdf_info",
-            "description": "Get metadata and information about a PDF file (page count, size, author, etc.)",
+            "description": "Get PDF metadata (page count, size, author).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "pdf_path": {"type": "string", "description": "Path to the PDF file"}
+                    "pdf_path": {"type": "string", "description": "PDF path"}
                 },
                 "required": ["pdf_path"]
             }
@@ -454,14 +454,14 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "read_csv",
-            "description": "Read a CSV file and display as a formatted table. ⚠️ ALWAYS use max_rows (e.g., max_rows=50) for large CSV files to avoid context overflow.",
+            "description": "Read CSV as formatted table. Use max_rows for large files.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "csv_path": {"type": "string", "description": "Path to CSV file"},
+                    "csv_path": {"type": "string", "description": "CSV path"},
                     "delimiter": {"type": "string", "description": "Field delimiter (default: ','). Use '\\t' for tab-separated."},
-                    "has_header": {"type": "boolean", "description": "Whether the first row is a header (default: true)"},
-                    "max_rows": {"type": "integer", "description": "Maximum number of rows to read (ALWAYS set to 50-100 for large files)"}
+                    "has_header": {"type": "boolean", "description": "Has header (default: true)"},
+                    "max_rows": {"type": "integer", "description": "Max rows (50-100 for large files)"}
                 },
                 "required": ["csv_path"]
             }
@@ -471,13 +471,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "read_excel",
-            "description": "Read an Excel (.xlsx) file and display as a formatted table. ⚠️ ALWAYS use max_rows (e.g., max_rows=50) and sheet_name for large workbooks to avoid context overflow.",
+            "description": "Read Excel (.xlsx) as table. Set max_rows for large files.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "excel_path": {"type": "string", "description": "Path to .xlsx file"},
-                    "sheet_name": {"type": "string", "description": "Specific sheet to read (default: first sheet). Use list_excel_sheets first."},
-                    "max_rows": {"type": "integer", "description": "Maximum rows to read per sheet (ALWAYS set to 50-100 for large sheets)"}
+                    "excel_path": {"type": "string", "description": "Excel path"},
+                    "sheet_name": {"type": "string", "description": "Sheet name (default: first). Use list_excel_sheets first."},
+                    "max_rows": {"type": "integer", "description": "Max rows (50-100 for large sheets)"}
                 },
                 "required": ["excel_path"]
             }
@@ -487,13 +487,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "write_csv",
-            "description": "Write data to a CSV file. Provide data as text with rows separated by newlines and cells by commas.",
+            "description": "Write CSV. Data: rows by newlines, cells by commas.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "csv_path": {"type": "string", "description": "Path to write CSV file"},
-                    "data": {"type": "string", "description": "Data as text (rows separated by newlines, cells by commas)"},
-                    "delimiter": {"type": "string", "description": "Field delimiter (default: ',')"}
+                    "csv_path": {"type": "string", "description": "Output CSV path"},
+                    "data": {"type": "string", "description": "Data (rows by newlines, cells by commas)"},
+                    "delimiter": {"type": "string", "description": "Delimiter (default: ',')"}
                 },
                 "required": ["csv_path", "data"]
             }
@@ -503,13 +503,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "write_excel",
-            "description": "Write data to an Excel (.xlsx) file. Provide data as text with rows by newlines, cells by tabs or pipes.",
+            "description": "Write Excel (.xlsx). Data: rows by newlines, cells by tabs/pipes.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "excel_path": {"type": "string", "description": "Path to write .xlsx file"},
-                    "data": {"type": "string", "description": "Data as text (rows by newlines, cells by tabs or pipes)"},
-                    "sheet_name": {"type": "string", "description": "Name of the sheet (default: 'Sheet1')"}
+                    "excel_path": {"type": "string", "description": "Output Excel path"},
+                    "data": {"type": "string", "description": "Data (rows by newlines, cells by tabs/pipes)"},
+                    "sheet_name": {"type": "string", "description": "Sheet name (default: 'Sheet1')"}
                 },
                 "required": ["excel_path", "data"]
             }
@@ -523,7 +523,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "excel_path": {"type": "string", "description": "Path to .xlsx file"}
+                    "excel_path": {"type": "string", "description": "Excel path"}
                 },
                 "required": ["excel_path"]
             }
@@ -535,15 +535,15 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "batch_rename",
-            "description": "Rename multiple files matching a regex pattern. Use dry_run=True first to preview changes.",
+            "description": "Rename files by regex pattern. Use dry_run=True to preview.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "directory": {"type": "string", "description": "Directory to operate in"},
-                    "pattern": {"type": "string", "description": "Regex pattern to match in filenames (e.g. 'screenshot_(\\\\d+)' to match 'screenshot_01')"},
-                    "replacement": {"type": "string", "description": "Replacement string (use \\\\1, \\\\2 for captured groups)"},
-                    "dry_run": {"type": "boolean", "description": "If True, only preview what would be renamed (default: true)"},
-                    "recursive": {"type": "boolean", "description": "If True, search subdirectories (default: false)"}
+                    "directory": {"type": "string", "description": "Directory"},
+                    "pattern": {"type": "string", "description": "Regex pattern for filenames"},
+                    "replacement": {"type": "string", "description": "Replacement (use \\1, \\2 for groups)"},
+                    "dry_run": {"type": "boolean", "description": "Preview only (default: true)"},
+                    "recursive": {"type": "boolean", "description": "Recursive (default: false)"}
                 },
                 "required": ["directory", "pattern", "replacement"]
             }
@@ -557,11 +557,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "source_dir": {"type": "string", "description": "Source directory"},
-                    "dest_dir": {"type": "string", "description": "Destination directory"},
-                    "pattern": {"type": "string", "description": "Optional glob pattern to filter files (e.g. '*.pdf')"},
-                    "recursive": {"type": "boolean", "description": "If True, search subdirectories (default: false)"},
-                    "dry_run": {"type": "boolean", "description": "If True, only preview (default: true)"}
+                    "source_dir": {"type": "string", "description": "Source dir"},
+                    "dest_dir": {"type": "string", "description": "Dest dir"},
+                    "pattern": {"type": "string", "description": "Glob filter (e.g. '*.pdf')"},
+                    "recursive": {"type": "boolean", "description": "Recursive (default: false)"},
+                    "dry_run": {"type": "boolean", "description": "Preview only (default: true)"}
                 },
                 "required": ["source_dir", "dest_dir"]
             }
@@ -571,14 +571,14 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "batch_delete",
-            "description": "Delete multiple files matching a glob pattern. Use dry_run=True first to preview.",
+            "description": "Delete files by glob pattern. Use dry_run=True to preview.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "directory": {"type": "string", "description": "Directory to operate in"},
-                    "pattern": {"type": "string", "description": "Glob pattern (e.g. '*.tmp', '*.log')"},
-                    "dry_run": {"type": "boolean", "description": "If True, only preview what would be deleted (default: true)"},
-                    "recursive": {"type": "boolean", "description": "If True, search subdirectories (default: false)"}
+                    "directory": {"type": "string", "description": "Directory"},
+                    "pattern": {"type": "string", "description": "Glob pattern (e.g. '*.tmp')"},
+                    "dry_run": {"type": "boolean", "description": "Preview only (default: true)"},
+                    "recursive": {"type": "boolean", "description": "Recursive (default: false)"}
                 },
                 "required": ["directory", "pattern"]
             }
@@ -588,13 +588,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "organize_by_extension",
-            "description": "Organize files into folders by their file extension (e.g. .pdf -> PDF/ folder).",
+            "description": "Organize files into folders by extension.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "directory": {"type": "string", "description": "Directory to organize"},
-                    "dry_run": {"type": "boolean", "description": "If True, only preview (default: true)"},
-                    "recursive": {"type": "boolean", "description": "If True, also organize files in subdirectories (default: false)"}
+                    "directory": {"type": "string", "description": "Directory"},
+                    "dry_run": {"type": "boolean", "description": "Preview only (default: true)"},
+                    "recursive": {"type": "boolean", "description": "Recursive (default: false)"}
                 },
                 "required": ["directory"]
             }
@@ -608,8 +608,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "directory": {"type": "string", "description": "Directory to search"},
-                    "by_content": {"type": "boolean", "description": "If True, compare by MD5 hash (slower but accurate). If False, compare by filename+size (default: false)"}
+                    "directory": {"type": "string", "description": "Directory"},
+                    "by_content": {"type": "boolean", "description": "By content hash vs filename+size (default: false)"}
                 },
                 "required": ["directory"]
             }
@@ -619,13 +619,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "export_directory_tree",
-            "description": "Export the directory tree structure as formatted text. Useful for understanding project structure.",
+            "description": "Export directory tree as text.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "directory": {"type": "string", "description": "Directory to scan"},
-                    "max_depth": {"type": "integer", "description": "Maximum depth to traverse (default: 3)"},
-                    "show_size": {"type": "boolean", "description": "If True, show file sizes (default: false)"}
+                    "directory": {"type": "string", "description": "Directory"},
+                    "max_depth": {"type": "integer", "description": "Max depth (default: 3)"},
+                    "show_size": {"type": "boolean", "description": "Show sizes (default: false)"}
                 },
                 "required": ["directory"]
             }
@@ -650,7 +650,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "text": {"type": "string", "description": "Text to copy to clipboard"}
+                    "text": {"type": "string", "description": "Text"}
                 },
                 "required": ["text"]
             }
@@ -660,11 +660,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "wait_for",
-            "description": "Wait/pause for a specified number of seconds. Useful in multi-step workflows between operations.",
+            "description": "Wait N seconds. Useful between operations.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "seconds": {"type": "integer", "description": "Number of seconds to wait (default: 1)"}
+                    "seconds": {"type": "integer", "description": "Seconds (default: 1)"}
                 }
             }
         }
@@ -677,11 +677,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "directory": {"type": "string", "description": "Directory containing files to merge"},
-                    "output_file": {"type": "string", "description": "Output file path"},
-                    "pattern": {"type": "string", "description": "Glob pattern to match files (default: '*')"},
-                    "separator": {"type": "string", "description": "Separator between file contents (default: '\\n\\n---\\n\\n')"},
-                    "recursive": {"type": "boolean", "description": "If True, search subdirectories (default: false)"}
+                    "directory": {"type": "string", "description": "Directory"},
+                    "output_file": {"type": "string", "description": "Output path"},
+                    "pattern": {"type": "string", "description": "Glob pattern (default: '*')"},
+                    "separator": {"type": "string", "description": "Separator (default: '\n---\n')"},
+                    "recursive": {"type": "boolean", "description": "Recursive (default: false)"}
                 },
                 "required": ["directory", "output_file"]
             }
@@ -693,12 +693,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "codebase_index",
-            "description": "Build or rebuild the codebase index. Scans the project, extracts classes, functions, imports, and file structure. Saves a searchable cache. Use this FIRST when starting work on a new project.",
+            "description": "Build codebase index (classes, functions, imports). Use FIRST on new projects.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "root": {"type": "string", "description": "Project root directory (default: current directory)"},
-                    "force": {"type": "boolean", "description": "If True, rebuild even if cache exists (default: false)"}
+                    "root": {"type": "string", "description": "Root dir (default: .)"},
+                    "force": {"type": "boolean", "description": "Force rebuild (default: false)"}
                 }
             }
         }
@@ -707,13 +707,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "codebase_search",
-            "description": "Search the codebase index for files, classes, functions, or imports matching the query. Much faster and cheaper than reading files blindly. Use this to find relevant code before reading.",
+            "description": "Search codebase index by keyword. Faster than reading files.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Keywords to search for (e.g. 'database config', 'user auth', 'api route')"},
-                    "root": {"type": "string", "description": "Project root directory (default: current directory)"},
-                    "max_results": {"type": "integer", "description": "Maximum results to return (default: 20)"}
+                    "query": {"type": "string", "description": "Keywords to search"},
+                    "root": {"type": "string", "description": "Root dir (default: .)"},
+                    "max_results": {"type": "integer", "description": "Max results (default: 20)"}
                 },
                 "required": ["query"]
             }
@@ -723,11 +723,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "codebase_summary",
-            "description": "Get a high-level summary of the project structure: file counts, languages, directories, largest files, classes, and functions. Great for onboarding or understanding a new project.",
+            "description": "Project summary: files, languages, dirs, classes, functions.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "root": {"type": "string", "description": "Project root directory (default: current directory)"}
+                    "root": {"type": "string", "description": "Root dir (default: .)"}
                 }
             }
         }
@@ -738,13 +738,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "screenshot",
-            "description": "Take a screenshot. Optionally analyze with vision_model (configured via JUDECODE_VISION_MODEL in .env).",
+            "description": "Take screenshot. Optional vision_model for analysis.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "vision_model": {"type": "string", "description": "Vision model name (set via JUDECODE_VISION_MODEL in .env). Empty = just screenshot."},
-                    "task_description": {"type": "string", "description": "Context to focus vision analysis."},
-                    "save_path": {"type": "string", "description": "Optional path to save screenshot."}
+                    "vision_model": {"type": "string", "description": "Vision model. Empty = screenshot only."},
+                    "task_description": {"type": "string", "description": "Focus context."},
+                    "save_path": {"type": "string", "description": "Save path"}
                 }
             }
         }
@@ -753,7 +753,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "get_screen_size",
-            "description": "Get the screen resolution (width x height). Useful before moving the mouse.",
+            "description": "Get screen resolution.",
             "parameters": {
                 "type": "object",
                 "properties": {}
@@ -775,7 +775,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "get_active_window_info",
-            "description": "Get information about the currently active window (title, position, size).",
+            "description": "Get active window info (title, position, size).",
             "parameters": {
                 "type": "object",
                 "properties": {}
@@ -786,13 +786,13 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "mouse_move",
-            "description": "Move the mouse cursor to absolute screen coordinates (x, y). Use get_screen_size() first to know the bounds.",
+            "description": "Move mouse to screen coordinates (x, y). Use get_screen_size() first.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "x": {"type": "integer", "description": "X coordinate (0 = left edge of screen)"},
-                    "y": {"type": "integer", "description": "Y coordinate (0 = top edge of screen)"},
-                    "duration": {"type": "number", "description": "Seconds to animate the movement (default: 0.5)"}
+                    "x": {"type": "integer", "description": "X (0 = left)"},
+                    "y": {"type": "integer", "description": "Y (0 = top)"},
+                    "duration": {"type": "number", "description": "Duration sec (default: 0.5)"}
                 },
                 "required": ["x", "y"]
             }
@@ -806,9 +806,9 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "button": {"type": "string", "description": "Mouse button: 'left', 'right', or 'middle' (default: 'left')"},
-                    "x": {"type": "integer", "description": "Optional X coordinate to move to before clicking"},
-                    "y": {"type": "integer", "description": "Optional Y coordinate to move to before clicking"}
+                    "button": {"type": "string", "description": "Button (default: left)"},
+                    "x": {"type": "integer", "description": "X (optional)"},
+                    "y": {"type": "integer", "description": "Y (optional)"}
                 }
             }
         }
@@ -821,8 +821,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "x": {"type": "integer", "description": "Optional X coordinate"},
-                    "y": {"type": "integer", "description": "Optional Y coordinate"}
+                    "x": {"type": "integer", "description": "X (optional)"},
+                    "y": {"type": "integer", "description": "Y (optional)"}
                 }
             }
         }
@@ -831,15 +831,15 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "mouse_drag",
-            "description": "Drag the mouse from one position to another (click and hold while moving).",
+            "description": "Drag mouse from one position to another.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "start_x": {"type": "integer", "description": "Starting X coordinate"},
-                    "start_y": {"type": "integer", "description": "Starting Y coordinate"},
-                    "end_x": {"type": "integer", "description": "Ending X coordinate"},
-                    "end_y": {"type": "integer", "description": "Ending Y coordinate"},
-                    "duration": {"type": "number", "description": "Duration of the drag in seconds (default: 0.5)"}
+                    "start_x": {"type": "integer", "description": "Start X"},
+                    "start_y": {"type": "integer", "description": "Start Y"},
+                    "end_x": {"type": "integer", "description": "End X"},
+                    "end_y": {"type": "integer", "description": "End Y"},
+                    "duration": {"type": "number", "description": "Duration sec (default: 0.5)"}
                 },
                 "required": ["start_x", "start_y", "end_x", "end_y"]
             }
@@ -849,12 +849,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "keyboard_type",
-            "description": "Type text at the current cursor position. Useful for filling forms, search bars, etc.",
+            "description": "Type text at cursor position.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "text": {"type": "string", "description": "The text to type"},
-                    "interval": {"type": "number", "description": "Seconds between each key press (default: 0.05)"}
+                    "text": {"type": "string", "description": "Text to type"},
+                    "interval": {"type": "number", "description": "Interval (default: 0.05)"}
                 },
                 "required": ["text"]
             }
@@ -864,11 +864,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "keyboard_press",
-            "description": "Press a single key (e.g., 'enter', 'tab', 'escape', 'space', 'backspace', 'delete').",
+            "description": "Press a single key.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "key": {"type": "string", "description": "Key name: enter, tab, escape, space, backspace, delete, up, down, left, right, home, end, pageup, pagedown, etc."}
+                    "key": {"type": "string", "description": "Key name"}
                 },
                 "required": ["key"]
             }
@@ -878,11 +878,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "keyboard_hotkey",
-            "description": "Press a keyboard shortcut combination. Examples: 'command,c' for copy, 'command,v' for paste, 'command,tab' for app switch, 'alt,f4' for close window.",
+            "description": "Press keyboard shortcut. E.g. 'command,c'=copy, 'alt,f4'=close.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "keys": {"type": "string", "description": "Comma-separated key names (e.g. 'command,c' for copy, 'command,shift,3' for screenshot)"}
+                    "keys": {"type": "string", "description": "Keys, comma-separated"}
                 },
                 "required": ["keys"]
             }
@@ -892,12 +892,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "keyboard_type_enqueue",
-            "description": "Add text to a background typing queue (non-blocking). Queues text to be typed while Jude Code continues working. Use this to type while doing other tasks simultaneously. Typing happens in order (FIFO).",
+            "description": "Queue text for background typing (non-blocking, FIFO).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "text": {"type": "string", "description": "The text to type"},
-                    "interval": {"type": "number", "description": "Seconds between each key press (default: 0.05)"}
+                    "text": {"type": "string", "description": "Text to type"},
+                    "interval": {"type": "number", "description": "Interval (default: 0.05)"}
                 },
                 "required": ["text"]
             }
@@ -907,7 +907,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "keyboard_queue_status",
-            "description": "Check the current typing queue status — what's being typed and how many jobs are waiting.",
+            "description": "Check typing queue status and pending jobs.",
             "parameters": {
                 "type": "object",
                 "properties": {}
@@ -918,7 +918,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "keyboard_queue_clear",
-            "description": "Clear all pending typing jobs from the queue. Does NOT stop the currently typing job.",
+            "description": "Clear pending typing jobs (not current one).",
             "parameters": {
                 "type": "object",
                 "properties": {}
@@ -933,9 +933,9 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "clicks": {"type": "integer", "description": "Number of scroll clicks. Positive = scroll up, Negative = scroll down."},
-                    "x": {"type": "integer", "description": "Optional X position to scroll at"},
-                    "y": {"type": "integer", "description": "Optional Y position to scroll at"}
+                    "clicks": {"type": "integer", "description": "Clicks (+up/-down)"},
+                    "x": {"type": "integer", "description": "X (optional)"},
+                    "y": {"type": "integer", "description": "Y (optional)"}
                 },
                 "required": ["clicks"]
             }
@@ -945,11 +945,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "open_app",
-            "description": "Open an application by name (e.g., 'Safari', 'Chrome', 'Terminal', 'Finder', 'Notes').",
+            "description": "Open app by name.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "app_name": {"type": "string", "description": "Application name (e.g., 'Safari', 'Google Chrome', 'Terminal', 'Finder', 'Notes')"}
+                    "app_name": {"type": "string", "description": "App name"}
                 },
                 "required": ["app_name"]
             }
@@ -972,12 +972,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "get_browser_accessibility_snapshot",
-            "description": "⚡ FAST: Get browser page accessibility tree (structured text elements). 10-50x faster than vision. Requires Playwright.",
+            "description": "⚡ Browser accessibility tree. 10-50x faster than vision.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "url": {"type": "string", "description": "Optional URL to navigate to first."},
-                    "task_description": {"type": "string", "description": "Optional context to focus analysis."}
+                    "url": {"type": "string", "description": "URL (optional)"},
+                    "task_description": {"type": "string", "description": "Focus (optional)"}
                 }
             }
         }
@@ -986,11 +986,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "get_desktop_accessibility_tree",
-            "description": "⚡ FAST: macOS desktop accessibility tree via AXUIElement. 10-50x faster than vision. No vision model needed.",
+            "description": "⚡ Get desktop accessibility tree (macOS). 10-50x faster than vision.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "task_description": {"type": "string", "description": "Optional context to focus analysis."}
+                    "task_description": {"type": "string", "description": "Focus (optional)"}
                 }
             }
         }
@@ -1005,10 +1005,10 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "Task title"},
-                    "description": {"type": "string", "description": "Optional description"},
-                    "priority": {"type": "string", "enum": ["low", "medium", "high", "urgent"], "description": "Priority level (default: medium)"},
-                    "tags": {"type": "array", "items": {"type": "string"}, "description": "Optional list of tags"}
+                    "title": {"type": "string", "description": "Title"},
+                    "description": {"type": "string", "description": "Description"},
+                    "priority": {"type": "string", "enum": ["low", "medium", "high", "urgent"], "description": "Priority (default: medium)"},
+                    "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags"}
                 },
                 "required": ["title"]
             }
@@ -1025,8 +1025,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "status": {"type": "string", "enum": ["pending", "in_progress", "done", "cancelled"], "description": "Filter by status"},
                     "priority": {"type": "string", "enum": ["low", "medium", "high", "urgent"], "description": "Filter by priority"},
                     "tag": {"type": "string", "description": "Filter by tag"},
-                    "sort_by": {"type": "string", "enum": ["priority", "status", "created", "updated"], "description": "Sort field (default: priority)"},
-                    "reverse": {"type": "boolean", "description": "Reverse sort order"}
+                    "sort_by": {"type": "string", "enum": ["priority", "status", "created", "updated"], "description": "Sort by (default: priority)"},
+                    "reverse": {"type": "boolean", "description": "Reverse sort"}
                 }
             }
         }
@@ -1057,7 +1057,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "title": {"type": "string", "description": "New title"},
                     "description": {"type": "string", "description": "New description"},
                     "priority": {"type": "string", "enum": ["low", "medium", "high", "urgent"], "description": "New priority"},
-                    "tags": {"type": "array", "items": {"type": "string"}, "description": "New tags list"}
+                    "tags": {"type": "array", "items": {"type": "string"}, "description": "New tags"}
                 },
                 "required": ["task_id"]
             }
@@ -1138,8 +1138,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "status": {"type": "string", "enum": ["pending", "in_progress", "done", "cancelled"], "description": "Filter by status (default: pending)"},
-                    "sort_by": {"type": "string", "enum": ["priority", "status", "created", "updated"], "description": "Sort field (default: priority)"}
+                    "status": {"type": "string", "enum": ["pending", "in_progress", "done", "cancelled"], "description": "Status (default: pending)"},
+                    "sort_by": {"type": "string", "enum": ["priority", "status", "created", "updated"], "description": "Sort by (default: priority)"}
                 }
             }
         }
@@ -1159,7 +1159,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "task_summary",
-            "description": "Get a summary of task statistics (total, pending, in_progress, done, etc.).",
+            "description": "Task statistics summary.",
             "parameters": {
                 "type": "object",
                 "properties": {}
@@ -1210,7 +1210,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Path to JSON file"}
+                    "path": {"type": "string", "description": "JSON path"}
                 },
                 "required": ["path"]
             }
@@ -1224,7 +1224,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Path to save JSON file"}
+                    "path": {"type": "string", "description": "Output path"}
                 },
                 "required": ["path"]
             }

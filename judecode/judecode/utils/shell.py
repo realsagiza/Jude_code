@@ -1,5 +1,6 @@
 """Shell command execution utility — cross-platform (macOS/Linux/Windows)."""
 
+import os
 import platform
 import subprocess
 import sys
@@ -7,6 +8,30 @@ import threading
 import time
 from queue import Queue, Empty
 from typing import Iterator, Optional
+
+# ── Shell output truncation ──
+# Prevent context explosion from commands that dump huge output.
+# The model can use head/tail/grep to see specific parts if needed.
+_MAX_SHELL_OUTPUT = int(os.environ.get("JUDECODE_MAX_SHELL_OUTPUT", "15000"))
+
+
+def _truncate_output(text: str, max_len: int = _MAX_SHELL_OUTPUT) -> str:
+    """Truncate output to max_len chars, keeping the tail (most relevant part).
+    
+    For most commands, the tail contains the most useful info (errors, final results).
+    The head is usually just repetitive listing.
+    """
+    if len(text) <= max_len:
+        return text
+    # Keep 20% from head + 80% from tail — head has command context, tail has results
+    head_len = max_len // 5
+    tail_len = max_len - head_len - 50  # 50 chars for the truncation notice
+    return (
+        text[:head_len]
+        + f"\n\n... [{len(text) - head_len - tail_len:,} chars truncated, "
+        + f"total {len(text):,} chars. Use `head`/`tail`/`grep` to see specific parts] ...\n\n"
+        + text[-tail_len:]
+    )
 
 
 def _get_shell_args() -> list[str]:
@@ -56,8 +81,8 @@ def execute_shell(
         errors="replace",
     )
     return {
-        "stdout": proc.stdout,
-        "stderr": proc.stderr,
+        "stdout": _truncate_output(proc.stdout),
+        "stderr": _truncate_output(proc.stderr),
         "exit_code": proc.returncode,
     }
 
