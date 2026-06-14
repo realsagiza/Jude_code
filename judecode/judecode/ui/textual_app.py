@@ -346,7 +346,13 @@ def main_cli() -> None:
             from judecode.ui.terminal import main_cli as m; m(); return
         if a == "--simple":
             from judecode.ui.async_terminal import main_cli as m; m(); return
-    JudeCodeTUI().run()
+    try:
+        JudeCodeTUI().run()
+    except Exception as e:
+        import traceback
+        print(f"\nFatal error: {e}")
+        traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
