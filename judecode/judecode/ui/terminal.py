@@ -362,30 +362,14 @@ def main_cli() -> None:
             print("  --version, -v   Show version and exit")
             print("  --help, -h      Show this help message and exit")
             print("  --legacy        Use legacy single-thread mode")
-            print("  --simple        Use async mode (default)")
-            print("  --tui           Use Textual TUI (experimental)")
             print()
             print("Default: Async mode - type while AI works!")
             return
         if arg == "--legacy":
             asyncio.run(run_agent_interactive())
             return
-        if arg == "--simple":
-            from judecode.ui.async_terminal import main_cli as async_main
-            async_main()
-            return
 
-    # Default: use async terminal (proven working)
-    # Use --tui for Textual TUI (experimental)
-    if len(sys.argv) > 1 and sys.argv[1] == "--tui":
-        try:
-            from judecode.ui.textual_app import main_cli as tui_main
-            tui_main()
-        except ImportError:
-            print("Textual not installed. Install with: pip install textual")
-            sys.exit(1)
-        return
-
+    # Default: async mode
     from judecode.ui.async_terminal import main_cli as async_main
     async_main()
 
