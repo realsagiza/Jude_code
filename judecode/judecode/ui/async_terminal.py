@@ -1,19 +1,17 @@
-"""Async Terminal UI for Jude Code — แยก input/output เป็นคนละ thread.
+"""Async Terminal UI for Jude Code — input/output แยก thread กัน.
 
-ใช้ asyncio tasks แยกกัน + ANSI cursor positioning เพื่อให้:
-- AI output area (top) = แสดงผล AI, scroll ตามธรรมชาติ
-- Status bar (bottom-1) = สถานะ AI + preview คิว, อัพเดท real-time  
-- Input line (bottom) = ผู้ใช้พิมพ์, อยู่ด้านล่างเสมอ
-
-ทั้งสองส่วนไม่ปนกัน — AI output ไม่มี prompt แทรก, input อยู่ล่างสุดตลอด
+หลักการ: เรียบง่าย ไม่ใช้ ANSI cursor tricks
+- AI output → console.print() ปกติ
+- Input → input() ปกติ  
+- การแยกพื้นที่เกิดจากธรรมชาติของ terminal: output จะอยู่เหนือ input line เสมอ
+- สถานะ AI + คิวแสดงใน prompt เวลา AI ทำงาน
+- ไม่มี background refresh, ไม่มี cursor save/restore → ไม่มี race condition
 """
 
 import asyncio
 import os
 import signal
 import sys
-import shutil
-import threading
 from typing import Optional
 
 from rich.text import Text
@@ -47,47 +45,6 @@ def safe_input(prompt: str = "") -> str:
             return raw.decode("utf-8", errors="replace").rstrip("\n")
         except Exception:
             return ""
-
-
-# ── Terminal helpers ────────────────────────────────────────────────────────
-
-def _term_width() -> int:
-    try:
-        return shutil.get_terminal_size().columns
-    except Exception:
-        return 80
-
-
-def _term_height() -> int:
-    try:
-        return shutil.get_terminal_size().lines
-    except Exception:
-        return 24
-
-
-def _ansi_save_cursor() -> None:
-    sys.stdout.write("\033[s")
-    sys.stdout.flush()
-
-
-def _ansi_restore_cursor() -> None:
-    sys.stdout.write("\033[u")
-    sys.stdout.flush()
-
-
-def _ansi_move_to(row: int, col: int = 1) -> None:
-    sys.stdout.write(f"\033[{row};{col}H")
-    sys.stdout.flush()
-
-
-def _ansi_clear_line() -> None:
-    sys.stdout.write("\033[2K")
-    sys.stdout.flush()
-
-
-def _ansi_clear_to_end() -> None:
-    sys.stdout.write("\033[0K")
-    sys.stdout.flush()
 
 
 # ── Greeting / Goodbye ──────────────────────────────────────────────────────
@@ -148,21 +105,19 @@ def print_goodbye() -> None:
     console.print()
 
 
-# ── Split Layout Agent Runner ───────────────────────────────────────────────
+# ── Agent Runner ────────────────────────────────────────────────────────────
 
-class SplitLayoutRunner:
-    """แยก AI output (บน) และ input (ล่าง) ออกจากกันอย่างอิสระ.
+class AsyncAgentRunner:
+    """แยก input/output เป็นคนละ asyncio task.
 
-    - AI output: แสดงผลตามปกติ อยู่ด้านบน scroll ได้
-    - Status bar: fixed บรรทัดล่างสุด-1 แสดงสถานะ AI + preview คิว
-    - Input: fixed บรรทัดล่างสุด รับ input จากผู้ใช้
-
-    ทั้งสองส่วนอัพเดทแยกจากกัน ไม่ปนกัน
+    หลักการสำคัญ:
+    - ตอน AI ว่าง → แสดง separator + "⏵ " prompt ปกติ
+    - ตอน AI ทำงาน → แสดงสถานะสั้นๆ + เว้น prompt ว่าง (input(""))
+    - AI output ปรากฏเหนือ input line โดยธรรมชาติของ terminal
+    - ไม่มีการแย่ง cursor → ไม่มี race condition
     """
 
-    _PREVIEW_LEN = 28
-    _STATUS_ROW_OFFSET = 1   # status bar = bottom - 1
-    _INPUT_ROW_OFFSET = 0    # input = bottom
+    _PREVIEW_LEN = 30
 
     def __init__(self):
         self.api_client = create_api_client()
@@ -174,117 +129,76 @@ class SplitLayoutRunner:
         self.running = True
         self._quit_requested = False
 
-        # Thread-safe lock for stdout (prevents race between
-        # status refresh in asyncio and input() in executor thread)
-        self._stdout_lock = threading.Lock()
-
-        # Queue tracking for display
+        # Queue tracking
         self._current_message: str = ""
         self._queued_previews: list[str] = []
 
         # Tasks
         self._agent_task: Optional[asyncio.Task] = None
         self._input_task: Optional[asyncio.Task] = None
-        self._status_task: Optional[asyncio.Task] = None
 
     # ── Helpers ─────────────────────────────────────────────────────────
 
     @staticmethod
-    def _preview(text: str, max_len: int = 28) -> str:
+    def _preview(text: str, max_len: int = 30) -> str:
         """Truncate message for compact display."""
         text = text.replace("\n", " ").strip()
         if len(text) <= max_len:
             return text
         return text[:max_len - 2] + "…"
 
-    def _render_status_line(self) -> str:
-        """Build plain-text status line for ANSI output."""
-        w = _term_width() - 4  # 2-space padding each side
+    def _print_divider(self, style: str = "dim cyan") -> None:
+        """Print a horizontal divider."""
+        console.print()
+        console.print(f"  [{style}]" + "─" * 68 + f"[/{style}]")
+
+    def _print_status_line(self) -> None:
+        """Print compact status: AI state + queue preview."""
+        parts = []
 
         if self.agent_busy:
             curr = self._preview(self._current_message, self._PREVIEW_LEN)
-            left = f"⏳ AI: \"{curr}\""
+            parts.append(f"[bold yellow]⏳ AI:[/bold yellow] [bold white]\"{curr}\"[/bold white]")
         else:
-            left = "● READY"
+            parts.append("[bold green]● READY[/bold green]")
 
         qp = self._queued_previews
         if qp:
-            right = f"📋 {len(qp)}: "
-            for i, p in enumerate(qp[:2]):
+            q_text = f"[dim]📋 {len(qp)}:[/dim] "
+            for i, p in enumerate(qp[:3]):
                 if i > 0:
-                    right += " → "
-                right += f'"{self._preview(p, 14)}"'
-            if len(qp) > 2:
-                right += f" +{len(qp) - 2}"
-        else:
-            right = ""
+                    q_text += " [dim]→[/dim] "
+                q_text += f'[dim]"{self._preview(p, 16)}"[/dim]'
+            if len(qp) > 3:
+                q_text += f" [dim]+{len(qp) - 3}[/dim]"
+            parts.append(q_text)
 
-        # Combine: left ... right
-        bar = f"  {left}"
-        if right:
-            combined = f"{bar}  │  {right}"
-        else:
-            combined = bar
+        line = "  " + "  │  ".join(parts)
+        console.print(line)
 
-        if len(combined) > w:
-            combined = combined[:w - 3] + "…"
-        else:
-            combined = combined.ljust(w)
-
-        return combined
-
-    def _redraw_bottom(self) -> None:
-        """Redraw status bar + input prompt at bottom of terminal."""
-        with self._stdout_lock:
-            h = _term_height()
-
-            # Save cursor position
-            _ansi_save_cursor()
-
-            # Draw status bar (bottom - 1)
-            status = self._render_status_line()
-            _ansi_move_to(h - self._STATUS_ROW_OFFSET, 1)
-            _ansi_clear_line()
-            sys.stdout.write(status)
-            sys.stdout.flush()
-
-            # Draw input line (bottom)
-            _ansi_move_to(h, 1)
-            _ansi_clear_line()
-            prompt = "  ⏵ "
-            sys.stdout.write(prompt)
-            sys.stdout.flush()
-
-            # Restore cursor
-            _ansi_restore_cursor()
-
-    def _print_ai_divider(self) -> None:
-        """Print divider after AI finishes."""
+    def _print_end_output(self) -> None:
+        """Print marker when AI finishes output."""
         console.print()
-        console.print("  [dim cyan]" + "─" * min(_term_width() - 4, 70) + "[/dim cyan]")
-
-    # ── Status refresh loop ─────────────────────────────────────────────
-
-    async def _status_refresh_loop(self) -> None:
-        """Periodically refresh the bottom status bar."""
-        while self.running:
-            try:
-                self._redraw_bottom()
-            except Exception:
-                pass
-            await asyncio.sleep(0.2)
+        console.print(f"  [dim cyan]" + "▬" * 68 + f"[/dim cyan]")
+        console.print("  [dim cyan]▐[/dim cyan] [dim]END OUTPUT[/dim]")
 
     # ── Input loop ──────────────────────────────────────────────────────
 
     async def _input_loop(self) -> None:
-        """Read user input continuously."""
+        """Read user input continuously, queue messages."""
         loop = asyncio.get_event_loop()
 
         while self.running:
-            # Input prompt
+            # Show appropriate prompt based on AI state
             if self.agent_busy:
-                prompt_text = ""  # Minimal: no prompt while AI works
+                # AI working: minimal prompt
+                self._print_divider("dim")
+                self._print_status_line()
+                prompt_text = ""  # empty = just cursor
             else:
+                # AI idle: full prompt
+                self._print_divider("dim cyan")
+                self._print_status_line()
                 prompt_text = "  ⏵ "
 
             try:
@@ -312,7 +226,7 @@ class SplitLayoutRunner:
     # ── Agent loop ──────────────────────────────────────────────────────
 
     async def _agent_loop(self) -> None:
-        """Process queued messages one at a time."""
+        """Process queued messages."""
         while self.running:
             try:
                 message = await asyncio.wait_for(
@@ -326,8 +240,6 @@ class SplitLayoutRunner:
             if self._queued_previews:
                 self._queued_previews.pop(0)
 
-            self._redraw_bottom()
-
             try:
                 self.agent.reset_stop()
                 await self.agent.chat(message)
@@ -337,8 +249,7 @@ class SplitLayoutRunner:
                 self.agent_busy = False
                 self._current_message = ""
                 self.input_queue.task_done()
-                self._print_ai_divider()
-                self._redraw_bottom()
+                self._print_end_output()
 
     # ── Command handler ─────────────────────────────────────────────────
 
@@ -380,6 +291,7 @@ class SplitLayoutRunner:
             self.agent.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
             self.agent.reset_stop()
             self.agent._turn_count = 0
+            self._queued_previews.clear()
             console.print("\n  [dim]Conversation cleared[/dim]")
             return
 
@@ -430,7 +342,7 @@ class SplitLayoutRunner:
     # ── Main runner ─────────────────────────────────────────────────────
 
     async def run(self) -> None:
-        """Main entry point — start all concurrent tasks."""
+        """Main entry point."""
         try:
             sys.stdin.reconfigure(encoding="utf-8", errors="replace")
         except Exception:
@@ -449,13 +361,9 @@ class SplitLayoutRunner:
 
         print_greeting()
 
-        # Draw initial bottom bar
-        self._redraw_bottom()
-
         try:
-            # Start all tasks
+            # Start both tasks
             self._agent_task = asyncio.create_task(self._agent_loop())
-            self._status_task = asyncio.create_task(self._status_refresh_loop())
             self._input_task = asyncio.create_task(self._input_loop())
 
             await self._input_task
@@ -464,13 +372,12 @@ class SplitLayoutRunner:
             self.running = False
             signal.signal(signal.SIGINT, original_sigint)
 
-            for task in [self._agent_task, self._status_task]:
-                if task and not task.done():
-                    task.cancel()
-                    try:
-                        await task
-                    except asyncio.CancelledError:
-                        pass
+            if self._agent_task and not self._agent_task.done():
+                self._agent_task.cancel()
+                try:
+                    await self._agent_task
+                except asyncio.CancelledError:
+                    pass
 
             await self.api_client.close()
             print_goodbye()
@@ -498,14 +405,14 @@ def main_cli() -> None:
             print("  --help, -h        Show this help message and exit")
             print("  --legacy          Use legacy single-thread mode")
             print()
-            print("Default: Split layout (AI output top + input bottom)")
+            print("Default: Async mode - type while AI works!")
             return
         if arg == "--legacy":
             from judecode.ui.terminal import main_cli as legacy_main
             legacy_main()
             return
 
-    runner = SplitLayoutRunner()
+    runner = AsyncAgentRunner()
     asyncio.run(runner.run())
 
 
