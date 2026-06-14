@@ -361,17 +361,28 @@ def main_cli() -> None:
             print("Options:")
             print("  --version, -v   Show version and exit")
             print("  --help, -h      Show this help message and exit")
-            print("  --legacy        Use legacy single-thread mode")
+            print("  --classic       Use the classic scrolling async UI")
+            print("  --legacy        Use the legacy single-thread UI")
             print()
-            print("Default: Async mode - type while AI works!")
+            print("Default: Beautiful full-screen TUI (Textual).")
             return
         if arg == "--legacy":
             asyncio.run(run_agent_interactive())
             return
+        if arg == "--classic":
+            from judecode.ui.async_terminal import main_cli as async_main
+            async_main()
+            return
 
-    # Default: async mode
-    from judecode.ui.async_terminal import main_cli as async_main
-    async_main()
+    # Default: beautiful Textual TUI
+    try:
+        from judecode.ui.tui_app import run_tui
+        run_tui()
+    except Exception as e:
+        # Fall back to the classic async UI if the TUI can't start
+        console.print(f"[yellow]TUI failed to start ({e}); falling back to classic UI.[/yellow]")
+        from judecode.ui.async_terminal import main_cli as async_main
+        async_main()
 
 
 if __name__ == "__main__":
