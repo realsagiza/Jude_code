@@ -23,7 +23,7 @@ from judecode.config import (
 )
 from judecode.ui.console import console
 from judecode.utils.logger import get_logger, log_error_details
-from rich.markup import escape as _escape_markup
+from rich.text import Text
 
 logger = get_logger("judecode.engine")
 
@@ -250,13 +250,12 @@ class AgentEngine:
                                 "  [dim]───────────────────── Reasoning ─────────────────────[/dim]"
                             )
                             has_shown_reasoning = True
-                        # Escape the model's reasoning text so any stray brackets
-                        # (e.g. "[", "]") are NOT interpreted as Rich markup.
-                        # Previously this leaked literal "[dim]" / "/dim" into the
-                        # output. Keeping it a string preserves smooth streaming in
-                        # both the legacy console and the TUI sink.
+                        # Use a Text object instead of markup string so that
+                        # newlines inside the reasoning text cannot break Rich
+                        # markup tags (which caused literal "[dim]" / "/dim" to
+                        # leak into the output when the TUI sink split on \n).
                         console.print(
-                            f"[dim italic]{_escape_markup(reasoning_piece)}[/dim italic]",
+                            Text(reasoning_piece, style="dim italic"),
                             end="",
                         )
 
@@ -274,9 +273,10 @@ class AgentEngine:
                             console.print()
                         console.print()
                         has_started_output = True
-                    # Escape so any bracketed text in the answer is shown
-                    # literally and never mis-parsed as Rich markup.
-                    console.print(_escape_markup(content_piece), end="")
+                    # Use a Text object so the content is rendered literally
+                    # (brackets, etc. are never mis-parsed as Rich markup) and
+                    # newlines cannot break surrounding markup tags.
+                    console.print(Text(content_piece), end="")
 
                 # Handle tool calls
                 tool_call_pieces = delta.get("tool_calls", [])

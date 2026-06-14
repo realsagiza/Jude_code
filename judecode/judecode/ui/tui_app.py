@@ -23,11 +23,12 @@ Design goals (per request):
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Any, Optional
 
 from rich.console import Group
-from rich.text import Text
 from rich.markup import MarkupError
+from rich.text import Span, Text
 
 from textual import on, work
 from textual.app import App, ComposeResult
@@ -143,6 +144,7 @@ class JudeCodeTUI(App):
         self.queued_previews: list[str] = []
         self._agent_loop_task: Optional[asyncio.Task] = None
         self._stream_buffer: str = ""
+        self._stream_text_buffer: Optional[Text] = None  # accumulates Text objects during streaming
         self._quit_armed = False
 
     # ── Layout ──────────────────────────────────────────────────────────
@@ -214,18 +216,50 @@ class JudeCodeTUI(App):
 
         Handles streamed output (``end=""``) by buffering until a newline so
         that partial tokens render smoothly inside the RichLog.
+
+        Supports both plain strings and Rich ``Text`` objects.  ``Text``
+        objects are accumulated in a separate buffer so their embedded
+        styling is preserved even when the content contains newlines (which
+        would otherwise break inline Rich markup tags like [dim]).
         """
         end = kwargs.get("end", "\n")
 
-        renderables: list[Any] = []
+        # ── Classify args ──
+        has_text_obj = False
         text_only = True
         for a in args:
-            if not isinstance(a, str):
+            if isinstance(a, Text):
+                has_text_obj = True
+            elif not isinstance(a, str):
                 text_only = False
-                break
 
+        # ── Path A: Text objects present ──
+        if has_text_obj and text_only:
+            # Flush any leftover string buffer first.
+            self._flush_stream_buffer()
+
+            # Accumulate Text objects.
+            if self._stream_text_buffer is None:
+                self._stream_text_buffer = Text()
+            for a in args:
+                if isinstance(a, Text):
+                    self._stream_text_buffer.append(a)
+                else:
+                    # Plain string arg alongside Text — add as default-styled Text.
+                    self._stream_text_buffer.append(Text(str(a)))
+
+            if end != "":
+                # A newline is implied — flush the accumulated Text.
+                self._stream_text_buffer.append(Text("\n"))
+                self._flush_text_buffer()
+            return
+
+        # ── Path B: Pure string args (original logic) ──
         if text_only:
-            # Join string args the way Console.print would (space separated).
+            # Flush any Text buffer first (switching from Text to string path).
+            if self._stream_text_buffer is not None:
+                self._flush_text_buffer()
+
             piece = " ".join(str(a) for a in args)
             self._stream_buffer += piece
             if end != "":
@@ -239,8 +273,10 @@ class JudeCodeTUI(App):
                     self._write_markup(ln)
             return
 
-        # Non-string renderable (Panel, Markdown, Group, …): flush buffer first.
+        # ── Path C: Non-string renderable (Panel, Markdown, Group, …) ──
         self._flush_stream_buffer()
+        if self._stream_text_buffer is not None:
+            self._flush_text_buffer()
         log = self.query_one("#output", OutputLog)
         if len(args) == 1:
             log.write(args[0])
@@ -253,12 +289,47 @@ class JudeCodeTUI(App):
             self._stream_buffer = ""
             self._write_markup(buf)
 
+    def _flush_text_buffer(self) -> None:
+        """Flush accumulated Text objects to the output log."""
+        if self._stream_text_buffer is not None:
+            log = self.query_one("#output", OutputLog)
+            # Split the accumulated Text by newlines so each line becomes
+            # its own RichLog entry (required for proper scrolling display).
+            text = self._stream_text_buffer
+            self._stream_text_buffer = None
+            plain = text.plain
+            if "\n" not in plain:
+                log.write(text)
+            else:
+                # Split the plain text by newlines, then for each line
+                # create a Text slice that preserves the styling.
+                # Rich Text._spans maps styles to character ranges in .plain,
+                # so we can split by offset.
+                lines = plain.split("\n")
+                offset = 0
+                for line_str in lines:
+                    line_text = Text(line_str)
+                    # Copy spans that overlap with this line's range.
+                    for span in text._spans:
+                        # Span overlaps [offset, offset+len(line_str)) ?
+                        span_start = max(span.start - offset, 0)
+                        span_end = min(span.end - offset, len(line_str))
+                        if span_start < span_end:
+                            line_text._spans.append(
+                                Span(span_start, span_end, span.style)
+                            )
+                    log.write(line_text)
+                    offset += len(line_str) + 1  # +1 for the \n
+
     def _write_markup(self, line: str) -> None:
         log = self.query_one("#output", OutputLog)
         try:
             log.write(Text.from_markup(line))
         except MarkupError:
-            log.write(Text(line))
+            # Markup is broken (e.g. tags split across lines).  Strip the
+            # broken tags so the user never sees raw "[dim]" / "/dim".
+            clean = re.sub(r"\[/?[^\]]*\]", "", line)
+            log.write(Text(clean))
 
     # ── Sidebar rendering ───────────────────────────────────────────────
 
@@ -377,6 +448,8 @@ class JudeCodeTUI(App):
                 self._console_sink(f"\n  [bold red]Error:[/bold red] {e}\n")
             finally:
                 self._flush_stream_buffer()
+                if self._stream_text_buffer is not None:
+                    self._flush_text_buffer()
                 self.ai_busy = False
                 self.current_msg = ""
                 self.input_queue.task_done()
@@ -440,6 +513,8 @@ class JudeCodeTUI(App):
                     self.ai_busy = False
                     self.current_msg = ""
                     self._flush_stream_buffer()
+                    if self._stream_text_buffer is not None:
+                        self._flush_text_buffer()
                     self._render_sidebar()
             else:
                 self._console_sink("\n  [red]Max continuations reached.[/red]")
