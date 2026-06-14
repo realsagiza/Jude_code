@@ -59,6 +59,24 @@ def _env_int(key: str, default: int) -> int:
         return default
 
 
+def _env_bool(key: str, default: bool) -> bool:
+    """Get bool config from environment variable."""
+    val = os.environ.get(f"JUDECODE_{key}", "").lower().strip()
+    if val in ("1", "true", "yes", "on"):
+        return True
+    if val in ("0", "false", "no", "off"):
+        return False
+    return default
+
+
+def _env_float(key: str, default: float) -> float:
+    """Get float config from environment variable."""
+    try:
+        return float(os.environ.get(f"JUDECODE_{key}", str(default)))
+    except (ValueError, TypeError):
+        return default
+
+
 # ── Provider Selection ──
 # "deepseek" (default), "anthropic", or "zai"
 PROVIDER = _env("PROVIDER", "deepseek").lower().strip()
@@ -173,6 +191,24 @@ CONTINUE_ON_INCOMPLETE_WORK = False
 # Whether to enable auto-continuation on tool errors
 CONTINUE_ON_TOOL_ERROR = True
 
+# ── Autonomous Mode (Phase 1) ──
+# Enable autonomous features: auto-advance, state persistence, self-eval, budget
+AUTONOMOUS_MODE = _env_bool("AUTONOMOUS_MODE", True)
+# Maximum budget per session in USD
+AUTONOMOUS_MAX_BUDGET = _env_float("AUTONOMOUS_MAX_BUDGET", 10.0)
+
+# ── Phase 5: Long-Running Autonomous & Auto-Rollback ──
+# Enable auto-rollback when task fails after max retries
+AUTO_ROLLBACK_ENABLED = _env_bool("AUTO_ROLLBACK_ENABLED", True)
+# Enable health monitoring and self-healing
+HEALTH_MONITOR_ENABLED = _env_bool("HEALTH_MONITOR_ENABLED", True)
+# Stuck detection threshold (seconds without task completion)
+HEALTH_STUCK_THRESHOLD = _env_int("HEALTH_STUCK_THRESHOLD", 600)
+# Context compaction threshold (number of messages)
+CONTEXT_COMPACTION_THRESHOLD = _env_int("CONTEXT_COMPACTION_THRESHOLD", 80)
+# Progress report interval (minutes)
+PROGRESS_REPORT_INTERVAL = _env_int("PROGRESS_REPORT_INTERVAL", 30)
+
 SYSTEM_PROMPT = """You are Jude Code, an AI coding assistant in the terminal.
 Help users with software engineering: write code, run commands, edit files, answer questions.
 
@@ -191,4 +227,15 @@ Key rules:
 - User can pause with Ctrl+C or /stop.
 - Prefer accessibility tree tools over screenshot+vision (10-50x faster).
 - Break complex requests into tasks with task_add() → task_start() → task_complete().
+
+Autonomous Mode (Phase 1+5):
+- After task_complete, the next pending task starts automatically — keep working!
+- Session state is saved for crash recovery. Use /resume to continue interrupted sessions.
+- Budget guardrails prevent overspending. Circuit breaker stops on too many errors.
+- Use /status to see autonomous mode status, /budget for cost tracking.
+- After completing tasks, run verification (tests/lint) if available. Auto-retry up to 3 times on failure.
+- Health monitoring detects stuck/loop states and suggests alternative approaches.
+- Auto-rollback restores files from checkpoint when a task fails after max retries.
+- Context auto-compaction keeps long sessions (8+ hours) running smoothly.
+- Progress reports are generated every 30 minutes automatically.
 """

@@ -132,6 +132,24 @@ def print_greeting() -> None:
     console.print(Rule(style="dim cyan"))
     console.print()
 
+    # ── Check for incomplete sessions (crash recovery) ──
+    try:
+        from judecode.agent.autonomous import SessionState
+        incomplete = SessionState.find_incomplete_sessions()
+        if incomplete:
+            console.print("\n  [bold yellow]🔄 Incomplete sessions detected:[/bold yellow]")
+            for s in incomplete[-3:]:  # Show last 3
+                console.print(
+                    f"    • {s.session_id} — {s.status} — "
+                    f"{len(s.completed_tasks)} tasks done — "
+                    f"Goal: {s.original_goal[:60]}..."
+                )
+            console.print(
+                "  [dim]Type /resume <session_id> to continue, or start a new task.[/dim]\n"
+            )
+    except Exception:
+        pass  # Don't block startup if session check fails
+
 
 def print_goodbye() -> None:
     """Print exit message."""
@@ -250,21 +268,40 @@ async def run_agent_interactive() -> None:
             if user_input.lower() == "/help":
                 console.print("""
 [bold cyan]Jude Code Commands:[/bold cyan]
-  [bold]/help[/bold]      - Show this help
-  [bold]/quit[/bold]      - Exit Jude Code
-  [bold]/clear[/bold]     - Clear the conversation history
-  [bold]/compact[/bold]  - Compact conversation (summarize old messages to save tokens)
-  [bold]/model[/bold]     - Show current model info
-  [bold]/continue[/bold]  - Manually trigger continuation (nudge agent to continue)
-  [bold]/stop[/bold]      - Pause the agent after current action (same as Ctrl+C)
-  [bold]/pause[/bold]     - Alias for /stop
-  [bold]/status[/bold]    - Show continuation status and history
-  [bold]Ctrl+C[/bold]     - Pause agent if running, exit if idle
-  [bold]Ctrl+C twice[/bold] - Force exit
+  [bold]/help[/bold]           - Show this help
+  [bold]/quit[/bold]           - Exit Jude Code
+  [bold]/clear[/bold]          - Clear the conversation history
+  [bold]/compact[/bold]        - Compact conversation (save tokens)
+  [bold]/model[/bold]          - Show current model info
+  [bold]/continue[/bold]       - Manually trigger continuation
+  [bold]/stop[/bold]           - Pause the agent (same as Ctrl+C)
+  [bold]/status[/bold]         - Show continuation + autonomous status
+  [bold]/budget[/bold]         - Show budget usage and circuit breaker
 
-You can type any question or request.
-For multi-line input, just press Enter twice (blank line) to send.
-The agent can use tools like shell, read, write, edit, grep, web_search, etc.
+[bold cyan]Persistence & Recovery:[/bold cyan]
+  [bold]/resume[/bold]         - Resume an incomplete session
+  [bold]/checkpoint[/bold]     - Show checkpoint history
+  [bold]/rollback[/bold]       - Rollback to checkpoint (e.g. /rollback 3)
+  [bold]/diff[/bold]           - Show diff between checkpoint and current
+  [bold]/decisions[/bold]      - Decision log (/decisions search <query>)
+  [bold]/memory[/bold]         - Cross-session memory (/memory patterns|sessions)
+
+[bold cyan]Safety & Control:[/bold cyan]
+  [bold]/sandbox[/bold]        - Toggle sandbox mode (preview before apply)
+  [bold]/sandbox apply[/bold]  - Apply sandboxed changes
+  [bold]/sandbox discard[/bold] - Discard sandboxed changes
+  [bold]/permissions[/bold]    - Show permission levels
+  [bold]/permissions set[/bold] - Set permission (/permissions set delete=ask)
+
+[bold cyan]Daemon & Automation:[/bold cyan]
+  [bold]/daemon[/bold]         - Show daemon status
+  [bold]/daemon start[/bold]   - Start background daemon with goal
+  [bold]/daemon stop[/bold]    - Stop daemon
+  [bold]/daemon logs[/bold]    - Show daemon logs
+  [bold]/notify[/bold]         - Test notification system
+
+[bold]Ctrl+C[/bold]            - Pause agent / exit if idle
+[bold]Ctrl+C twice[/bold]      - Force exit
 """)
                 continue
 
@@ -330,6 +367,243 @@ The agent can use tools like shell, read, write, edit, grep, web_search, etc.
                 console.print(f"  [dim]API: {BASE_URL}[/dim]\n", style="dim")
                 continue
 
+            if user_input.lower() == "/budget":
+                console.print(f"\n  [bold yellow]💰 Budget Status:[/bold yellow]")
+                console.print(agent.autonomous.budget.get_status())
+                console.print()
+                continue
+
+            if user_input.lower() == "/checkpoint":
+                from judecode.agent.checkpoint import CheckpointManager
+                cp = CheckpointManager(session_id=agent.autonomous.session.session_id)
+                console.print(f"\n  [bold green]📦 Checkpoint Status:[/bold green]")
+                console.print(cp.get_summary())
+                console.print()
+                continue
+
+            if user_input.lower().startswith("/rollback"):
+                from judecode.agent.checkpoint import CheckpointManager
+                parts = user_input.strip().split(maxsplit=1)
+                step_num = None
+                if len(parts) > 1:
+                    try:
+                        step_num = int(parts[1])
+                    except ValueError:
+                        console.print("  [red]Usage: /rollback [step_number][/red]\n")
+                        continue
+                cp = CheckpointManager(session_id=agent.autonomous.session.session_id)
+                result = cp.rollback(step=step_num)
+                if result["success"]:
+                    console.print(f"\n  [bold green]✅ Rolled back to step {result['rolled_back_to']}[/bold green]")
+                    for r in result.get("restored", []):
+                        console.print(f"    {r['action']}: {r['path']}")
+                    if result.get("errors"):
+                        for e in result["errors"]:
+                            console.print(f"    [red]error: {e['path']}: {e['error']}[/red]")
+                else:
+                    console.print(f"  [red]❌ {result.get('error', 'Rollback failed')}[/red]")
+                console.print()
+                continue
+
+            if user_input.lower().startswith("/diff"):
+                from judecode.agent.checkpoint import CheckpointManager
+                parts = user_input.strip().split(maxsplit=1)
+                step_num = None
+                file_path = None
+                if len(parts) > 1:
+                    try:
+                        step_num = int(parts[1])
+                    except ValueError:
+                        file_path = parts[1]
+                cp = CheckpointManager(session_id=agent.autonomous.session.session_id)
+                diff = cp.get_diff(step=step_num, file_path=file_path)
+                console.print(f"\n  [bold cyan]📝 Diff:[/bold cyan]")
+                console.print(diff)
+                console.print()
+                continue
+
+            if user_input.lower().startswith("/decisions"):
+                from judecode.agent.memory import DecisionLog
+                parts = user_input.strip().split(maxsplit=1)
+                dl = DecisionLog(session_id=agent.autonomous.session.session_id)
+                if len(parts) > 1 and parts[1] == "search":
+                    # /decisions search <query>
+                    query_parts = user_input.strip().split(maxsplit=2)
+                    query = query_parts[2] if len(query_parts) > 2 else ""
+                    if query:
+                        results = dl.search(query)
+                        console.print(f"\n  [bold cyan]🔍 Search results for '{query}':[/bold cyan]")
+                        for r in results:
+                            console.print(f"    #{r['id']}: {r['task']} → {r['strategy']} ({r['result']})")
+                    else:
+                        console.print("  [dim]Usage: /decisions search <query>[/dim]")
+                else:
+                    console.print(f"\n  [bold cyan]📝 Decision Log:[/bold cyan]")
+                    console.print(dl.get_summary())
+                    entries = dl.get_entries(limit=5)
+                    for e in entries:
+                        icon = "✅" if e.get("result") == "pass" else "❌" if e.get("result") == "fail" else "⏳"
+                        console.print(f"    {icon} #{e['id']}: {e['task']} → {e['strategy']}")
+                        if e.get("learnings"):
+                            console.print(f"       💡 {e['learnings']}")
+                console.print()
+                continue
+
+            if user_input.lower().startswith("/memory"):
+                from judecode.agent.memory import CrossSessionMemory
+                mem = CrossSessionMemory()
+                parts = user_input.strip().split(maxsplit=1)
+                subcmd = parts[1] if len(parts) > 1 else ""
+
+                if subcmd.startswith("patterns"):
+                    patterns = mem.get_successful_patterns()
+                    failed = mem.get_failed_patterns()
+                    console.print(f"\n  [bold green]✅ Successful patterns ({len(patterns)}):[/bold green]")
+                    for p in patterns[:5]:
+                        console.print(f"    • {p['pattern']} — {p['context']}")
+                    console.print(f"\n  [bold red]❌ Failed patterns ({len(failed)}):[/bold red]")
+                    for p in failed[:5]:
+                        console.print(f"    • {p['pattern']} — {p['context']}")
+                elif subcmd.startswith("sessions"):
+                    summaries = mem.get_session_summaries()
+                    console.print(f"\n  [bold cyan]📋 Recent sessions ({len(summaries)}):[/bold cyan]")
+                    for s in summaries:
+                        rate = s.get('completion_rate', 0)
+                        console.print(f"    • {s['session_id']}: {rate:.0%} complete — {s['goal'][:50]}")
+                else:
+                    console.print(f"\n  [bold cyan]🧠 Cross-Session Memory:[/bold cyan]")
+                    console.print(f"    /memory patterns — Show learned patterns")
+                    console.print(f"    /memory sessions — Show session history")
+                console.print()
+                continue
+
+            if user_input.lower() == "/sandbox":
+                if agent.sandbox.is_active:
+                    result = agent.sandbox.deactivate()
+                else:
+                    result = agent.sandbox.activate()
+                console.print(f"\n  {result}\n")
+                continue
+
+            if user_input.lower() == "/sandbox apply":
+                result = agent.sandbox.apply_all()
+                console.print(f"\n  🧪 Applied {result['applied']} change(s)")
+                if result['errors']:
+                    console.print(f"  ❌ {result['errors']} error(s)")
+                console.print()
+                continue
+
+            if user_input.lower() == "/sandbox discard":
+                result = agent.sandbox.discard_all()
+                console.print(f"\n  {result}\n")
+                continue
+
+            if user_input.lower() == "/permissions":
+                console.print(f"\n  {agent.permissions.get_permissions_summary()}\n")
+                continue
+
+            if user_input.lower().startswith("/permissions set"):
+                # /permissions set delete=ask
+                parts = user_input.strip().split()
+                if len(parts) >= 3:
+                    try:
+                        category, level = parts[2].split("=")
+                        agent.permissions.set_permission(category, level)
+                        console.print(f"  ✅ Set {category} = {level}\n")
+                    except ValueError:
+                        console.print("  [red]Usage: /permissions set <category>=<auto|ask|deny>[/red]\n")
+                else:
+                    console.print("  [dim]Usage: /permissions set delete=ask[/dim]\n")
+                continue
+
+            if user_input.lower() == "/daemon":
+                from judecode.agent.daemon import DaemonManager
+                dm = DaemonManager()
+                status = dm.get_status()
+                icon = "🟢" if status.get("running") else "🔴"
+                console.print(f"\n  {icon} Daemon: {'Running' if status.get('running') else 'Stopped'}")
+                if status.get("goal"):
+                    console.print(f"  🎯 Goal: {status['goal']}")
+                if status.get("pid"):
+                    console.print(f"  🔢 PID: {status['pid']}")
+                console.print(f"  📋 Logs: {status.get('log_file', 'N/A')}")
+                console.print()
+                continue
+
+            if user_input.lower().startswith("/daemon start"):
+                from judecode.agent.daemon import DaemonManager
+                parts = user_input.strip().split(maxsplit=2)
+                goal = parts[2] if len(parts) > 2 else ""
+                if not goal:
+                    console.print("  [red]Usage: /daemon start <goal>[/red]\n")
+                else:
+                    dm = DaemonManager()
+                    result = dm.start(goal=goal)
+                    console.print(f"\n  {result}\n")
+                continue
+
+            if user_input.lower() == "/daemon stop":
+                from judecode.agent.daemon import DaemonManager
+                dm = DaemonManager()
+                result = dm.stop()
+                console.print(f"\n  {result}\n")
+                continue
+
+            if user_input.lower().startswith("/daemon logs"):
+                from judecode.agent.daemon import DaemonManager
+                dm = DaemonManager()
+                logs = dm.get_logs(lines=30)
+                console.print(f"\n  [bold cyan]📋 Daemon Logs:[/bold cyan]")
+                console.print(logs)
+                continue
+
+            if user_input.lower() == "/notify":
+                result = agent.notifications.notify("JudeCode Test", "Notification system is working!")
+                console.print(f"\n  🔔 Notification results: {result}\n")
+                continue
+
+            if user_input.lower().startswith("/resume"):
+                parts = user_input.strip().split(maxsplit=1)
+                session_id = parts[1] if len(parts) > 1 else ""
+                if not session_id:
+                    # List incomplete sessions
+                    from judecode.agent.autonomous import SessionState
+                    incomplete = SessionState.find_incomplete_sessions()
+                    if incomplete:
+                        console.print("\n  [bold yellow]📋 Incomplete sessions:[/bold yellow]")
+                        for s in incomplete[-5:]:
+                            console.print(
+                                f"    • {s.session_id} — {s.status} — "
+                                f"{len(s.completed_tasks)} tasks done"
+                            )
+                        console.print("  [dim]Usage: /resume <session_id>[/dim]\n")
+                    else:
+                        console.print("  [dim]No incomplete sessions found.[/dim]\n")
+                else:
+                    from judecode.agent.autonomous import SessionState
+                    session = SessionState.load(session_id.strip())
+                    if session:
+                        agent.autonomous.session = session
+                        console.print(f"\n  [bold green]✅ Session {session_id} loaded![/bold green]")
+                        console.print(session.get_progress_summary())
+                        console.print()
+                        # Nudge agent to continue
+                        nudge = (
+                            f"[SYSTEM: Resuming session {session_id}. "
+                            f"Original goal: {session.original_goal}. "
+                            f"Completed {len(session.completed_tasks)} tasks. "
+                            f"Current task: #{session.current_task_id}. "
+                            f"Please continue from where we left off.]"
+                        )
+                        agent_running = True
+                        try:
+                            await agent.chat(nudge)
+                        finally:
+                            agent_running = False
+                    else:
+                        console.print(f"  [red]❌ Session '{session_id}' not found.[/red]\n")
+                continue
+
             if user_input.lower() == "/status":
                 ct = agent.continuation
                 console.print(f"\n  [bold cyan]Continuation Status:[/bold cyan]")
@@ -344,6 +618,9 @@ The agent can use tools like shell, read, write, edit, grep, web_search, etc.
                         console.print(f"      #{h['count']}: {h['reason']} at {h['timestamp'][:19]}")
                 else:
                     console.print(f"\n    [dim]No continuations triggered yet.[/dim]")
+                # ── Autonomous Mode Status ──
+                console.print(f"\n  [bold magenta]🤖 Autonomous Mode:[/bold magenta]")
+                console.print(agent.autonomous.get_status())
                 console.print()
                 continue
 

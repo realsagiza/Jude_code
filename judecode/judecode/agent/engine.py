@@ -3,8 +3,9 @@
 import asyncio
 import json
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import Any, Optional
 
 from judecode.api.client import ApiClient
 from judecode.agent.tools import TOOL_DEFINITIONS, execute_tool
@@ -20,7 +21,16 @@ from judecode.config import (
     CONTINUE_ON_STREAM_ERROR,
     CONTINUE_ON_INCOMPLETE_WORK,
     CONTINUE_ON_TOOL_ERROR,
+    AUTONOMOUS_MODE,
+    AUTONOMOUS_MAX_BUDGET,
+    AUTO_ROLLBACK_ENABLED,
+    HEALTH_MONITOR_ENABLED,
 )
+from judecode.agent.autonomous import AutonomousController
+from judecode.agent.checkpoint import CheckpointManager
+from judecode.agent.safety import PermissionManager, BackupManager, SandboxManager
+from judecode.agent.memory import DecisionLog, CrossSessionMemory
+from judecode.agent.daemon import NotificationManager
 from judecode.ui.console import console
 from judecode.utils.logger import get_logger, log_error_details
 from rich.text import Text
@@ -55,6 +65,30 @@ class AgentEngine:
         self.cancel_requested = False
         # ── Turn counter (shared between chat() and continue_task()) ──
         self._turn_count = 0
+        # ── Autonomous Controller (Phase 1+5: Auto-advance, State, Eval, Budget, Health, Rollback) ──
+        self.autonomous = AutonomousController(
+            max_budget=AUTONOMOUS_MAX_BUDGET,
+            enabled=AUTONOMOUS_MODE,
+            auto_rollback=AUTO_ROLLBACK_ENABLED,
+        )
+        # ── Checkpoint Manager (Phase 2) ──
+        self.checkpoint = CheckpointManager(
+            session_id=self.autonomous.session.session_id
+        )
+        # ── Link checkpoint manager to auto-rollback ──
+        self.autonomous.auto_rollback_manager.set_checkpoint_manager(self.checkpoint)
+        # ── Safety Systems (Phase 3) ──
+        self.permissions = PermissionManager()
+        self.permissions.load_from_env()
+        self.backups = BackupManager()
+        self.sandbox = SandboxManager()
+        # ── Memory Systems (Phase 2) ──
+        self.decisions = DecisionLog(
+            session_id=self.autonomous.session.session_id
+        )
+        self.memory = CrossSessionMemory()
+        # ── Notifications (Phase 4) ──
+        self.notifications = NotificationManager()
 
     # ── Context Management (Token Optimization) ──
 
@@ -213,6 +247,116 @@ class AgentEngine:
     def _is_nudge_message(self, content: str) -> bool:
         """Check if a message is a system nudge (starts with [SYSTEM:)."""
         return content.strip().startswith("[SYSTEM:")
+
+    def _track_token_usage(self, content: str, reasoning: str = "") -> None:
+        """Estimate and track token usage for budget monitoring.
+
+        Uses rough estimation: ~4 chars per token for English,
+        ~2 chars per token for CJK/Thai content.
+        This is approximate but sufficient for budget guardrails.
+        """
+        # Combine content + reasoning for output tokens
+        total_text = content + reasoning
+        if not total_text:
+            return
+
+        # Simple heuristic: count chars and estimate tokens
+        # Mixed content: use 3 chars/token as middle ground
+        estimated_output_tokens = max(1, len(total_text) // 3)
+
+        # Estimate input tokens from message history length
+        total_input_chars = sum(
+            len(str(m.get("content", ""))) for m in self.messages
+        )
+        estimated_input_tokens = max(1, total_input_chars // 3)
+
+        self.autonomous.budget.record_usage(
+            input_tokens=estimated_input_tokens,
+            output_tokens=estimated_output_tokens,
+        )
+
+    def _save_session_memory(self) -> None:
+        """Save session summary to cross-session memory on session end."""
+        try:
+            s = self.autonomous.session
+            self.memory.save_session_summary(
+                session_id=s.session_id,
+                goal=s.original_goal,
+                completed_tasks=s.completed_tasks,
+                total_tasks=len(s.completed_tasks) + (1 if s.current_task_id else 0),
+                errors_encountered=[e.get("error", "")[:100] for e in s.errors[-5:]],
+            )
+            # Save project context if we're in a project directory
+            import os
+            cwd = os.getcwd()
+            self.memory.save_project_context(
+                project_path=cwd,
+                conventions={"last_session": s.session_id},
+            )
+        except Exception as e:
+            logger.debug(f"Failed to save session memory: {e}")
+
+    def _pre_tool_hook(self, tool_name: str, tool_params: dict) -> Optional[str]:
+        """Pre-execution hook: backup files, check permissions, create checkpoint.
+
+        Returns an error string if execution should be blocked, or None.
+        """
+        # ── Permission check ──
+        allowed, level, reason = self.permissions.check_permission(tool_name, tool_params)
+        if not allowed:
+            return reason
+
+        # ── Auto-backup before file modifications ──
+        file_modifying_tools = {"write", "edit", "delete"}
+        if tool_name in file_modifying_tools:
+            path = tool_params.get("path", "")
+            if path and os.path.exists(path):
+                self.backups.backup_file(path, reason=tool_name)
+
+        # ── Checkpoint before write/edit ──
+        if tool_name in ("write", "edit") and tool_params.get("path"):
+            self.checkpoint.create_checkpoint(
+                file_paths=[tool_params["path"]],
+                reason=tool_name,
+                task_id=self.autonomous.session.current_task_id,
+            )
+
+        return None  # Allow execution
+
+    def _post_tool_hook(self, tool_name: str, tool_params: dict, result: str) -> None:
+        """Post-execution hook: record decisions, notify on important events."""
+        # ── Record significant decisions ──
+        if tool_name == "task_complete":
+            task_id = tool_params.get("task_id")
+            self.decisions.record(
+                task=f"Complete task #{task_id}",
+                strategy="task_complete",
+                result="pass" if "✅" in result else "fail",
+                task_id=task_id,
+            )
+            # ── Notify on task completion ──
+            self.notifications.notify_task_complete(
+                task_name=f"Task #{task_id}",
+                success="✅" in result,
+            )
+
+        elif tool_name == "task_start":
+            task_id = tool_params.get("task_id")
+            self.decisions.record(
+                task=f"Start task #{task_id}",
+                strategy="task_start",
+                result="pending",
+                task_id=task_id,
+            )
+
+        # ── Record errors in decision log ──
+        if result.lstrip().lower().startswith("error executing tool"):
+            self.decisions.record(
+                task=f"Tool: {tool_name}",
+                strategy=str(tool_params)[:100],
+                result="fail",
+                learnings=f"Error: {result[:200]}",
+            )
 
     @staticmethod
     def _is_context_overflow_error(error_text: str) -> bool:
@@ -517,6 +661,10 @@ class AgentEngine:
                 msg["reasoning_content"] = full_reasoning
             self.messages.append(msg)
 
+            # ── Track estimated tokens for budget ──
+            self._track_token_usage(full_content, full_reasoning)
+            self.autonomous.on_turn_complete()
+
             # ── Check for token limit truncation (only valid no-tool-call continuation) ──
             if finish_reason == "length":
                 if self.continuation.can_continue():
@@ -627,20 +775,28 @@ class AgentEngine:
         if len(parsed_calls) == 1:
             tc = parsed_calls[0]
             self._show_tool_call(tc["name"], tc["args"])
-            try:
-                result = execute_tool(tc["name"], tc["args"])
-            except TypeError as e:
-                log_error_details(
-                    logger,
-                    f"Tool execution TypeError in '{tc['name']}'",
-                    exc_info=True,
-                    extra={"args": tc["args"]},
-                )
-                result = (
-                    f"Error executing tool '{tc['name']}': "
-                    f"TypeError ({type(e).__name__}: {e}). "
-                    "This usually means a required parameter was missing."
-                )
+
+            # ── Pre-tool hook: backup, permission check ──
+            blocked = self._pre_tool_hook(tc["name"], tc["args"])
+            if blocked:
+                result = blocked
+            else:
+                try:
+                    result = execute_tool(tc["name"], tc["args"])
+                except TypeError as e:
+                    log_error_details(
+                        logger,
+                        f"Tool execution TypeError in '{tc['name']}'",
+                        exc_info=True,
+                        extra={"args": tc["args"]},
+                    )
+                    result = (
+                        f"Error executing tool '{tc['name']}': "
+                        f"TypeError ({type(e).__name__}: {e}). "
+                        "This usually means a required parameter was missing."
+                    )
+                # ── Post-tool hook: decision log, notifications ──
+                self._post_tool_hook(tc["name"], tc["args"], result)
             self.messages.append({
                 "role": "tool",
                 "tool_call_id": tc["id"],
@@ -675,6 +831,10 @@ class AgentEngine:
                         f"Error executing tool '{tc['name']}': "
                         f"{type(result).__name__}: {result}"
                     )
+                # ── Pre-tool hook for parallel (backup only, can't block) ──
+                self._pre_tool_hook(tc["name"], tc["args"])
+                # ── Post-tool hook ──
+                self._post_tool_hook(tc["name"], tc["args"], result)
                 self.messages.append({
                     "role": "tool",
                     "tool_call_id": tc["id"],
@@ -690,6 +850,25 @@ class AgentEngine:
                 "\n  [bold yellow]⏸ Paused by user after tool execution. Type a new message to redirect, or /continue to resume.[/bold yellow]\n"
             )
             return False  # Stop the loop
+
+        # ── Autonomous Controller Hook (Phase 1 + Phase 5) ──
+        # After tool execution, check for auto-advance, self-eval, budget,
+        # health monitoring, self-healing, and auto-rollback
+        if self.autonomous.enabled and parsed_calls:
+            for i, tc in enumerate(parsed_calls):
+                result_text = tool_results[i] if i < len(tool_results) else ""
+                auto_nudge = self.autonomous.on_tool_executed(
+                    tool_name=tc["name"],
+                    tool_params=tc["args"],
+                    tool_result=result_text,
+                    message_count=len(self.messages),
+                )
+                if auto_nudge:
+                    self.messages.append({"role": "user", "content": auto_nudge})
+                    console.print(
+                        f"\n  [bold magenta]🤖 Auto-nudge: {auto_nudge[:80]}...[/bold magenta]\n"
+                    )
+                    return True  # Continue with nudge
 
         # ── Auto-continuation check after tool execution ──
         if (
@@ -749,6 +928,8 @@ class AgentEngine:
         # Reset for new user message
         self.continuation.reset(user_message)
         self._turn_count = 0
+        # ── Start autonomous session tracking ──
+        self.autonomous.on_session_start(goal=user_message)
 
         self.messages.append({"role": "user", "content": user_message})
 
@@ -761,12 +942,35 @@ class AgentEngine:
                     "redirect, or /continue to resume.[/bold yellow]\n"
                 )
                 return
+
+            # ── Phase 5: Context Compaction for long sessions ──
+            if self.autonomous.enabled and self.autonomous.should_compact_context(self.messages):
+                console.print(
+                    "\n  [bold cyan]🧠 Context compaction: trimming old messages "
+                    "to keep session running smoothly...[/bold cyan]"
+                )
+                self.messages = self.autonomous.compact_context(self.messages)
+                console.print(
+                    f"  [dim green]✓ Compacted to {len(self.messages)} messages[/dim green]"
+                )
+
             self._turn_count += 1
             should_continue = await self._process_turn(turn_number=self._turn_count)
             if not should_continue:
+                self.autonomous.on_session_end()
+                self._save_session_memory()
+                self.notifications.notify_session_complete(
+                    goal=self.autonomous.session.original_goal,
+                    completed=len(self.autonomous.session.completed_tasks),
+                    total=len(self.autonomous.session.completed_tasks) + (
+                        1 if self.autonomous.session.current_task_id else 0
+                    ),
+                )
                 return
 
         console.print(
             f"\n  [bold yellow]Reached max conversation turns ({MAX_TURNS}). "
             "Stopping to prevent infinite loop.[/bold yellow]\n"
         )
+        self.autonomous.on_session_end()
+        self._save_session_memory()
