@@ -177,10 +177,6 @@ class JudeCodeTUI(App):
         height: auto;
     }
 
-    #input > .input--placeholder {
-        color: $text-disabled;
-    }
-
     Header {
         dock: top;
         background: $primary-darken-2;
