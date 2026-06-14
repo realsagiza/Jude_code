@@ -140,12 +140,11 @@ class JudeCodeTUI(App):
 
     CSS = """
     Screen {
-        layout: dock;
+        layout: vertical;
         background: $surface;
     }
 
     #output-container {
-        dock: top;
         height: 1fr;
         border-bottom: solid $primary;
     }
@@ -158,7 +157,6 @@ class JudeCodeTUI(App):
     }
 
     #bottom-area {
-        dock: bottom;
         height: auto;
         background: $panel;
         border-top: solid $primary;
