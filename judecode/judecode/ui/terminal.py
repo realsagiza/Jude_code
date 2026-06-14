@@ -376,10 +376,14 @@ def main_cli() -> None:
     # Default: try Textual TUI, fall back to simple async
     try:
         from judecode.ui.textual_app import main_cli as tui_main
-        tui_main()
     except ImportError:
+        # Textual not installed — fall back to simple mode
         from judecode.ui.async_terminal import main_cli as async_main
         async_main()
+        return
+
+    # Run TUI (let it crash visibly if there's an error)
+    tui_main()
 
 
 if __name__ == "__main__":
