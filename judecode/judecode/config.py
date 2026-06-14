@@ -4,6 +4,7 @@ Multi-Provider Support:
     Jude Code supports multiple LLM providers. Set JUDECODE_PROVIDER to choose:
       - "deepseek"  : DeepSeek API (default, OpenAI-compatible)
       - "anthropic" : Anthropic Claude API (native Messages API)
+      - "zai"       : Z.AI / Zhipu GLM API (OpenAI-compatible)
 
     Provider-specific env vars:
       # DeepSeek
@@ -14,6 +15,12 @@ Multi-Provider Support:
       # Anthropic
       JUDECODE_ANTHROPIC_API_KEY=...
       JUDECODE_ANTHROPIC_MODEL=claude-sonnet-4-20250514
+
+      # Z.AI (GLM)
+      JUDECODE_ZAI_API_KEY=...
+      JUDECODE_ZAI_MODEL=glm-4.6
+      JUDECODE_ZAI_BASE_URL=https://api.z.ai/api/paas/v4
+      # For GLM Coding Plan use: https://api.z.ai/api/coding/paas/v4
 
     Other config values:
       JUDECODE_VISION_MODEL
@@ -53,7 +60,7 @@ def _env_int(key: str, default: int) -> int:
 
 
 # ── Provider Selection ──
-# "deepseek" (default) or "anthropic"
+# "deepseek" (default), "anthropic", or "zai"
 PROVIDER = _env("PROVIDER", "deepseek").lower().strip()
 
 # ── DeepSeek API (OpenAI-compatible) ──
@@ -71,10 +78,22 @@ DEEPSEEK_MODEL = _env("DEEPSEEK_MODEL", "deepseek-chat")
 ANTHROPIC_API_KEY = _env("ANTHROPIC_API_KEY", "")
 ANTHROPIC_MODEL = _env("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
 
+# ── Z.AI / Zhipu GLM API (OpenAI-compatible) ──
+# ใช้ Z.AI GLM models (glm-4.6 ฯลฯ) ผ่าน OpenAI-compatible endpoint
+# ⚠️ ต้องตั้งค่า JUDECODE_ZAI_API_KEY environment variable
+# General endpoint:      https://api.z.ai/api/paas/v4
+# GLM Coding Plan:       https://api.z.ai/api/coding/paas/v4
+ZAI_BASE_URL = _env("ZAI_BASE_URL", "https://api.z.ai/api/paas/v4")
+ZAI_API_KEY = _env("ZAI_API_KEY", "")
+ZAI_MODEL = _env("ZAI_MODEL", "glm-4.6")
+
 # ── Active provider config (used by the app) ──
 if PROVIDER == "anthropic":
     _ACTIVE_KEY = ANTHROPIC_API_KEY
     _ACTIVE_MODEL = ANTHROPIC_MODEL
+elif PROVIDER == "zai":
+    _ACTIVE_KEY = ZAI_API_KEY
+    _ACTIVE_MODEL = ZAI_MODEL
 else:
     _ACTIVE_KEY = DEEPSEEK_API_KEY
     _ACTIVE_MODEL = DEEPSEEK_MODEL
@@ -106,6 +125,10 @@ if PROVIDER == "anthropic":
     BASE_URL = "https://api.anthropic.com/v1"
     API_KEY = ANTHROPIC_API_KEY
     MODEL = ANTHROPIC_MODEL
+elif PROVIDER == "zai":
+    BASE_URL = ZAI_BASE_URL
+    API_KEY = ZAI_API_KEY
+    MODEL = ZAI_MODEL
 else:
     BASE_URL = DEEPSEEK_BASE_URL
     API_KEY = DEEPSEEK_API_KEY

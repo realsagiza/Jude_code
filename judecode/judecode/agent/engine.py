@@ -23,6 +23,7 @@ from judecode.config import (
 )
 from judecode.ui.console import console
 from judecode.utils.logger import get_logger, log_error_details
+from rich.markup import escape as _escape_markup
 
 logger = get_logger("judecode.engine")
 
@@ -123,6 +124,38 @@ class AgentEngine:
         """Check if a message is a system nudge (starts with [SYSTEM:)."""
         return content.strip().startswith("[SYSTEM:")
 
+    @staticmethod
+    def _is_context_overflow_error(error_text: str) -> bool:
+        """Detect if an error is caused by the context/prompt being too large.
+
+        When the conversation grows too long, the API rejects the request with
+        a 'context length exceeded' / 'too large' style error. Auto-continuing
+        in that case is USELESS — the context is still too big, so it just loops
+        forever. We must detect this and STOP instead of continuing.
+        """
+        if not error_text:
+            return False
+        lower = error_text.lower()
+        overflow_markers = (
+            "context length",
+            "context_length_exceeded",
+            "maximum context",
+            "context window",
+            "too long",
+            "too large",
+            "prompt is too long",
+            "reduce the length",
+            "request too large",
+            "exceeds the maximum",
+            "exceed the maximum",
+            "input length",
+            "max_tokens",
+            "string too long",
+            "payload too large",
+            "413",
+        )
+        return any(marker in lower for marker in overflow_markers)
+
     def request_stop(self) -> None:
         """Request the agent to stop/pause after the current action."""
         self.cancel_requested = True
@@ -178,11 +211,23 @@ class AgentEngine:
         # Show thinking indicator
         self._show_thinking(turn_number)
 
+        # Track whether the stream was aborted mid-flight by Ctrl+C
+        stream_aborted = False
+
         # Stream the response
         try:
             async for chunk in self.api.chat_completion(
                 self.messages, tools=TOOL_DEFINITIONS
             ):
+                # ── Abort streaming IMMEDIATELY if user pressed Ctrl+C ──
+                # This is the key fix: previously cancel was only checked AFTER
+                # the whole stream finished, so a long response would keep
+                # flowing for a long time before stopping. Now we break out of
+                # the token stream as soon as the stop flag is set.
+                if self.cancel_requested:
+                    stream_aborted = True
+                    break
+
                 choices = chunk.get("choices", [])
                 if not choices:
                     continue
@@ -205,8 +250,14 @@ class AgentEngine:
                                 "  [dim]───────────────────── Reasoning ─────────────────────[/dim]"
                             )
                             has_shown_reasoning = True
+                        # Escape the model's reasoning text so any stray brackets
+                        # (e.g. "[", "]") are NOT interpreted as Rich markup.
+                        # Previously this leaked literal "[dim]" / "/dim" into the
+                        # output. Keeping it a string preserves smooth streaming in
+                        # both the legacy console and the TUI sink.
                         console.print(
-                            f"[dim][italic]{reasoning_piece}[/italic][/dim]", end=""
+                            f"[dim italic]{_escape_markup(reasoning_piece)}[/dim italic]",
+                            end="",
                         )
 
                 # ── Extract normal content ──
@@ -223,7 +274,9 @@ class AgentEngine:
                             console.print()
                         console.print()
                         has_started_output = True
-                    console.print(content_piece, end="")
+                    # Escape so any bracketed text in the answer is shown
+                    # literally and never mis-parsed as Rich markup.
+                    console.print(_escape_markup(content_piece), end="")
 
                 # Handle tool calls
                 tool_call_pieces = delta.get("tool_calls", [])
@@ -257,6 +310,26 @@ class AgentEngine:
                     "has_partial": bool(full_content),
                 },
             )
+
+            # ── Context overflow → STOP, do NOT auto-continue ──
+            # Continuing would just re-send the same oversized context and loop
+            # forever. Tell the user to clear the conversation instead.
+            if self._is_context_overflow_error(error_msg):
+                # Save whatever partial assistant content we got so /clear works cleanly
+                if full_content:
+                    self.messages.append({
+                        "role": "assistant",
+                        "content": full_content,
+                    })
+                console.print(
+                    "\n  [bold red]⛔ Context too large — the conversation has grown "
+                    "beyond the model's limit.[/bold red]\n"
+                    "  [yellow]Auto-continuation stopped to prevent an infinite loop.[/yellow]\n"
+                    "  [dim]Type [bold]/clear[/bold] to start a fresh conversation, "
+                    "or [bold]/compact[/bold] if available.[/dim]\n"
+                )
+                return False  # Hard stop — no continuation
+
             self.continuation.had_stream_error = True
             self.continuation.partial_content_buffer = full_content
 
@@ -289,6 +362,25 @@ class AgentEngine:
                 "  [dim]───────────────── End Reasoning ───────────────────[/dim]"
             )
             console.print()
+
+        # ── Ctrl+C aborted the stream mid-flight → pause immediately ──
+        # We saved whatever partial text/tool-calls arrived; store the partial
+        # assistant content and STOP. Do NOT execute partial tool calls and do
+        # NOT auto-continue.
+        if stream_aborted:
+            self.cancel_requested = False
+            msg: dict[str, Any] = {
+                "role": "assistant",
+                "content": full_content,
+            }
+            if full_reasoning:
+                msg["reasoning_content"] = full_reasoning
+            self.messages.append(msg)
+            console.print(
+                "\n  [bold yellow]⏸ Stopped mid-response by user. "
+                "Type a new message to redirect, or /continue to resume.[/bold yellow]\n"
+            )
+            return False  # Hard stop
 
         # ── Save finish_reason for continuation logic ──
         self.continuation.last_finish_reason = finish_reason
@@ -567,6 +659,14 @@ class AgentEngine:
         self.messages.append({"role": "user", "content": user_message})
 
         while self._turn_count < MAX_TURNS:
+            # ── Stop before starting a new turn if user requested it ──
+            if self.cancel_requested:
+                self.cancel_requested = False
+                console.print(
+                    "\n  [bold yellow]⏸ Paused by user. Type a new message to "
+                    "redirect, or /continue to resume.[/bold yellow]\n"
+                )
+                return
             self._turn_count += 1
             should_continue = await self._process_turn(turn_number=self._turn_count)
             if not should_continue:
