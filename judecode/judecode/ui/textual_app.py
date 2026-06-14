@@ -1,18 +1,4 @@
 """Textual TUI for Jude Code — fixed-layout terminal UI.
-
-Layout (dock-based, reliable):
-  ┌─ Header ──────────────────────────────────────┐
-  │  Jude Code | provider | model                  │
-  ├────────────────────────────────────────────────┤
-  │ ┌─ AI Output ────────────────────────────────┐ │
-  │ │  (RichLog - fills all remaining space)     │ │
-  │ │  auto-scrolls to bottom                    │ │
-  │ └────────────────────────────────────────────┘ │
-  ├─ Status ──────────────────────────────────────┤
-  │  ⏳ AI: "..." │ 📋 2 queued: "..." → "..."    │
-  ├─ Input ───────────────────────────────────────┤
-  │  ⏵ [type /help for commands]                 │
-  └──────────────────────────────────────────────┘
 """
 
 import asyncio
@@ -25,7 +11,7 @@ from rich.text import Text
 
 from textual.app import App, ComposeResult
 from textual.widgets import Header, RichLog, Input, Static
-from textual.containers import Container, VerticalScroll
+from textual.containers import Container
 from textual.reactive import reactive
 from textual import work
 
@@ -33,10 +19,11 @@ from judecode.config import (
     SYSTEM_PROMPT, MODEL, BASE_URL, MAX_CONTINUATIONS, PROVIDER,
 )
 from judecode.api import create_api_client
-from judecode.agent.engine import AgentEngine
 
 
-# ── Console Proxy ───────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════
+# 1. Console Proxy — must be created BEFORE AgentEngine import
+# ═══════════════════════════════════════════════════════════════════════
 
 class RichLogProxy:
     """Proxies console.print() calls to a Textual RichLog widget."""
@@ -49,51 +36,45 @@ class RichLogProxy:
             force_terminal=False,
             color_system="truecolor",
             width=120,
-            no_color=False,
         )
 
     def set_widget(self, widget: RichLog) -> None:
         self._widget = widget
 
     def print(self, *args, **kwargs) -> None:
-        """Forward print to RichLog widget."""
         if self._widget is None:
             return
-
         try:
-            # Reset buffer
             self._buf.truncate(0)
             self._buf.seek(0)
-
-            # Capture Rich output
-            self._temp_console.file = self._buf
             self._temp_console.print(*args, **kwargs)
-
             text = self._buf.getvalue()
             if text:
-                # Write each non-empty line to RichLog
                 for line in text.split("\n"):
-                    stripped = line.rstrip()
-                    if stripped:
-                        self._widget.write(stripped, scroll_end=True)
-                    else:
-                        self._widget.write("", scroll_end=True)
+                    s = line.rstrip()
+                    self._widget.write(s if s else "", scroll_end=True)
         except Exception:
-            pass
-
-    def rule(self, *args, **kwargs) -> None:
-        """Print a horizontal rule."""
-        self.print("─" * 60, style="dim")
+            import traceback
+            traceback.print_exc()
 
     def __getattr__(self, name):
         return getattr(self._temp_console, name)
 
 
-# Global proxy - must be created before widget exists
+# Create the global proxy instance
 console_proxy = RichLogProxy()
 
+# Replace console NOW — before AgentEngine imports it
+import judecode.ui.console as _console_mod
+_console_mod.console = console_proxy
 
-# ── Status Bar ─────────────────────────────────────────────────────────────
+# NOW safe to import engine — it will get the proxy
+from judecode.agent.engine import AgentEngine
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 2. Status Bar Widget
+# ═══════════════════════════════════════════════════════════════════════
 
 class StatusBar(Static):
     """Custom status bar showing AI state + queue preview."""
@@ -106,7 +87,7 @@ class StatusBar(Static):
         text = Text(no_wrap=True)
 
         if self.agent_busy:
-            preview = self._truncate(self.current_message, 35)
+            preview = self._trunc(self.current_message, 35)
             text.append("⏳ ", style="bold yellow")
             text.append(f'AI: "{preview}"', style="bold white")
         else:
@@ -119,52 +100,48 @@ class StatusBar(Static):
             for i, p in enumerate(self.queue_previews[:3]):
                 if i > 0:
                     text.append(" → ", style="dim")
-                text.append(f'"{self._truncate(p, 15)}"', style="dim")
+                text.append(f'"{self._trunc(p, 15)}"', style="dim")
             if len(self.queue_previews) > 3:
                 text.append(f" +{len(self.queue_previews) - 3}", style="dim")
 
         return text
 
     @staticmethod
-    def _truncate(s: str, max_len: int) -> str:
+    def _trunc(s: str, max_len: int) -> str:
         s = s.replace("\n", " ").strip()
         if len(s) <= max_len:
             return s
         return s[:max_len - 2] + "…"
 
 
-# ── Main TUI App ───────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════
+# 3. Main TUI App
+# ═══════════════════════════════════════════════════════════════════════
 
 class JudeCodeTUI(App):
     """Jude Code Textual TUI application."""
 
     CSS = """
-    Screen {
-        layout: vertical;
-    }
+    Screen { layout: vertical; }
 
     #output-container {
         height: 1fr;
         border-bottom: solid white;
     }
-
     #output {
         height: 100%;
         border: none;
         padding: 0 1;
     }
-
     #bottom-area {
         height: auto;
         border-top: solid white;
     }
-
     #status-bar {
         height: 1;
         padding: 0 1;
         color: white;
     }
-
     #input {
         border: none;
         padding: 0 1;
@@ -174,7 +151,6 @@ class JudeCodeTUI(App):
 
     BINDINGS = [
         ("ctrl+c", "quit_app", "Quit"),
-        ("escape", "focus_input", "Focus Input"),
     ]
 
     def __init__(self):
@@ -188,50 +164,35 @@ class JudeCodeTUI(App):
         self._queued_previews: list[str] = []
         self._quit_requested = False
 
-    # ── Compose ────────────────────────────────────────────────────────
+    # ── Compose ────────────────────────────────────────────────────
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Container(id="output-container"):
-            yield RichLog(id="output", markup=True, wrap=True, highlight=True, auto_scroll=True)
+            yield RichLog(id="output", markup=True, wrap=True, auto_scroll=True)
         with Container(id="bottom-area"):
             yield StatusBar(id="status-bar")
-            yield Input(
-                id="input",
-                placeholder="⏵ Type /help for commands...",
-            )
+            yield Input(id="input", placeholder="⏵ Type /help for commands...")
 
-    # ── Mount ──────────────────────────────────────────────────────────
+    # ── Mount ──────────────────────────────────────────────────────
 
     async def on_mount(self) -> None:
-        """Initialize after widgets are mounted."""
         output = self.query_one("#output", RichLog)
         console_proxy.set_widget(output)
-
-        # Replace the global console with our proxy
-        import judecode.ui.console as console_mod
-        console_mod.console = console_proxy
-
-        # Header
-        header = self.query_one(Header)
-        header.sub_title = f"[dim]{PROVIDER.upper()} | {MODEL}[/dim]"
-
-        # Welcome
-        output.write("[bold cyan]Jude Code[/bold cyan] — Terminal AI Coding Assistant")
-        output.write(f"[dim]Provider: {PROVIDER.upper()} | Model: {MODEL}[/dim]")
-        output.write("[dim]Commands: /help /quit /stop /queue /clear[/dim]")
-        output.write("")
+        console_proxy.print("[bold cyan]Jude Code[/bold cyan] — Terminal AI Coding Assistant")
+        console_proxy.print(f"[dim]{PROVIDER.upper()} | {MODEL}[/dim]")
+        console_proxy.print("[dim]Commands: /help /quit /stop /queue /clear[/dim]")
+        console_proxy.print("")
 
         self.query_one("#input", Input).focus()
         self.agent_worker()
 
-    # ── Input Handler ──────────────────────────────────────────────────
+    # ── Input ──────────────────────────────────────────────────────
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         line = event.value.strip()
         if not line:
             return
-
         event.input.value = ""
 
         if line.startswith("/") or line.lower() in ("quit", "exit", ":q"):
@@ -241,41 +202,39 @@ class JudeCodeTUI(App):
         self._quit_requested = False
         self._queued_previews.append(line)
         await self.input_queue.put(line)
-        self._update_status_bar()
+        self._refresh_status()
 
-    # ── Worker: Agent Loop ─────────────────────────────────────────────
+    # ── Agent Worker ───────────────────────────────────────────────
 
     @work(exclusive=True, thread=False)
     async def agent_worker(self) -> None:
         while self.is_running:
             try:
-                message = await asyncio.wait_for(
-                    self.input_queue.get(), timeout=0.5
-                )
+                msg = await asyncio.wait_for(self.input_queue.get(), timeout=0.5)
             except asyncio.TimeoutError:
                 continue
 
             self._agent_busy = True
-            self._current_message = message
+            self._current_message = msg
             if self._queued_previews:
                 self._queued_previews.pop(0)
-            self._update_status_bar()
+            self._refresh_status()
 
             try:
                 self.agent.reset_stop()
-                await self.agent.chat(message)
+                await self.agent.chat(msg)
             except Exception as e:
                 console_proxy.print(f"[bold red]Error:[/bold red] {e}")
             finally:
                 self._agent_busy = False
                 self._current_message = ""
                 self.input_queue.task_done()
-                self._update_status_bar()
+                self._refresh_status()
                 console_proxy.print("[dim]" + "─" * 50 + "[/dim]")
 
-    # ── Status Bar Update ──────────────────────────────────────────────
+    # ── Status ─────────────────────────────────────────────────────
 
-    def _update_status_bar(self) -> None:
+    def _refresh_status(self) -> None:
         try:
             bar = self.query_one("#status-bar", StatusBar)
             bar.agent_busy = self._agent_busy
@@ -284,149 +243,110 @@ class JudeCodeTUI(App):
         except Exception:
             pass
 
-    # ── Command Handler ────────────────────────────────────────────────
+    # ── Commands ───────────────────────────────────────────────────
 
     async def _handle_command(self, cmd: str) -> None:
-        cmd_lower = cmd.lower().strip()
-
-        if cmd_lower not in ("/quit", "/exit", ":q", "quit", "exit"):
+        c = cmd.lower().strip()
+        if c not in ("/quit", "/exit", ":q", "quit", "exit"):
             self._quit_requested = False
 
-        if cmd_lower in ("/quit", "/exit", ":q", "quit", "exit"):
+        if c in ("/quit", "/exit", ":q", "quit", "exit"):
             if self._agent_busy and not self._quit_requested:
                 self._quit_requested = True
-                console_proxy.print("[bold yellow]⚠ Agent is busy. Type /quit again to force quit.[/bold yellow]")
+                console_proxy.print("[bold yellow]⚠ AI busy. Type /quit again.[/bold yellow]")
                 return
-            await self.action_quit_app()
-            return
+            await self.action_quit()
 
-        if cmd_lower == "/help":
-            console_proxy.print("""
-[bold cyan]Commands:[/bold cyan]
-  /help      Show help
-  /quit      Exit (twice when AI busy)
-  /clear     Clear conversation
-  /stop      Pause agent
-  /queue     Show pending queue
-  /continue  Trigger continuation
-  /status    Continuation status
-  Ctrl+C     Quit app
-""")
-            return
+        elif c == "/help":
+            console_proxy.print("[bold cyan]/help /quit /clear /stop /queue /continue /status[/bold cyan]")
 
-        if cmd_lower == "/clear":
+        elif c == "/clear":
             if self._agent_busy:
-                console_proxy.print("[yellow]⚠ Cannot clear while agent is busy.[/yellow]")
-                return
+                console_proxy.print("[yellow]⚠ Cannot clear while AI busy.[/yellow]"); return
             self.agent.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
             self.agent.reset_stop()
             self.agent._turn_count = 0
             self._queued_previews.clear()
-            try:
-                self.query_one("#output", RichLog).clear()
-            except Exception:
-                pass
+            try: self.query_one("#output", RichLog).clear()
+            except: pass
             console_proxy.print("[dim]Conversation cleared[/dim]")
-            self._update_status_bar()
-            return
+            self._refresh_status()
 
-        if cmd_lower == "/queue":
-            qsize = self.input_queue.qsize()
-            console_proxy.print(f"Queue: {qsize} pending  |  Agent: {'🔵 Busy' if self._agent_busy else '🟢 Idle'}")
+        elif c == "/queue":
+            qs = self.input_queue.qsize()
+            console_proxy.print(f"Queue: {qs}  |  Agent: {'🔵 Busy' if self._agent_busy else '🟢 Idle'}")
             for i, p in enumerate(self._queued_previews[:10]):
-                console_proxy.print(f"  #{i+1}: {self._truncate(p, 50)}")
-            return
+                console_proxy.print(f"  #{i+1}: {self._trunc(p, 50)}")
 
-        if cmd_lower in ("/stop", "/pause"):
+        elif c in ("/stop", "/pause"):
             if self._agent_busy:
                 self.agent.request_stop()
                 console_proxy.print("[yellow]⏸ Stop requested...[/yellow]")
             else:
                 console_proxy.print("[dim]Agent is not running.[/dim]")
-            return
 
-        if cmd_lower == "/continue":
+        elif c == "/continue":
             if self._agent_busy:
                 console_proxy.print("[dim]Agent is already running.[/dim]")
             elif self.agent.continuation.can_continue():
                 self._agent_busy = True
-                self._current_message = "(manual continuation)"
-                self._update_status_bar()
-                try:
-                    await self.agent.continue_task()
-                except Exception as e:
-                    console_proxy.print(f"[red]Error: {e}[/red]")
+                self._current_message = "(manual)"
+                self._refresh_status()
+                try: await self.agent.continue_task()
+                except Exception as e: console_proxy.print(f"[red]Error: {e}[/red]")
                 finally:
                     self._agent_busy = False
                     self._current_message = ""
-                    self._update_status_bar()
+                    self._refresh_status()
             else:
                 console_proxy.print("[red]Max continuations reached.[/red]")
-            return
 
-        if cmd_lower == "/status":
+        elif c == "/status":
             ct = self.agent.continuation
-            console_proxy.print(f"Max continuations: {ct.max_continuations}  |  Used: {ct.count}")
-            return
+            console_proxy.print(f"Continuations: {ct.count}/{ct.max_continuations}")
 
-        if cmd_lower == "/model":
-            console_proxy.print(f"Provider: {PROVIDER.upper()}  |  Model: {MODEL}  |  API: {BASE_URL}")
-            return
+        elif c == "/model":
+            console_proxy.print(f"{PROVIDER.upper()} | {MODEL} | {BASE_URL}")
 
-        console_proxy.print(f"[dim]Unknown: {cmd}. Type /help[/dim]")
+        else:
+            console_proxy.print(f"[dim]Unknown: {cmd}[/dim]")
 
     @staticmethod
-    def _truncate(s: str, max_len: int) -> str:
+    def _trunc(s: str, n: int) -> str:
         s = s.replace("\n", " ").strip()
-        if len(s) <= max_len:
-            return s
-        return s[:max_len - 2] + "…"
+        return s if len(s) <= n else s[:n-2] + "…"
 
-    # ── Actions ────────────────────────────────────────────────────────
+    # ── Actions ────────────────────────────────────────────────────
 
-    async def action_quit_app(self) -> None:
+    async def action_quit(self) -> None:
         if self._agent_busy:
             self.agent.request_stop()
-        self._agent_busy = False
         self.running = False
         await self.api_client.close()
         self.exit()
-
-    async def action_focus_input(self) -> None:
-        self.query_one("#input", Input).focus()
 
     async def on_unmount(self) -> None:
         await self.api_client.close()
 
 
-# ── CLI Entry Points ────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════
+# 4. CLI Entry Point
+# ═══════════════════════════════════════════════════════════════════════
 
 def main_cli() -> None:
     import sys
-
     if len(sys.argv) > 1:
-        arg = sys.argv[1]
-        if arg in ("--version", "-v"):
+        a = sys.argv[1]
+        if a in ("--version", "-v"):
             from judecode import __version__
-            print(f"judecode v{__version__}")
-            return
-        if arg in ("--help", "-h"):
-            print("Jude Code - Your terminal AI coding assistant")
-            print("Usage: judecode [OPTIONS]")
-            print("  --legacy   Legacy single-thread mode")
-            print("  --simple   Async mode without Textual TUI")
-            return
-        if arg == "--legacy":
-            from judecode.ui.terminal import main_cli as legacy_main
-            legacy_main()
-            return
-        if arg == "--simple":
-            from judecode.ui.async_terminal import main_cli as async_main
-            async_main()
-            return
-
-    app = JudeCodeTUI()
-    app.run()
+            print(f"judecode v{__version__}"); return
+        if a in ("--help", "-h"):
+            print("Usage: judecode [--legacy|--simple]"); return
+        if a == "--legacy":
+            from judecode.ui.terminal import main_cli as m; m(); return
+        if a == "--simple":
+            from judecode.ui.async_terminal import main_cli as m; m(); return
+    JudeCodeTUI().run()
 
 
 if __name__ == "__main__":
