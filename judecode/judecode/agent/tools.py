@@ -59,6 +59,7 @@ try:
         screenshot, get_screen_size, get_mouse_position, get_active_window_info,
         mouse_move, mouse_click, mouse_double_click, mouse_drag,
         keyboard_type, keyboard_press, keyboard_hotkey,
+        keyboard_type_enqueue, keyboard_queue_status, keyboard_queue_clear,
         scroll, open_app, list_running_apps,
         get_browser_accessibility_snapshot,
         get_desktop_accessibility_tree,
@@ -79,6 +80,9 @@ except Exception:
     keyboard_type = _stub_error("keyboard_type")
     keyboard_press = _stub_error("keyboard_press")
     keyboard_hotkey = _stub_error("keyboard_hotkey")
+    keyboard_type_enqueue = _stub_error("keyboard_type_enqueue")
+    keyboard_queue_status = _stub_error("keyboard_queue_status")
+    keyboard_queue_clear = _stub_error("keyboard_queue_clear")
     scroll = _stub_error("scroll")
     open_app = _stub_error("open_app")
     list_running_apps = _stub_error("list_running_apps")
@@ -887,6 +891,43 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "keyboard_type_enqueue",
+            "description": "Add text to a background typing queue (non-blocking). Queues text to be typed while Jude Code continues working. Use this to type while doing other tasks simultaneously. Typing happens in order (FIFO).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "The text to type"},
+                    "interval": {"type": "number", "description": "Seconds between each key press (default: 0.05)"}
+                },
+                "required": ["text"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "keyboard_queue_status",
+            "description": "Check the current typing queue status — what's being typed and how many jobs are waiting.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "keyboard_queue_clear",
+            "description": "Clear all pending typing jobs from the queue. Does NOT stop the currently typing job.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "scroll",
             "description": "Scroll the mouse wheel. Positive = scroll up, Negative = scroll down.",
             "parameters": {
@@ -1494,6 +1535,18 @@ def execute_tool(
                 tool_params["text"],
                 interval=tool_params.get("interval", 0.05),
             )
+
+        elif tool_name == "keyboard_type_enqueue":
+            return keyboard_type_enqueue(
+                tool_params["text"],
+                interval=tool_params.get("interval", 0.05),
+            )
+
+        elif tool_name == "keyboard_queue_status":
+            return keyboard_queue_status()
+
+        elif tool_name == "keyboard_queue_clear":
+            return keyboard_queue_clear()
 
         elif tool_name == "keyboard_press":
             return keyboard_press(tool_params["key"])

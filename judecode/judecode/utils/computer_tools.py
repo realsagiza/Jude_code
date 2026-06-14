@@ -54,6 +54,8 @@ import subprocess
 import shutil
 import platform
 import tempfile
+import threading
+import queue
 import time
 import urllib.request
 import urllib.error
@@ -1054,6 +1056,128 @@ def keyboard_hotkey(*keys: str) -> str:
         return f"Pressed hotkey: {keys_str}"
     except Exception as e:
         return f"Error pressing hotkey: {type(e).__name__}: {e}"
+
+
+# ── Background Typing Queue ───────────────────────────────────────────────────
+# Allows queuing text to type while typing is already in progress.
+# Uses a daemon thread + queue.Queue for thread-safe, non-blocking operation.
+
+_typing_queue: "queue.Queue[tuple[str, float] | None]" = queue.Queue()
+_typing_worker: Optional[threading.Thread] = None
+_typing_lock = threading.Lock()
+_typing_current: Optional[str] = None  # currently typing text (or None if idle)
+
+
+def _ensure_typing_worker() -> None:
+    """Start the background typing worker thread if not already running."""
+    global _typing_worker
+    with _typing_lock:
+        if _typing_worker is None or not _typing_worker.is_alive():
+            _typing_worker = threading.Thread(
+                target=_typing_worker_loop,
+                daemon=True,
+                name="judecode-typing-queue",
+            )
+            _typing_worker.start()
+
+
+def _typing_worker_loop() -> None:
+    """Background worker that types queued text one job at a time."""
+    global _typing_current
+    while True:
+        try:
+            job = _typing_queue.get()
+            if job is None:
+                # None is the poison pill — stop the worker
+                break
+            text, interval = job
+            _typing_current = text
+            try:
+                pg = _get_pyautogui()
+                pg.typewrite(text, interval=interval)
+            except RuntimeError:
+                # Headless machine — silently skip
+                pass
+            except Exception:
+                pass  # Don't crash the worker on typing errors
+            finally:
+                _typing_current = None
+                _typing_queue.task_done()
+        except Exception:
+            # Catch-all to keep worker alive
+            pass
+
+
+def keyboard_type_enqueue(text: str, interval: float = 0.05) -> str:
+    """Add text to the typing queue (non-blocking). Types in the background.
+
+    Use this when you want to type text while Jude Code continues working.
+    Text is queued FIFO — if typing is already in progress, this text will
+    be typed after the current job finishes.
+
+    Args:
+        text: The text to type
+        interval: Seconds between each key press (default: 0.05)
+
+    Returns:
+        Queue status message
+    """
+    if not text:
+        return "No text provided to type."
+    try:
+        _ensure_typing_worker()
+        _typing_queue.put((text, interval))
+        qsize = _typing_queue.qsize()
+        preview = text[:50] + ("..." if len(text) > 50 else "")
+        if _typing_current is not None:
+            current_preview = _typing_current[:30] + ("..." if len(_typing_current) > 30 else "")
+            return (
+                f"📝 Queued: '{preview}' ({len(text)} chars) — "
+                f"Position #{qsize} in queue (currently typing: '{current_preview}')"
+            )
+        return f"📝 Queued: '{preview}' ({len(text)} chars) — typing now..."
+    except RuntimeError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Error queuing type: {type(e).__name__}: {e}"
+
+
+def keyboard_queue_status() -> str:
+    """Check the current typing queue status.
+
+    Returns:
+        Queue status including queue size and what's currently being typed.
+    """
+    qsize = _typing_queue.qsize()
+    if _typing_current is not None:
+        preview = _typing_current[:50] + ("..." if len(_typing_current) > 50 else "")
+        return (
+            f"⌨️ Currently typing: '{preview}' ({len(_typing_current)} chars) — "
+            f"{qsize} job(s) in queue"
+        )
+    if qsize > 0:
+        return f"⌨️ Typing queue: {qsize} job(s) waiting"
+    return "⌨️ Typing queue is empty (idle)"
+
+
+def keyboard_queue_clear() -> str:
+    """Clear all pending typing jobs from the queue.
+    Does NOT stop the currently typing job.
+
+    Returns:
+        Confirmation
+    """
+    cleared = 0
+    while not _typing_queue.empty():
+        try:
+            _typing_queue.get_nowait()
+            _typing_queue.task_done()
+            cleared += 1
+        except queue.Empty:
+            break
+    if cleared == 0:
+        return "⌨️ Queue was already empty."
+    return f"⌨️ Cleared {cleared} pending typing job(s). Current typing continues."
 
 
 def scroll(clicks: int, x: Optional[int] = None, y: Optional[int] = None) -> str:
