@@ -379,7 +379,7 @@ def main_cli() -> None:
     # Use --tui for Textual TUI (experimental)
     if len(sys.argv) > 1 and sys.argv[1] == "--tui":
         try:
-            from judecode.ui.textual_app import main_cli as tui_main
+            from judecode.ui._textual_app import main_cli as tui_main
             tui_main()
         except ImportError:
             print("Textual not installed. Install with: pip install textual")
