@@ -171,6 +171,10 @@ class AsyncAgentRunner:
         self.running = True
         self._quit_requested = False  # Track /quit confirmation
 
+        # Queue preview tracking (for display in separator area)
+        self._current_message: str = ""          # Message being processed now
+        self._queued_previews: list[str] = []     # Previews of queued messages
+
         # Tasks
         self._input_task: asyncio.Task | None = None
         self._agent_task: asyncio.Task | None = None
@@ -180,23 +184,68 @@ class AsyncAgentRunner:
     # Separator character and style for input/output boundary
     _SEP_CHAR = "▬"
     _SEP_WIDTH = 70  # characters
+    _PREVIEW_LEN = 25  # max chars for message preview
+
+    @staticmethod
+    def _preview(text: str, max_len: int = 25) -> str:
+        """Truncate message for compact display."""
+        text = text.replace("\n", " ").strip()
+        if len(text) <= max_len:
+            return text
+        return text[:max_len - 2] + "…"
 
     def _print_input_separator(self) -> None:
-        """Print a clear separator line between output area and input area."""
-        # Clear separation: blank line + dashed line + status
+        """Print separator line with queue dashboard between output and input."""
+        from rich.text import Text
+
         console.print()
         sep_line = self._SEP_CHAR * self._SEP_WIDTH
+
+        # ── Build status line ──
         if self.agent_busy:
-            qsize = self.input_queue.qsize()
+            curr = self._preview(self._current_message, self._PREVIEW_LEN)
+
+            # Line 1: separator bar
+            console.print(f"  [dim cyan]{sep_line}[/dim cyan]")
+
+            # Line 2: status with current task
+            status = Text()
+            status.append("▐", style="dim cyan")
+            status.append(" ⏳ AI: ", style="bold yellow")
+            status.append(f'"{curr}"', style="bold white")
+
+            qsize = len(self._queued_previews)
             if qsize > 0:
-                label = f" [⏳ AI working · {qsize} queued] "
-            else:
-                label = " [⏳ AI working] "
-            console.print(f"  [dim cyan]{sep_line}[/dim cyan]")
-            console.print(f"  [dim cyan]▐[/dim cyan][bold yellow]{label}[/bold yellow][dim cyan]{self._SEP_CHAR * (self._SEP_WIDTH - len(label) - 2)}[/dim cyan]")
+                status.append(" │ 📋 ", style="")
+                for i, p in enumerate(self._queued_previews[:3]):
+                    if i > 0:
+                        status.append(" → ", style="dim")
+                    status.append(f'"{self._preview(p, 18)}"', style="dim")
+                if qsize > 3:
+                    status.append(f" +{qsize - 3} more", style="dim")
+
+            console.print("  ", status)
+
         else:
+            # Idle
             console.print(f"  [dim cyan]{sep_line}[/dim cyan]")
-            console.print(f"  [dim cyan]▐ [bold cyan]INPUT[/bold cyan] {self._SEP_CHAR * (self._SEP_WIDTH - 13)}[/dim cyan]")
+
+            status = Text()
+            status.append("▐", style="dim cyan")
+            status.append(" INPUT", style="bold cyan")
+
+            qsize = len(self._queued_previews)
+            if qsize > 0:
+                status.append(" │ 📋 ", style="")
+                status.append(f"{qsize} queued: ", style="bold cyan")
+                for i, p in enumerate(self._queued_previews[:3]):
+                    if i > 0:
+                        status.append(" → ", style="dim")
+                    status.append(f'"{self._preview(p, 18)}"', style="dim")
+                if qsize > 3:
+                    status.append(f" +{qsize - 3} more", style="dim")
+
+            console.print("  ", status)
 
     def _get_prompt_text(self) -> str:
         """Get the plain-text input prompt."""
@@ -239,6 +288,7 @@ class AsyncAgentRunner:
 
             # Queue the message for the agent
             self._quit_requested = False  # Reset quit confirmation
+            self._queued_previews.append(line)  # Track preview for display
             await self.input_queue.put(line)
 
     # ── Agent loop (processes queue) ────────────────────────────────────
@@ -259,6 +309,10 @@ class AsyncAgentRunner:
                 continue
 
             self.agent_busy = True
+            self._current_message = message  # Track for display
+            # Pop first queued preview (should match this message)
+            if self._queued_previews:
+                self._queued_previews.pop(0)
             try:
                 # Reset stop flag for new message
                 self.agent.reset_stop()
@@ -267,6 +321,7 @@ class AsyncAgentRunner:
                 console.print(f"\n  [bold red]Error:[/bold red] {e}\n")
             finally:
                 self.agent_busy = False
+                self._current_message = ""  # Clear current
                 self.input_queue.task_done()
                 # Print output-end separator so input area stands out
                 console.print()
