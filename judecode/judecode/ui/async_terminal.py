@@ -177,16 +177,30 @@ class AsyncAgentRunner:
 
     # ── Prompt helpers ──────────────────────────────────────────────────
 
-    def _get_prompt(self) -> str:
-        """Get the input prompt based on agent state."""
+    # Separator character and style for input/output boundary
+    _SEP_CHAR = "▬"
+    _SEP_WIDTH = 70  # characters
+
+    def _print_input_separator(self) -> None:
+        """Print a clear separator line between output area and input area."""
+        # Clear separation: blank line + dashed line + status
+        console.print()
+        sep_line = self._SEP_CHAR * self._SEP_WIDTH
         if self.agent_busy:
             qsize = self.input_queue.qsize()
             if qsize > 0:
-                return f"\n  [⏳ AI busy, {qsize} queued] ⏵ "
+                label = f" [⏳ AI working · {qsize} queued] "
             else:
-                return f"\n  [⏳ AI busy] ⏵ "
+                label = " [⏳ AI working] "
+            console.print(f"  [dim cyan]{sep_line}[/dim cyan]")
+            console.print(f"  [dim cyan]▐[/dim cyan][bold yellow]{label}[/bold yellow][dim cyan]{self._SEP_CHAR * (self._SEP_WIDTH - len(label) - 2)}[/dim cyan]")
         else:
-            return "\n  ⏵ "
+            console.print(f"  [dim cyan]{sep_line}[/dim cyan]")
+            console.print(f"  [dim cyan]▐ [bold cyan]INPUT[/bold cyan] {self._SEP_CHAR * (self._SEP_WIDTH - 13)}[/dim cyan]")
+
+    def _get_prompt_text(self) -> str:
+        """Get the plain-text input prompt."""
+        return "  ⏵ "
 
     # ── Input loop (runs continuously) ──────────────────────────────────
 
@@ -199,9 +213,11 @@ class AsyncAgentRunner:
         loop = asyncio.get_event_loop()
 
         while self.running:
-            prompt = self._get_prompt()
+            # Print separator to clearly separate output from input
+            self._print_input_separator()
+            prompt_text = self._get_prompt_text()
             try:
-                line = await loop.run_in_executor(None, safe_input, prompt)
+                line = await loop.run_in_executor(None, safe_input, prompt_text)
             except (EOFError, KeyboardInterrupt):
                 continue
 
@@ -252,6 +268,11 @@ class AsyncAgentRunner:
             finally:
                 self.agent_busy = False
                 self.input_queue.task_done()
+                # Print output-end separator so input area stands out
+                console.print()
+                console.print(f"  [dim cyan]{self._SEP_CHAR * self._SEP_WIDTH}[/dim cyan]")
+                console.print("  [dim cyan]▐ [dim]END OUTPUT[/dim][/dim cyan]")
+                console.print()
 
     # ── Command handler ─────────────────────────────────────────────────
 
@@ -426,6 +447,11 @@ class AsyncAgentRunner:
         original_sigint = signal.signal(signal.SIGINT, handle_sigint)
 
         print_greeting()
+
+        # Print initial separator for clean start
+        console.print(f"  [dim cyan]{'▬' * 70}[/dim cyan]")
+        console.print(f"  [dim cyan]▐ [bold cyan]START[/bold cyan] {'▬' * 55}[/dim cyan]")
+        console.print()
 
         try:
             # Start both tasks
