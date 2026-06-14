@@ -361,9 +361,10 @@ def main_cli() -> None:
             print("  --version, -v   Show version and exit")
             print("  --help, -h      Show this help message and exit")
             print("  --legacy        Use legacy single-thread mode")
-            print("  --simple        Use async mode without Textual TUI")
+            print("  --simple        Use async mode (default)")
+            print("  --tui           Use Textual TUI (experimental)")
             print()
-            print("Default: Textual TUI with fixed split layout")
+            print("Default: Async mode - type while AI works!")
             return
         if arg == "--legacy":
             asyncio.run(run_agent_interactive())
@@ -373,17 +374,19 @@ def main_cli() -> None:
             async_main()
             return
 
-    # Default: try Textual TUI, fall back to simple async
-    try:
-        from judecode.ui.textual_app import main_cli as tui_main
-    except ImportError:
-        # Textual not installed — fall back to simple mode
-        from judecode.ui.async_terminal import main_cli as async_main
-        async_main()
+    # Default: use async terminal (proven working)
+    # Use --tui for Textual TUI (experimental)
+    if len(sys.argv) > 1 and sys.argv[1] == "--tui":
+        try:
+            from judecode.ui.textual_app import main_cli as tui_main
+            tui_main()
+        except ImportError:
+            print("Textual not installed. Install with: pip install textual")
+            sys.exit(1)
         return
 
-    # Run TUI (let it crash visibly if there's an error)
-    tui_main()
+    from judecode.ui.async_terminal import main_cli as async_main
+    async_main()
 
 
 if __name__ == "__main__":
