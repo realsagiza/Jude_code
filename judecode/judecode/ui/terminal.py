@@ -338,7 +338,13 @@ The agent can use tools like shell, read, write, edit, grep, web_search, etc.
 
 
 def main_cli() -> None:
-    """Entry point for `judecode` command."""
+    """Entry point for `judecode` command.
+
+    Uses the async concurrent terminal by default (input/output on
+    separate threads so you can type while AI works).
+
+    Use --legacy for the old single-thread mode.
+    """
     import sys
 
     # Handle --version and --help flags
@@ -356,11 +362,18 @@ def main_cli() -> None:
             print("Options:")
             print("  --version, -v   Show version and exit")
             print("  --help, -h      Show this help message and exit")
+            print("  --legacy        Use legacy single-thread mode")
             print()
-            print("Without arguments, starts the interactive chat session.")
+            print("Without arguments, starts the interactive chat session")
+            print("with concurrent input/output (Type while AI works!)")
+            return
+        if arg == "--legacy":
+            asyncio.run(run_agent_interactive())
             return
 
-    asyncio.run(run_agent_interactive())
+    # Default: use async concurrent terminal
+    from judecode.ui.async_terminal import main_cli as async_main
+    async_main()
 
 
 if __name__ == "__main__":

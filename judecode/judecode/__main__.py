@@ -1,7 +1,6 @@
 """Entry point for `python -m judecode`."""
 
 import sys
-from judecode.ui.terminal import main_cli
 
 if __name__ == "__main__":
     # Handle --version flag
@@ -12,5 +11,6 @@ if __name__ == "__main__":
         except ImportError:
             print("Jude Code v0.1.0")
         sys.exit(0)
-    
+
+    from judecode.ui.terminal import main_cli
     main_cli()
