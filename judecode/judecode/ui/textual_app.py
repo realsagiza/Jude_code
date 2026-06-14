@@ -2,11 +2,9 @@
 """
 
 import asyncio
-import io
 import sys
 from typing import Optional
 
-from rich.console import Console as RichConsole
 from rich.text import Text
 
 from textual.app import App, ComposeResult
@@ -26,17 +24,14 @@ from judecode.api import create_api_client
 # ═══════════════════════════════════════════════════════════════════════
 
 class RichLogProxy:
-    """Proxies console.print() calls to a Textual RichLog widget."""
+    """Proxies console.print() calls to a Textual RichLog widget.
+
+    Intercepts at the renderable level — converts Rich markup strings
+    directly to RichLog.write() calls, preserving styling.
+    """
 
     def __init__(self):
         self._widget: Optional[RichLog] = None
-        self._buf = io.StringIO()
-        self._temp_console = RichConsole(
-            file=self._buf,
-            force_terminal=False,
-            color_system="truecolor",
-            width=120,
-        )
 
     def set_widget(self, widget: RichLog) -> None:
         self._widget = widget
@@ -45,20 +40,20 @@ class RichLogProxy:
         if self._widget is None:
             return
         try:
-            self._buf.truncate(0)
-            self._buf.seek(0)
-            self._temp_console.print(*args, **kwargs)
-            text = self._buf.getvalue()
-            if text:
-                for line in text.split("\n"):
-                    s = line.rstrip()
-                    self._widget.write(s if s else "", scroll_end=True)
+            # Build a single string from all args (preserving Rich markup)
+            parts = []
+            for arg in args:
+                parts.append(str(arg))
+            text = " ".join(parts)
+            if text.strip():
+                self._widget.write(text, scroll_end=True)
         except Exception:
             import traceback
             traceback.print_exc()
 
     def __getattr__(self, name):
-        return getattr(self._temp_console, name)
+        # Return a no-op for anything else
+        return lambda *a, **kw: None
 
 
 # Create the global proxy instance
@@ -120,6 +115,8 @@ class StatusBar(Static):
 
 class JudeCodeTUI(App):
     """Jude Code Textual TUI application."""
+
+    TITLE = "Jude Code"
 
     CSS = """
     Screen { layout: vertical; }
