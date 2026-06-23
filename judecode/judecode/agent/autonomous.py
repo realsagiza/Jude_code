@@ -383,11 +383,29 @@ class BudgetTracker:
 
     Integrates with the API client to count tokens from usage metadata.
     Circuit breaker stops the session if too many consecutive errors occur.
+
+    Tracks tokens by category for detailed visibility:
+    - system_prompt: The static system instructions
+    - input_messages: User messages + conversation history (input side)
+    - output_messages: Assistant response text (output side)
+    - tool_requests: Tool call definitions sent to API
+    - tool_results: Tool execution results fed back into context
+    - nudge_messages: System auto-nudge / health-check messages
     """
 
     # Default cost per 1M tokens (approximate, varies by model)
     DEFAULT_INPUT_COST_PER_M = 3.0    # $3 per 1M input tokens
     DEFAULT_OUTPUT_COST_PER_M = 15.0  # $15 per 1M output tokens
+
+    # Category definitions with display info
+    CATEGORIES = {
+        "system_prompt":    {"icon": "🧠", "label": "System Prompt",     "is_input": True},
+        "input_messages":   {"icon": "💬", "label": "Conversation In",   "is_input": True},
+        "output_messages":  {"icon": "🤖", "label": "Assistant Output",  "is_input": False},
+        "tool_requests":    {"icon": "🔧", "label": "Tool Requests",     "is_input": True},
+        "tool_results":     {"icon": "📦", "label": "Tool Results",      "is_input": True},
+        "nudge_messages":   {"icon": "⏰", "label": "Auto-Nudges",       "is_input": True},
+    }
 
     def __init__(
         self,
@@ -403,7 +421,7 @@ class BudgetTracker:
         self.max_error_rate = max_error_rate
         self.error_window = error_window
 
-        # Tracking
+        # Legacy totals (kept for circuit breaker & backward compat)
         self.total_input_tokens = 0
         self.total_output_tokens = 0
         self.total_cost = 0.0
@@ -411,6 +429,17 @@ class BudgetTracker:
         self.recent_results: list[bool] = []  # True=success, False=error
         self.circuit_breaker_triggered = False
         self.circuit_breaker_reason: str = ""
+
+        # Per-category token tracking
+        self.tokens: dict[str, int] = {cat: 0 for cat in self.CATEGORIES}
+
+        # Detailed audit log (last N entries for debugging)
+        self.audit_log: list[dict] = []  # {category, tokens, note, timestamp}
+        self._max_audit_entries = 200
+
+        # Turn counter for per-turn stats
+        self.turn_count: int = 0
+        self.tokens_this_turn: int = 0  # total tokens consumed in current turn
 
         # Cost rates (can be overridden per model)
         self.input_cost_per_m = self.DEFAULT_INPUT_COST_PER_M
@@ -421,14 +450,72 @@ class BudgetTracker:
         self.input_cost_per_m = input_per_m
         self.output_cost_per_m = output_per_m
 
-    def record_usage(self, input_tokens: int, output_tokens: int) -> None:
-        """Record token usage from an API response."""
-        self.total_input_tokens += input_tokens
-        self.total_output_tokens += output_tokens
+    # ── Category-specific recorders ──
+
+    def _add_tokens(self, category: str, tokens: int, note: str = "") -> None:
+        """Internal: add tokens to a category and update totals."""
+        if category not in self.tokens:
+            # Fallback for unknown categories — treat as general input
+            category = "input_messages"
+        self.tokens[category] += tokens
+        is_input = self.CATEGORIES.get(category, {}).get("is_input", True)
+        if is_input:
+            self.total_input_tokens += tokens
+        else:
+            self.total_output_tokens += tokens
+        self.tokens_this_turn += tokens
+        # Audit log
+        self.audit_log.append({
+            "category": category,
+            "tokens": tokens,
+            "note": note,
+            "timestamp": __import__("datetime").datetime.now().isoformat(),
+        })
+        if len(self.audit_log) > self._max_audit_entries:
+            self.audit_log = self.audit_log[-self._max_audit_entries:]
+        # Recompute cost
         self.total_cost = (
             (self.total_input_tokens / 1_000_000) * self.input_cost_per_m
             + (self.total_output_tokens / 1_000_000) * self.output_cost_per_m
         )
+
+    def record_system_prompt(self, tokens: int) -> None:
+        """Record system prompt tokens (call once at init)."""
+        self._add_tokens("system_prompt", tokens, "System prompt loaded")
+
+    def record_input_message(self, tokens: int, note: str = "") -> None:
+        """Record tokens from a user/context message sent to API."""
+        self._add_tokens("input_messages", tokens, note or "User/context message")
+
+    def record_output_message(self, tokens: int, note: str = "") -> None:
+        """Record tokens from an assistant response."""
+        self._add_tokens("output_messages", tokens, note or "Assistant response")
+
+    def record_tool_request(self, tokens: int) -> None:
+        """Record tokens from tool call definitions in API request."""
+        self._add_tokens("tool_requests", tokens, "Tool call request")
+
+    def record_tool_result_tokens(self, tokens: int, tool_name: str = "") -> None:
+        """Record tokens from tool result fed back into context."""
+        self._add_tokens("tool_results", tokens, f"Tool result: {tool_name}" if tool_name else "Tool result")
+
+    def record_nudge(self, tokens: int, reason: str = "") -> None:
+        """Record tokens from a system auto-nudge message."""
+        self._add_tokens("nudge_messages", tokens, f"Nudge: {reason}" if reason else "Auto-nudge")
+
+    def new_turn(self) -> None:
+        """Mark the start of a new conversation turn."""
+        self.turn_count += 1
+        self.tokens_this_turn = 0
+
+    # ── Legacy API (backward compatible) ──
+
+    def record_usage(self, input_tokens: int, output_tokens: int) -> None:
+        """Record token usage from an API response (legacy, splits to general categories)."""
+        if input_tokens:
+            self._add_tokens("input_messages", input_tokens, "Legacy input")
+        if output_tokens:
+            self._add_tokens("output_messages", output_tokens, "Legacy output")
 
     def record_tool_result(self, is_error: bool) -> None:
         """Record whether a tool execution succeeded or failed."""
@@ -495,17 +582,71 @@ class BudgetTracker:
         return False, ""
 
     def get_status(self) -> str:
-        """Get a human-readable budget status."""
+        """Get a human-readable budget status with category breakdown."""
         total_tokens = self.total_input_tokens + self.total_output_tokens
         budget_pct = (self.total_cost / self.max_cost) * 100 if self.max_cost > 0 else 0
         token_pct = (total_tokens / self.max_tokens) * 100 if self.max_tokens > 0 else 0
 
-        return (
-            f"💰 Budget: ${self.total_cost:.2f}/${self.max_cost:.2f} ({budget_pct:.0f}%)\n"
-            f"📊 Tokens: {total_tokens:,}/{self.max_tokens:,} ({token_pct:.0f}%)\n"
-            f"🔴 Consecutive errors: {self.consecutive_errors}\n"
-            f"📡 Circuit breaker: {'TRIGGERED' if self.circuit_breaker_triggered else 'OK'}"
-        )
+        lines = [
+            f"💰 Budget: ${self.total_cost:.2f}/${self.max_cost:.2f} ({budget_pct:.0f}%)",
+            f"📊 Tokens: {total_tokens:,}/{self.max_tokens:,} ({token_pct:.0f}%)  |  Turns: {self.turn_count}",
+            f"🔴 Errors: {self.consecutive_errors} consecutive  |  CB: {'⚡TRIGGERED' if self.circuit_breaker_triggered else '✅OK'}",
+            "",
+            f"📋 Token Breakdown:",
+        ]
+
+        # Build category bars
+        max_bar_width = 28
+        for cat, info in self.CATEGORIES.items():
+            cat_tokens = self.tokens.get(cat, 0)
+            if total_tokens == 0:
+                bar_len = 0
+            else:
+                bar_len = int((cat_tokens / total_tokens) * max_bar_width)
+            bar = "█" * bar_len + "░" * (max_bar_width - bar_len)
+            pct = (cat_tokens / total_tokens * 100) if total_tokens > 0 else 0
+            lines.append(f"  {info['icon']} {info['label']:<18} {bar} {pct:5.1f}% ({cat_tokens:,})")
+
+        # Show top 3 heaviest recent audit entries for insight
+        if self.audit_log:
+            recent = self.audit_log[-20:]
+            # Group by category for recent summary
+            recent_by_cat: dict[str, int] = {}
+            for entry in recent:
+                recent_by_cat[entry["category"]] = recent_by_cat.get(entry["category"], 0) + entry["tokens"]
+            if recent_by_cat:
+                top_cats = sorted(recent_by_cat.items(), key=lambda x: x[1], reverse=True)[:3]
+                lines.append("")
+                lines.append("🔥 Recent token burn (last 20 events):")
+                for cat, tokens in top_cats:
+                    info = self.CATEGORIES.get(cat, {})
+                    lines.append(f"  {info.get('icon', '❓')} {info.get('label', cat)}: +{tokens:,} tokens")
+
+        return "\n".join(lines)
+
+    def get_token_breakdown(self) -> dict:
+        """Get detailed token breakdown as a dict (for programmatic use)."""
+        total = self.total_input_tokens + self.total_output_tokens
+        return {
+            "total": total,
+            "total_input": self.total_input_tokens,
+            "total_output": self.total_output_tokens,
+            "cost": self.total_cost,
+            "turns": self.turn_count,
+            "categories": dict(self.tokens),
+            "category_pct": {
+                cat: (cnt / total * 100) if total > 0 else 0
+                for cat, cnt in self.tokens.items()
+            },
+            "circuit_breaker": self.circuit_breaker_triggered,
+        }
+
+    def get_compact_status(self) -> str:
+        """Get a compact one-line token summary for status displays."""
+        total = self.total_input_tokens + self.total_output_tokens
+        token_pct = (total / self.max_tokens) * 100 if self.max_tokens > 0 else 0
+        cost_str = f"${self.total_cost:.2f}"
+        return f"💰 {cost_str} | 📊 {total:,} tokens ({token_pct:.0f}%) | 🔄 {self.turn_count} turns"
 
     def reset_circuit_breaker(self) -> None:
         """Manually reset the circuit breaker (e.g. after user intervention)."""

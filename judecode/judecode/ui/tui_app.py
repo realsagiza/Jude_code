@@ -146,6 +146,7 @@ class JudeCodeTUI(App):
         self._stream_buffer: str = ""
         self._stream_text_buffer: Optional[Text] = None  # accumulates Text objects during streaming
         self._quit_armed = False
+        self._sidebar_refresh_timer: Optional[asyncio.Task] = None
 
     # ── Layout ──────────────────────────────────────────────────────────
 
@@ -377,6 +378,43 @@ class JudeCodeTUI(App):
                 t.append(f"  +{n - 8} more…\n", style="dim")
 
         t.append("\n")
+        # ── Token Budget ──
+        b = self.agent.autonomous.budget
+        total = b.total_input_tokens + b.total_output_tokens
+        cost = b.total_cost
+        turns = b.turn_count
+        max_tok = b.max_tokens
+        tok_pct = (total / max_tok * 100) if max_tok > 0 else 0
+        cost_pct = (cost / b.max_cost * 100) if b.max_cost > 0 else 0
+        t.append("TOKEN USAGE\n", style="bold cyan")
+        t.append(f"  💰 ${cost:.2f}", style="bold yellow")
+        t.append(f" / ${b.max_cost:.0f}\n", style="dim")
+        # Budget bar
+        bw = 18
+        filled = min(int(cost_pct / 100 * bw), bw)
+        empty = bw - filled
+        bar_color = "green" if cost_pct < 50 else ("yellow" if cost_pct < 80 else "red")
+        t.append(f"  [{bar_color}]{'█' * filled}{'░' * empty}[/{bar_color}] {cost_pct:.0f}%\n")
+        # Token bar
+        tk_filled = min(int(tok_pct / 100 * bw), bw)
+        tk_empty = bw - tk_filled
+        t.append(f"  📊 {total:,}", style="bold cyan")
+        t.append(f" / {max_tok:,}\n", style="dim")
+        t.append(f"  [cyan]{'█' * tk_filled}{'░' * tk_empty}[/cyan] {tok_pct:.0f}%\n")
+        t.append(f"  🔄 {turns} turns\n", style="dim")
+        # Top 3 burn categories
+        if total > 0:
+            sorted_cats = sorted(b.tokens.items(), key=lambda x: x[1], reverse=True)[:3]
+            shown = False
+            for cat, cnt in sorted_cats:
+                if cnt > 0:
+                    if not shown:
+                        t.append("  ———\n", style="dim")
+                        shown = True
+                    info = b.CATEGORIES.get(cat, {})
+                    t.append(f"  {info.get('icon','')} {info.get('label',cat)[:12]:<12} ", style="dim")
+                    t.append(f"{cnt:,}\n", style="white")
+        t.append("\n")
         # ── Connection ──
         t.append("CONNECTION\n", style="bold cyan")
         t.append("  Provider ", style="dim")
@@ -438,6 +476,8 @@ class JudeCodeTUI(App):
             if self.queued_previews:
                 self.queued_previews.pop(0)
             self._render_sidebar()
+            # Start periodic sidebar refresh while agent works
+            self._start_sidebar_timer()
 
             try:
                 self.agent.reset_stop()
@@ -447,6 +487,7 @@ class JudeCodeTUI(App):
             except Exception as e:  # noqa: BLE001
                 self._console_sink(f"\n  [bold red]Error:[/bold red] {e}\n")
             finally:
+                self._stop_sidebar_timer()
                 self._flush_stream_buffer()
                 if self._stream_text_buffer is not None:
                     self._flush_text_buffer()
@@ -454,6 +495,28 @@ class JudeCodeTUI(App):
                 self.current_msg = ""
                 self.input_queue.task_done()
                 self._render_sidebar()
+
+    def _start_sidebar_timer(self) -> None:
+        """Periodically refresh sidebar while agent is working."""
+        if self._sidebar_refresh_timer and not self._sidebar_refresh_timer.done():
+            self._sidebar_refresh_timer.cancel()
+        self._sidebar_refresh_timer = asyncio.create_task(self._sidebar_timer_loop())
+
+    def _stop_sidebar_timer(self) -> None:
+        """Stop the periodic sidebar refresh."""
+        if self._sidebar_refresh_timer and not self._sidebar_refresh_timer.done():
+            self._sidebar_refresh_timer.cancel()
+            self._sidebar_refresh_timer = None
+
+    async def _sidebar_timer_loop(self) -> None:
+        """Refresh sidebar every 2s while agent is busy."""
+        try:
+            while self.ai_busy:
+                await asyncio.sleep(2)
+                if self.ai_busy:
+                    self._render_sidebar()
+        except asyncio.CancelledError:
+            pass
 
     # ── Commands ────────────────────────────────────────────────────────
 
@@ -474,6 +537,7 @@ class JudeCodeTUI(App):
                 "  [magenta]/queue[/magenta]     show pending prompt queue\n"
                 "  [magenta]/continue[/magenta]  trigger a continuation\n"
                 "  [magenta]/status[/magenta]    continuation status\n"
+                "  [magenta]/budget[/magenta]    token budget breakdown\n"
                 "  [magenta]/model[/magenta]     show model info\n"
             )
             return
@@ -507,9 +571,11 @@ class JudeCodeTUI(App):
                 self.ai_busy = True
                 self.current_msg = "(manual continuation)"
                 self._render_sidebar()
+                self._start_sidebar_timer()
                 try:
                     await self.agent.continue_task()
                 finally:
+                    self._stop_sidebar_timer()
                     self.ai_busy = False
                     self.current_msg = ""
                     self._flush_stream_buffer()
@@ -525,6 +591,15 @@ class JudeCodeTUI(App):
             self._console_sink(
                 f"\n  Max continuations: {ct.max_continuations}  |  Used: {ct.count}"
             )
+            self._console_sink(
+                f"  {self.agent.autonomous.budget.get_compact_status()}"
+            )
+            return
+
+        if c == "/budget":
+            self._console_sink(f"\n  [bold yellow]💰 Token Budget Report:[/bold yellow]")
+            for line in self.agent.autonomous.budget.get_status().split("\n"):
+                self._console_sink(f"  {line}")
             return
 
         self._console_sink(f"\n  [dim]Unknown command: {cmd}  (try /help)[/dim]")

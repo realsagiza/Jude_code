@@ -368,7 +368,7 @@ async def run_agent_interactive() -> None:
                 continue
 
             if user_input.lower() == "/budget":
-                console.print(f"\n  [bold yellow]💰 Budget Status:[/bold yellow]")
+                console.print(f"\n  [bold yellow]💰 Token Budget Report:[/bold yellow]")
                 console.print(agent.autonomous.budget.get_status())
                 console.print()
                 continue
@@ -621,6 +621,7 @@ async def run_agent_interactive() -> None:
                 # ── Autonomous Mode Status ──
                 console.print(f"\n  [bold magenta]🤖 Autonomous Mode:[/bold magenta]")
                 console.print(agent.autonomous.get_status())
+                console.print(f"\n  [bold yellow]💰 {agent.autonomous.budget.get_compact_status()}[/bold yellow]")
                 console.print()
                 continue
 

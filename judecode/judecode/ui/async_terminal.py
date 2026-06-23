@@ -153,7 +153,7 @@ class AsyncAgentRunner:
         console.print(f"  [{style}]" + "─" * 68 + f"[/{style}]")
 
     def _print_status_line(self) -> None:
-        """Print compact status: AI state + queue preview."""
+        """Print compact status: AI state + queue preview + token usage."""
         parts = []
 
         if self.agent_busy:
@@ -173,14 +173,46 @@ class AsyncAgentRunner:
                 q_text += f" [dim]+{len(qp) - 3}[/dim]"
             parts.append(q_text)
 
+        # ── Realtime token counter ──
+        total = self.agent.autonomous.budget.total_input_tokens + self.agent.autonomous.budget.total_output_tokens
+        cost = self.agent.autonomous.budget.total_cost
+        turns = self.agent.autonomous.budget.turn_count
+        max_tok = self.agent.autonomous.budget.max_tokens
+        tok_pct = (total / max_tok * 100) if max_tok > 0 else 0
+        parts.append(
+            f"[dim cyan]💰 ${cost:.2f}[/dim cyan] [dim]|[/dim] "
+            f"[dim cyan]📊 {total:,}[/dim cyan][dim]/[dim]{max_tok:,}[/dim] "
+            f"[dim]({tok_pct:.0f}%)[/dim] [dim]|[/dim] 🔄[dim]{turns}[/dim]"
+        )
+
         line = "  " + "  │  ".join(parts)
         console.print(line)
 
     def _print_end_output(self) -> None:
-        """Print marker when AI finishes output."""
+        """Print marker when AI finishes output + budget summary."""
         console.print()
         console.print(f"  [dim cyan]" + "▬" * 68 + f"[/dim cyan]")
-        console.print("  [dim cyan]▐[/dim cyan] [dim]END OUTPUT[/dim]")
+        # ── Budget summary ──
+        b = self.agent.autonomous.budget
+        total = b.total_input_tokens + b.total_output_tokens
+        cost = b.total_cost
+        turns = b.turn_count
+        max_tok = b.max_tokens
+        tok_pct = (total / max_tok * 100) if max_tok > 0 else 0
+        # Top 3 burn categories this session
+        cat_bars = []
+        for cat, cnt in sorted(b.tokens.items(), key=lambda x: x[1], reverse=True)[:3]:
+            if cnt > 0:
+                info = b.CATEGORIES.get(cat, {})
+                cat_bars.append(f"{info.get('icon','')} {cnt:,}")
+        cat_str = "  ".join(cat_bars) if cat_bars else "-"
+        console.print(
+            f"  [dim cyan]▐[/dim cyan] [dim]END OUTPUT[/dim]  [dim]│[/dim]  "
+            f"[bold yellow]💰 ${cost:.2f}[/bold yellow]  [dim]│[/dim]  "
+            f"[bold cyan]📊 {total:,}[/bold cyan][dim]/{max_tok:,} tokens ({tok_pct:.0f}%)[/dim]  [dim]│[/dim]  "
+            f"🔄[dim]{turns} turns[/dim]\n"
+            f"  [dim cyan]▐[/dim cyan] [dim]Top burn:[/dim] {cat_str}"
+        )
 
     # ── Input loop ──────────────────────────────────────────────────────
 
@@ -280,6 +312,7 @@ class AsyncAgentRunner:
   /queue     Show pending queue
   /continue  Trigger continuation
   /status    Continuation status
+  /budget    Token budget breakdown
   Ctrl+C     Pause agent / Exit when idle
 """)
             return
@@ -302,6 +335,7 @@ class AsyncAgentRunner:
         if cmd_lower == "/queue":
             qsize = self.input_queue.qsize()
             console.print(f"\n  [bold]Queue:[/bold] {qsize} pending  |  Agent: {'🔵 Busy' if self.agent_busy else '🟢 Idle'}")
+            console.print(f"  {self.agent.autonomous.budget.get_compact_status()}")
             for i, p in enumerate(self._queued_previews[:10]):
                 console.print(f"    #{i+1}: {self._preview(p, 60)}")
             console.print()
@@ -335,6 +369,12 @@ class AsyncAgentRunner:
         if cmd_lower == "/status":
             ct = self.agent.continuation
             console.print(f"\n  Max continuations: {ct.max_continuations}  |  Used: {ct.count}")
+            console.print(f"  {self.agent.autonomous.budget.get_compact_status()}")
+            return
+
+        if cmd_lower == "/budget":
+            console.print(f"\n  [bold yellow]💰 Token Budget Report:[/bold yellow]")
+            console.print(self.agent.autonomous.budget.get_status())
             return
 
         console.print(f"\n  [dim]Unknown: {cmd}. Type /help[/dim]")

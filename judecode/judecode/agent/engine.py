@@ -71,6 +71,9 @@ class AgentEngine:
             enabled=AUTONOMOUS_MODE,
             auto_rollback=AUTO_ROLLBACK_ENABLED,
         )
+        # Record system prompt tokens upfront (one-time cost per session)
+        sys_prompt_tokens = max(1, len(system_prompt) // 3)
+        self.autonomous.budget.record_system_prompt(sys_prompt_tokens)
         # ── Checkpoint Manager (Phase 2) ──
         self.checkpoint = CheckpointManager(
             session_id=self.autonomous.session.session_id
@@ -248,8 +251,14 @@ class AgentEngine:
         """Check if a message is a system nudge (starts with [SYSTEM:)."""
         return content.strip().startswith("[SYSTEM:")
 
+    def _append_nudge(self, content: str, reason: str = "") -> None:
+        """Append a nudge message and track its token cost."""
+        self.messages.append({"role": "user", "content": content})
+        nudge_tokens = max(1, len(content) // 3)
+        self.autonomous.budget.record_nudge(nudge_tokens, reason)
+
     def _track_token_usage(self, content: str, reasoning: str = "") -> None:
-        """Estimate and track token usage for budget monitoring.
+        """Estimate and track token usage with category breakdown for budget monitoring.
 
         Uses rough estimation: ~4 chars per token for English,
         ~2 chars per token for CJK/Thai content.
@@ -257,12 +266,11 @@ class AgentEngine:
         """
         # Combine content + reasoning for output tokens
         total_text = content + reasoning
-        if not total_text:
-            return
-
-        # Simple heuristic: count chars and estimate tokens
-        # Mixed content: use 3 chars/token as middle ground
-        estimated_output_tokens = max(1, len(total_text) // 3)
+        if total_text:
+            estimated_output_tokens = max(1, len(total_text) // 3)
+            self.autonomous.budget.record_output_message(
+                estimated_output_tokens, f"Turn {self._turn_count}"
+            )
 
         # Estimate input tokens from message history length
         total_input_chars = sum(
@@ -270,9 +278,10 @@ class AgentEngine:
         )
         estimated_input_tokens = max(1, total_input_chars // 3)
 
+        # Legacy call for backward compat (also updates totals)
         self.autonomous.budget.record_usage(
             input_tokens=estimated_input_tokens,
-            output_tokens=estimated_output_tokens,
+            output_tokens=estimated_output_tokens if total_text else 0,
         )
 
     def _save_session_memory(self) -> None:
@@ -418,7 +427,7 @@ class AgentEngine:
             f"(Continuation {self.continuation.count + 1}/{self.continuation.max_continuations})]"
         )
         self.continuation.record_continuation("manual", nudge)
-        self.messages.append({"role": "user", "content": nudge})
+        self._append_nudge(nudge, "manual")
         console.print(
             f"\n  [bold yellow]⟳ Manual continuation #{self.continuation.count}/{self.continuation.max_continuations}[/bold yellow]"
         )
@@ -587,7 +596,7 @@ class AgentEngine:
                     self.continuation.count,
                     self.continuation.max_continuations,
                 )
-                self.messages.append({"role": "user", "content": nudge})
+                self._append_nudge(nudge, "stream_interrupted")
                 return True  # Continue to next turn
             return False
 
@@ -680,7 +689,7 @@ class AgentEngine:
                         self.continuation.count,
                         self.continuation.max_continuations,
                     )
-                    self.messages.append({"role": "user", "content": nudge})
+                    self._append_nudge(nudge, "token_limit")
                     return True  # Continue
                 return False
 
@@ -753,6 +762,11 @@ class AgentEngine:
                 })
                 tool_results.append(result)
                 self._show_tool_result(result)
+                # ── Track tool result tokens ──
+                self.autonomous.budget.record_tool_result_tokens(
+                    max(1, len(str(result)) // 3),
+                    tool_name=tc["name"],
+                )
 
             # Send continuation nudge with partial arguments
             if self.continuation.can_continue():
@@ -769,7 +783,7 @@ class AgentEngine:
                     self.continuation.count,
                     self.continuation.max_continuations,
                 )
-                self.messages.append({"role": "user", "content": nudge})
+                self._append_nudge(nudge, "token_limit")
                 return True  # Continue
 
         if len(parsed_calls) == 1:
@@ -842,6 +856,11 @@ class AgentEngine:
                 })
                 tool_results.append(result)
                 self._show_tool_result(result)
+                # ── Track tool result tokens ──
+                self.autonomous.budget.record_tool_result_tokens(
+                    max(1, len(str(result)) // 3),
+                    tool_name=tc["name"],
+                )
 
         # ── Check for cancel/stop BEFORE auto-continuation ──
         if self.cancel_requested:
@@ -899,7 +918,7 @@ class AgentEngine:
                     self.continuation.count,
                     self.continuation.max_continuations,
                 )
-                self.messages.append({"role": "user", "content": nudge})
+                self._append_nudge(nudge, "tool_error")
                 return True  # Continue
 
             elif work_incomplete and self.continuation.continue_on_incomplete_work:
@@ -914,7 +933,7 @@ class AgentEngine:
                     self.continuation.count,
                     self.continuation.max_continuations,
                 )
-                self.messages.append({"role": "user", "content": nudge})
+                self._append_nudge(nudge, "incomplete_work")
                 return True  # Continue
 
         # ── Check if work is clearly done before auto-continuing ──
@@ -932,6 +951,9 @@ class AgentEngine:
         self.autonomous.on_session_start(goal=user_message)
 
         self.messages.append({"role": "user", "content": user_message})
+        # ── Track user input tokens ──
+        user_tokens = max(1, len(user_message) // 3)
+        self.autonomous.budget.record_input_message(user_tokens, "User message")
 
         while self._turn_count < MAX_TURNS:
             # ── Stop before starting a new turn if user requested it ──
