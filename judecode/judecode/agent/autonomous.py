@@ -529,43 +529,51 @@ class BudgetTracker:
             self.recent_results = self.recent_results[-self.error_window:]
 
     def check_circuit_breaker(self) -> tuple[bool, str]:
-        """Check if the circuit breaker should trigger.
+        """Check circuit breaker conditions (MONITOR-ONLY mode).
 
-        Returns (should_stop, reason).
+        Logs warnings when thresholds are exceeded but does NOT stop
+        the session. The ``circuit_breaker_triggered`` flag is still set
+        for status display / monitoring, but ``should_stop`` is always
+        ``False`` so the user's work is never blocked.
+
+        Returns (should_stop, reason) — should_stop is always False.
         """
-        if self.circuit_breaker_triggered:
-            return True, self.circuit_breaker_reason
-
         # Check budget
         if self.total_cost >= self.max_cost:
             reason = (
                 f"💰 Budget exceeded: ${self.total_cost:.2f} >= ${self.max_cost:.2f} max. "
-                f"Stopping to prevent overspending."
+                f"(monitor-only: continuing despite warning)"
             )
+            if not self.circuit_breaker_triggered:
+                logger.warning("Circuit breaker (monitor-only): %s", reason)
             self.circuit_breaker_triggered = True
             self.circuit_breaker_reason = reason
-            return True, reason
+            return False, reason
 
         # Check token limit
         total_tokens = self.total_input_tokens + self.total_output_tokens
         if total_tokens >= self.max_tokens:
             reason = (
                 f"📊 Token limit reached: {total_tokens:,} >= {self.max_tokens:,}. "
-                f"Stopping to prevent excessive usage."
+                f"(monitor-only: continuing despite warning)"
             )
+            if not self.circuit_breaker_triggered:
+                logger.warning("Circuit breaker (monitor-only): %s", reason)
             self.circuit_breaker_triggered = True
             self.circuit_breaker_reason = reason
-            return True, reason
+            return False, reason
 
         # Check consecutive errors
         if self.consecutive_errors >= self.max_consecutive_errors:
             reason = (
                 f"🔴 Too many consecutive errors: {self.consecutive_errors}. "
-                f"Stopping to prevent infinite error loops."
+                f"(monitor-only: continuing despite warning)"
             )
+            if not self.circuit_breaker_triggered:
+                logger.warning("Circuit breaker (monitor-only): %s", reason)
             self.circuit_breaker_triggered = True
             self.circuit_breaker_reason = reason
-            return True, reason
+            return False, reason
 
         # Check error rate
         if len(self.recent_results) >= self.error_window:
@@ -573,11 +581,13 @@ class BudgetTracker:
             if error_rate > self.max_error_rate:
                 reason = (
                     f"⚠️ High error rate: {error_rate:.0%} in last {self.error_window} turns. "
-                    f"Stopping — something is likely broken."
+                    f"(monitor-only: continuing despite warning)"
                 )
+                if not self.circuit_breaker_triggered:
+                    logger.warning("Circuit breaker (monitor-only): %s", reason)
                 self.circuit_breaker_triggered = True
                 self.circuit_breaker_reason = reason
-                return True, reason
+                return False, reason
 
         return False, ""
 
@@ -747,14 +757,15 @@ class AutonomousController:
             # After rollback, still allow auto-advance to next task
             return rollback_nudge
 
-        # ── Check circuit breaker ──
+        # ── Check circuit breaker (MONITOR-ONLY: logs warnings, never blocks) ──
         should_stop, reason = self.budget.check_circuit_breaker()
         if should_stop:
-            self.session.mark_crashed(reason)
-            return (
-                f"[SYSTEM: 🛑 CIRCUIT BREAKER TRIGGERED\n{reason}\n\n"
-                f"Session paused. Please review and fix the issue before continuing.]"
-            )
+            # Defensive: should_stop is always False in monitor-only mode,
+            # but if someone re-enables blocking, we still won't crash the session.
+            logger.warning("Circuit breaker would have stopped: %s", reason)
+        if reason:
+            # Surface the warning to the user as a soft nudge, but keep working
+            logger.info("Circuit breaker monitor: %s", reason)
 
         # ── 1.1 Auto-Advance ──
         nudge = check_auto_advance(tool_name, tool_result)
