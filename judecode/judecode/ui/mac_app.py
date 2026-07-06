@@ -603,26 +603,8 @@ class JudeCodeAppDelegate(NSObject):
         send.setControlSize_(1)  # NSControlSizeRegular
         self._send_button = send
 
-        # ── Settings button (visible in main window) ──
-        settings_btn = NSButton.buttonWithTitle_target_action_(
-            "⚙ Settings", self, b"showSettings:")
-        settings_btn.setBezelStyle_(1)  # rounded
-        settings_btn.setFont_(_font(12.0, mono=False))
-        settings_btn.setToolTip_("Open settings to configure API keys and provider (⌘,)")
-        content.addSubview_(settings_btn)
-        self._settings_btn = settings_btn
-
-        # ── Clear button ──
-        clear_btn = NSButton.buttonWithTitle_target_action_(
-            "Clear", self, b"clearConversation:")
-        clear_btn.setBezelStyle_(1)
-        clear_btn.setFont_(_font(12.0, mono=False))
-        clear_btn.setToolTip_("Clear the conversation (⌘K)")
-        content.addSubview_(clear_btn)
-        self._clear_btn = clear_btn
-
         # ── Layout with Auto Layout ──
-        for v in (output_scroll, status, input_scroll, send, settings_btn, clear_btn):
+        for v in (output_scroll, status, input_scroll, send):
             v.setTranslatesAutoresizingMaskIntoConstraints_(False)
             content.addSubview_(v)
 
@@ -640,7 +622,7 @@ class JudeCodeAppDelegate(NSObject):
             status.leadingAnchor().constraintEqualToAnchor_(
                 output_scroll.leadingAnchor()),
             status.trailingAnchor().constraintEqualToAnchor_constant_(
-                clear_btn.leadingAnchor(), -8.0),
+                send.leadingAnchor(), -8.0),
             # Input: below status
             input_scroll.topAnchor().constraintEqualToAnchor_constant_(
                 status.bottomAnchor(), 6.0),
@@ -652,23 +634,12 @@ class JudeCodeAppDelegate(NSObject):
                 content.bottomAnchor(), -10.0),
             input_scroll.heightAnchor().constraintGreaterThanOrEqualToConstant_(60.0),
             input_scroll.heightAnchor().constraintLessThanOrEqualToConstant_(220.0),
-            # Buttons row: [Clear] [Settings] [Send] on the right
-            clear_btn.bottomAnchor().constraintEqualToAnchor_(
-                input_scroll.topAnchor()),
-            clear_btn.trailingAnchor().constraintEqualToAnchor_constant_(
-                settings_btn.leadingAnchor(), -8.0),
-            clear_btn.heightAnchor().constraintEqualToConstant_(28.0),
-            settings_btn.bottomAnchor().constraintEqualToAnchor_(
-                input_scroll.topAnchor()),
-            settings_btn.trailingAnchor().constraintEqualToAnchor_constant_(
-                send.leadingAnchor(), -8.0),
-            settings_btn.heightAnchor().constraintEqualToConstant_(28.0),
+            # Send button
             send.bottomAnchor().constraintEqualToAnchor_(
                 input_scroll.topAnchor()),
             send.trailingAnchor().constraintEqualToAnchor_(
                 output_scroll.trailingAnchor()),
             send.widthAnchor().constraintEqualToConstant_(90.0),
-            send.heightAnchor().constraintEqualToConstant_(28.0),
         ]
         for c in constraints:
             c.setActive_(True)
@@ -682,15 +653,6 @@ class JudeCodeAppDelegate(NSObject):
         app = NSApplication.sharedApplication()
         main_menu = NSMenu.alloc().init()
 
-        def _add_item(menu, title, action, key, target=None):
-            """Helper: create a menu item with an explicit target."""
-            item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-                title, action, key)
-            if target is not None:
-                item.setTarget_(target)
-            menu.addItem_(item)
-            return item
-
         # App menu
         app_menu = NSMenu.alloc().init()
         item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
@@ -698,12 +660,16 @@ class JudeCodeAppDelegate(NSObject):
         item.setSubmenu_(app_menu)
         main_menu.addItem_(item)
 
-        _add_item(app_menu, "About Jude Code", b"showAbout:", "", target=self)
+        app_menu.addItemWithTitle_action_keyEquivalent_(
+            "About Jude Code", b"showAbout:", "")
         app_menu.addItem_(NSMenuItem.separatorItem())
-        _add_item(app_menu, "Settings…", b"showSettings:", ",", target=self)
+        app_menu.addItemWithTitle_action_keyEquivalent_(
+            "Settings…", b"showSettings:", ",")
         app_menu.addItem_(NSMenuItem.separatorItem())
-        _add_item(app_menu, "Hide", b"hide:", "h", target=app)
-        _add_item(app_menu, "Quit Jude Code", b"terminate:", "q", target=app)
+        app_menu.addItemWithTitle_action_keyEquivalent_(
+            "Hide", b"hide:", "h")
+        app_menu.addItemWithTitle_action_keyEquivalent_(
+            "Quit Jude Code", b"terminate:", "q")
 
         # Edit menu
         edit_menu = NSMenu.alloc().init()
@@ -711,13 +677,19 @@ class JudeCodeAppDelegate(NSObject):
             "Edit", None, "")
         edit_item.setSubmenu_(edit_menu)
         main_menu.addItem_(edit_item)
-        _add_item(edit_menu, "Undo", b"undo:", "z", target=None)
-        _add_item(edit_menu, "Redo", b"redo:", "Z", target=None)
+        edit_menu.addItemWithTitle_action_keyEquivalent_(
+            "Undo", b"undo:", "z")
+        edit_menu.addItemWithTitle_action_keyEquivalent_(
+            "Redo", b"redo:", "Z")
         edit_menu.addItem_(NSMenuItem.separatorItem())
-        _add_item(edit_menu, "Cut", b"cut:", "x", target=None)
-        _add_item(edit_menu, "Copy", b"copy:", "c", target=None)
-        _add_item(edit_menu, "Paste", b"paste:", "v", target=None)
-        _add_item(edit_menu, "Select All", b"selectAll:", "a", target=None)
+        edit_menu.addItemWithTitle_action_keyEquivalent_(
+            "Cut", b"cut:", "x")
+        edit_menu.addItemWithTitle_action_keyEquivalent_(
+            "Copy", b"copy:", "c")
+        edit_menu.addItemWithTitle_action_keyEquivalent_(
+            "Paste", b"paste:", "v")
+        edit_menu.addItemWithTitle_action_keyEquivalent_(
+            "Select All", b"selectAll:", "a")
 
         # Action menu (Jude Code specific)
         action_menu = NSMenu.alloc().init()
@@ -725,22 +697,22 @@ class JudeCodeAppDelegate(NSObject):
             "Action", None, "")
         action_item.setSubmenu_(action_menu)
         main_menu.addItem_(action_item)
-        _add_item(action_menu, "Send Message", b"sendClicked:", "\\r", target=self)
-        _add_item(action_menu, "Clear Conversation", b"clearConversation:", "k", target=self)
+        action_menu.addItemWithTitle_action_keyEquivalent_(
+            "Send Message", b"sendClicked:", "\\r")
+        action_menu.addItemWithTitle_action_keyEquivalent_(
+            "Clear Conversation", b"clearConversation:", "k")
         action_menu.addItem_(NSMenuItem.separatorItem())
-        _add_item(action_menu, "Open Settings…", b"showSettings:", ",", target=self)
+        action_menu.addItemWithTitle_action_keyEquivalent_(
+            "Open Settings…", b"showSettings:", ",")
 
         app.setMainMenu_(main_menu)
 
     # ── Settings sheet ──
 
     def showSettings_(self, sender):
-        """Open the settings window (non-modal)."""
-        log = _logging.getLogger("judecode.mac")
-        log.info("showSettings_ called, sender=%s", sender)
+        """Open the settings sheet (modal)."""
         if self._settings_panel is not None:
             # Already open — just bring to front.
-            log.info("settings already open, bringing to front")
             self._settings_panel.makeKeyAndOrderFront_(None)
             return
 
@@ -890,13 +862,7 @@ class JudeCodeAppDelegate(NSObject):
         for c in constraints:
             c.setActive_(True)
 
-        # Make the panel a regular window so it doesn't block the main
-        # run loop's timer (which pumps the asyncio worker). We use
-        # orderFrontRegardless + makeKeyAndOrderFront instead of runModal.
-        panel.setLevel_(3)  # NSFloatingWindowLevel — stays above main window
-        panel.makeKeyAndOrderFront_(None)
-        panel.setIsVisible_(True)
-        log.info("settings panel shown")
+        NSApplication.sharedApplication().runModalForWindow_(panel)
 
     def importFromEnv_(self, sender):
         """Open a file picker to import keys from a .env file."""
@@ -1093,8 +1059,8 @@ class JudeCodeAppDelegate(NSObject):
         self._settings_fields = {}
         self._provider_popup = None
         if panel is not None:
-            panel.orderOut_(None)
             panel.close()
+        NSApplication.sharedApplication().stopModal()
 
     def _show_alert(self, title: str, message: str, style=NSAlertStyleInformational) -> None:
         alert = NSAlert.alloc().init()
