@@ -105,6 +105,16 @@ ZAI_BASE_URL = _env("ZAI_BASE_URL", "https://api.z.ai/api/paas/v4")
 ZAI_API_KEY = _env("ZAI_API_KEY", "")
 ZAI_MODEL = _env("ZAI_MODEL", "glm-4.6")
 
+# ── Custom provider (any OpenAI-compatible endpoint) ──
+# สำหรับ model ใหม่ๆ ในอนาคต (เช่น fable หรืออื่นๆ) โดยไม่ต้องแก้โค้ด:
+#   JUDECODE_PROVIDER=custom
+#   JUDECODE_CUSTOM_BASE_URL=https://api.example.com/v1
+#   JUDECODE_CUSTOM_API_KEY=sk-...
+#   JUDECODE_CUSTOM_MODEL=fable-large
+CUSTOM_BASE_URL = _env("CUSTOM_BASE_URL", "")
+CUSTOM_API_KEY = _env("CUSTOM_API_KEY", "")
+CUSTOM_MODEL = _env("CUSTOM_MODEL", "")
+
 # ── Active provider config (used by the app) ──
 if PROVIDER == "anthropic":
     _ACTIVE_KEY = ANTHROPIC_API_KEY
@@ -112,6 +122,9 @@ if PROVIDER == "anthropic":
 elif PROVIDER == "zai":
     _ACTIVE_KEY = ZAI_API_KEY
     _ACTIVE_MODEL = ZAI_MODEL
+elif PROVIDER == "custom":
+    _ACTIVE_KEY = CUSTOM_API_KEY
+    _ACTIVE_MODEL = CUSTOM_MODEL
 else:
     _ACTIVE_KEY = DEEPSEEK_API_KEY
     _ACTIVE_MODEL = DEEPSEEK_MODEL
@@ -157,13 +170,46 @@ elif PROVIDER == "zai":
     BASE_URL = ZAI_BASE_URL
     API_KEY = ZAI_API_KEY
     MODEL = ZAI_MODEL
+elif PROVIDER == "custom":
+    BASE_URL = CUSTOM_BASE_URL
+    API_KEY = CUSTOM_API_KEY
+    MODEL = CUSTOM_MODEL
 else:
     BASE_URL = DEEPSEEK_BASE_URL
     API_KEY = DEEPSEEK_API_KEY
     MODEL = DEEPSEEK_MODEL
-# deepseek-v4-flash output limit ~8K tokens
-MAX_TOKENS = _env_int("MAX_TOKENS", 8192)
-TEMPERATURE = float(_env("TEMPERATURE", "0.7"))
+
+# ── Model Profiles ──
+# Per-model tuning so cheap models (GLM ฯลฯ) work well out of the box.
+# Matched by substring against the active MODEL name.
+# Override via env: JUDECODE_MAX_TOKENS, JUDECODE_TEMPERATURE, JUDECODE_COMPACT_PROMPT
+_MODEL_PROFILES: dict = {
+    # GLM (Z.AI/Zhipu) — cheap, good tool-calling; lower temp = more reliable
+    # tool-call JSON; compact prompt helps instruction-following.
+    "glm": {"max_tokens": 8192, "temperature": 0.3, "compact_prompt": True},
+    # DeepSeek — default behavior
+    "deepseek": {"max_tokens": 8192, "temperature": 0.7, "compact_prompt": False},
+    # Claude — strong instruction-following
+    "claude": {"max_tokens": 8192, "temperature": 0.7, "compact_prompt": False},
+}
+
+def _get_model_profile(model_name: str) -> dict:
+    name = (model_name or "").lower()
+    for key, profile in _MODEL_PROFILES.items():
+        if key in name:
+            return profile
+    # Unknown model (custom provider): safe defaults for cheap models
+    return {"max_tokens": 8192, "temperature": 0.3, "compact_prompt": True}
+
+MODEL_PROFILE = _get_model_profile(MODEL)
+MAX_TOKENS = _env_int("MAX_TOKENS", MODEL_PROFILE["max_tokens"])
+TEMPERATURE = float(_env("TEMPERATURE", str(MODEL_PROFILE["temperature"])))
+COMPACT_PROMPT = _env("COMPACT_PROMPT", "1" if MODEL_PROFILE["compact_prompt"] else "0") == "1"
+
+# ── Fallback model (used when the primary model errors mid-stream) ──
+# Default: same as primary model (retry). Previously hardcoded to
+# "deepseek-chat" which broke non-DeepSeek providers.
+FALLBACK_MODEL = _env("FALLBACK_MODEL", MODEL)
 
 # ── Telegram Bot ──
 # ตั้งค่าเพื่อให้ Jude Code รับข้อความและตอบกลับผ่าน Telegram
@@ -223,6 +269,9 @@ Key rules:
 - ALWAYS use codebase_index/search BEFORE reading files in a new project (saves huge tokens).
 - For files >200 lines: use `wc -l` first, then read with offset+limit (never read huge files at once).
 - Knowledge Vault: check vault before complex work; save summaries after.
+- MEMORY: a "MEMORY" block may be appended below — it contains user preferences and past work. Follow it. Never ask the user to repeat what's already there, never redo listed work.
+- When the user expresses a lasting preference ("จากนี้ไป...", "always...", "อย่า...ทุกครั้ง"), immediately save it with memory_save_preference.
+- When you discover important project facts (how to build/test, gotchas, decisions), save with memory_add_note. Before starting non-trivial work, memory_recall relevant keywords.
 - [SYSTEM: ...] messages = auto-nudge. Continue if incomplete, confirm if done. Don't repeat work.
 - User can pause with Ctrl+C or /stop.
 - Prefer accessibility tree tools over screenshot+vision (10-50x faster).
@@ -239,3 +288,21 @@ Autonomous Mode (Phase 1+5):
 - Context auto-compaction keeps long sessions (8+ hours) running smoothly.
 - Progress reports are generated every 30 minutes automatically.
 """
+
+# ── Compact system prompt for cheap/small models (GLM ฯลฯ) ──
+# Shorter + more imperative = better instruction-following and lower cost.
+SYSTEM_PROMPT_COMPACT = """You are Jude Code, an AI coding assistant in the terminal.
+
+Rules (follow strictly):
+1. Use tools to act; don't just describe. One logical step at a time.
+2. Search first: codebase_index/codebase_search before reading files. For files >200 lines use wc -l then read with offset+limit.
+3. After each shell command, check the exit code and output before continuing.
+4. MEMORY block below (if present) = facts from past sessions. Follow user preferences there. Never ask about or redo things listed there.
+5. Save lasting user preferences with memory_save_preference. Save important project facts with memory_add_note. Search old memory with memory_recall.
+6. For multi-step work: task_add() each step, task_start() -> do it -> task_complete().
+7. [SYSTEM: ...] messages are automated nudges: continue unfinished work, don't repeat done work.
+8. Keep replies short. Answer in the user's language.
+"""
+
+if COMPACT_PROMPT:
+    SYSTEM_PROMPT = SYSTEM_PROMPT_COMPACT

@@ -10,7 +10,7 @@ from typing import AsyncGenerator, Optional
 
 import httpx
 
-from judecode.config import BASE_URL, API_KEY, MODEL, MAX_TOKENS, TEMPERATURE
+from judecode.config import BASE_URL, API_KEY, MODEL, MAX_TOKENS, TEMPERATURE, FALLBACK_MODEL
 from judecode.utils.logger import get_logger, log_error_details
 
 logger = get_logger("judecode.api")
@@ -24,7 +24,7 @@ class ApiClient:
         base_url: str = BASE_URL,
         api_key: str = API_KEY,
         model: str = MODEL,
-        fallback_model: str = "deepseek-chat",  # Non-thinking fallback
+        fallback_model: str = FALLBACK_MODEL,  # Configurable — must match provider!
         max_tokens: int = MAX_TOKENS,
         temperature: float = TEMPERATURE,
         max_retries: int = 3,  # Increased from 2 to 3 for better resilience
@@ -336,3 +336,4 @@ class ApiClient:
 
     async def close(self):
         await self._client.aclose()
+

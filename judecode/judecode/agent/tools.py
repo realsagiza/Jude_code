@@ -34,6 +34,13 @@ from judecode.knowledge.search import (
 )
 from judecode.knowledge.vault import get_vault_structure
 
+# ── Memory tools (cross-session recall) ──
+from judecode.agent.recall import (
+    recall_search,
+    add_project_note,
+    PreferenceStore,
+)
+
 # ── Codebase Indexer (Claude Code-style indexing) ──
 from judecode.utils.codebase_indexer import (
     build_index,
@@ -414,6 +421,90 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "tag": {"type": "string", "description": "Tag (without #)"}
                 },
                 "required": ["tag"]
+            }
+        }
+    },
+
+    # ── Memory Tools (cross-session memory the model can use directly) ──
+    {
+        "type": "function",
+        "function": {
+            "name": "memory_recall",
+            "description": "🧠 Search ALL past memory: preferences, JUDE.md, previous sessions, learned patterns, decisions. Use when the user references past work or before redoing anything.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "What to search for"}
+                },
+                "required": ["query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "memory_save_preference",
+            "description": "Save a lasting user preference (e.g. 'reply in Thai', 'always run tests before commit'). Saved globally — applied in ALL future sessions so the user never repeats it.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "preference": {"type": "string", "description": "The preference, phrased as an instruction"},
+                    "category": {"type": "string", "description": "Category: style|workflow|language|general (default: general)"}
+                },
+                "required": ["preference"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "memory_add_note",
+            "description": "Save a permanent fact about THIS project to JUDE.md (architecture decisions, gotchas, how to run/test). Loaded automatically at every session start.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "note": {"type": "string", "description": "The fact/note to remember about this project"}
+                },
+                "required": ["note"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "memory_save_pattern",
+            "description": "Record a learned pattern: an approach that worked or failed. Helps avoid repeating mistakes in future sessions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {"type": "string", "description": "The approach/pattern"},
+                    "context": {"type": "string", "description": "When/where it applies"},
+                    "result": {"type": "string", "description": "'pass' (worked) or 'fail' (avoid)"},
+                    "category": {"type": "string", "description": "debugging|refactoring|testing|build|general"}
+                },
+                "required": ["pattern", "context", "result"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "memory_list_preferences",
+            "description": "List all saved user preferences. Use memory_forget_preference to remove outdated ones.",
+            "parameters": {"type": "object", "properties": {}}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "memory_forget_preference",
+            "description": "Remove saved preference(s) matching a keyword.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keyword": {"type": "string", "description": "Keyword to match preferences for removal"}
+                },
+                "required": ["keyword"]
             }
         }
     },
@@ -1344,6 +1435,38 @@ def execute_tool(
         elif tool_name == "vault_get_by_tag":
             notes = get_notes_by_tag(tool_params["tag"])
             return json.dumps(notes, ensure_ascii=False, indent=2)
+
+        # ── Memory Tools ──
+        elif tool_name == "memory_recall":
+            from judecode.agent.memory import CrossSessionMemory
+            return recall_search(tool_params["query"], memory=CrossSessionMemory())
+
+        elif tool_name == "memory_save_preference":
+            return PreferenceStore().add(
+                tool_params["preference"],
+                category=tool_params.get("category", "general"),
+            )
+
+        elif tool_name == "memory_add_note":
+            return add_project_note(tool_params["note"])
+
+        elif tool_name == "memory_save_pattern":
+            from judecode.agent.memory import CrossSessionMemory
+            return CrossSessionMemory().save_pattern(
+                pattern=tool_params["pattern"],
+                context=tool_params["context"],
+                result=tool_params["result"],
+                category=tool_params.get("category", "general"),
+            )
+
+        elif tool_name == "memory_list_preferences":
+            prefs = PreferenceStore().list_all()
+            if not prefs:
+                return "No preferences saved yet."
+            return json.dumps(prefs, ensure_ascii=False, indent=2)
+
+        elif tool_name == "memory_forget_preference":
+            return PreferenceStore().remove(tool_params["keyword"])
 
         # ── Cowork-style: PDF Tools ──
         elif tool_name == "read_pdf":

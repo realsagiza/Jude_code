@@ -30,6 +30,7 @@ from judecode.agent.autonomous import AutonomousController
 from judecode.agent.checkpoint import CheckpointManager
 from judecode.agent.safety import PermissionManager, BackupManager, SandboxManager
 from judecode.agent.memory import DecisionLog, CrossSessionMemory
+from judecode.agent.recall import MemoryRecall, update_project_memory_file
 from judecode.agent.daemon import NotificationManager
 from judecode.ui.console import console
 from judecode.utils.logger import get_logger, log_error_details
@@ -272,15 +273,23 @@ class AgentEngine:
                 estimated_output_tokens, f"Turn {self._turn_count}"
             )
 
-        # Estimate input tokens from message history length
+        # Estimate input tokens from message history length.
+        # NOTE: the full history is re-sent to the API every turn, so counting
+        # the whole history each time is technically correct for API cost.
+        # BUT we only record the *delta* vs. the previous turn as "new" input
+        # for budget guardrails, otherwise a 50-turn session would count the
+        # system prompt 50x and trip the budget limit far too early.
         total_input_chars = sum(
             len(str(m.get("content", ""))) for m in self.messages
         )
         estimated_input_tokens = max(1, total_input_chars // 3)
+        prev = getattr(self, "_last_input_token_estimate", 0)
+        new_input_tokens = max(1, estimated_input_tokens - prev)
+        self._last_input_token_estimate = estimated_input_tokens
 
         # Legacy call for backward compat (also updates totals)
         self.autonomous.budget.record_usage(
-            input_tokens=estimated_input_tokens,
+            input_tokens=new_input_tokens,
             output_tokens=estimated_output_tokens if total_text else 0,
         )
 
@@ -302,6 +311,22 @@ class AgentEngine:
                 project_path=cwd,
                 conventions={"last_session": s.session_id},
             )
+            # ── Update per-project JUDE.md session log ──
+            # Only in real project dirs (has VCS/manifest) or if JUDE.md exists,
+            # and only for non-trivial sessions (avoid logging "hi" chats).
+            goal = (s.original_goal or "").strip()
+            is_project = any(
+                os.path.exists(os.path.join(cwd, marker))
+                for marker in (
+                    ".git", "pyproject.toml", "package.json", "Cargo.toml",
+                    "go.mod", "JUDE.md",
+                )
+            )
+            if is_project and (len(goal) > 20 or s.completed_tasks):
+                summary = goal[:150]
+                if s.completed_tasks:
+                    summary += f" — completed tasks: {s.completed_tasks}"
+                update_project_memory_file(summary, cwd=cwd)
         except Exception as e:
             logger.debug(f"Failed to save session memory: {e}")
 
