@@ -164,6 +164,7 @@ class JudeCodeTUI(App):
             yield Input(
                 placeholder="Type a message…  (Enter = send, /help for commands)",
                 id="message",
+                max_length=10000,  # prevent buffer overflow from corrupt input
             )
         yield Footer()
 
@@ -438,7 +439,9 @@ class JudeCodeTUI(App):
 
     @on(Input.Submitted, "#message")
     async def _on_submit(self, event: Input.Submitted) -> None:
-        text = event.value.strip()
+        raw = event.value
+        # Clean: strip and normalize unicode (fixes Thai IME leftover chars)
+        text = raw.strip()
         inp = self.query_one("#message", Input)
         inp.value = ""
         if not text:
