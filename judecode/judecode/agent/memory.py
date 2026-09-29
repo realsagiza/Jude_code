@@ -246,6 +246,8 @@ class CrossSessionMemory:
         duration: str = "",
         key_decisions: Optional[list[dict]] = None,
         errors_encountered: Optional[list[str]] = None,
+        status: str = "unverified",
+        outcome_reason: str = "",
     ) -> str:
         """Save a summary of a completed session."""
         summary = {
@@ -254,6 +256,8 @@ class CrossSessionMemory:
             "goal": goal,
             "completed_tasks": len(completed_tasks),
             "total_tasks": total_tasks,
+            "status": status,
+            "outcome_reason": outcome_reason,
             "completion_rate": len(completed_tasks) / max(total_tasks, 1),
             "duration": duration,
             "key_decisions": key_decisions or [],

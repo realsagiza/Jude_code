@@ -1335,6 +1335,8 @@ def execute_tool(
             if result["stderr"]:
                 output += f"\n[stderr]: {result['stderr']}"
             output += f"\n[exit_code]: {result['exit_code']}"
+            if result["exit_code"] != 0:
+                return f"{TOOL_ERROR_PREFIX} 'shell': {output.strip()}"
             return output.strip()
 
         elif tool_name == "read":

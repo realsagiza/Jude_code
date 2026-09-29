@@ -217,7 +217,7 @@ class CheckpointManager:
         self._save_metadata()
 
         return {
-            "success": True,
+            "success": not errors,
             "rolled_back_to": checkpoint["step"],
             "restored": restored,
             "errors": errors,

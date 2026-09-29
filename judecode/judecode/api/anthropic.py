@@ -283,6 +283,7 @@ class AnthropicClient:
     def _error_chunk(content: str) -> dict:
         """Build a synthetic assistant chunk with error message (OpenAI format)."""
         return {
+            "error": content,
             "choices": [
                 {
                     "delta": {

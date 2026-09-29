@@ -260,6 +260,7 @@ class ApiClient:
     def _error_chunk(content: str) -> dict:
         """Build a synthetic assistant chunk that carries an error message."""
         return {
+            "error": content,
             "choices": [
                 {
                     "delta": {

@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any, Optional
 
 from judecode.api.client import ApiClient
@@ -93,6 +93,12 @@ class AgentEngine:
         self.memory = CrossSessionMemory()
         # ── Notifications (Phase 4) ──
         self.notifications = NotificationManager()
+        self._stop_outcome = None
+        self._tool_failures = {}
+        self._needs_verification = False
+        self._verification = None
+        self.sandbox.before_apply = self._snapshot_file
+
 
     # ── Context Management (Token Optimization) ──
 
@@ -212,9 +218,8 @@ class AgentEngine:
     def _show_tool_result(self, result: str) -> None:
         """Display a snippet of the tool result."""
         result_preview = result[:300] + "..." if len(result) > 300 else result
-        console.print(
-            f"     [dim green]✓ Done[/dim green] [dim]{result_preview}[/dim]"
-        )
+        label = "Failed" if result.lstrip().lower().startswith("error executing tool") else "Result"
+        console.print(Text(f"     {label}: {result_preview}"))
 
     def _show_continuation_nudge(self, reason: str, count: int, max_c: int):
         """Display a continuation nudge in the UI."""
@@ -231,22 +236,84 @@ class AgentEngine:
             f"[dim]({label})[/dim]"
         )
 
+    # Conservatively treat other tools as requiring outcome verification.
+    READ_ONLY_TOOLS = {"read", "glob", "grep", "ls", "web_fetch", "web_search",
+                       "codebase_search", "codebase_summary", "vault_read_note",
+                       "vault_search", "task_list", "task_get", "task_summary"}
+
+    def _snapshot_file(self, path: str, reason: str = "apply") -> None:
+        if os.path.exists(path) and not self.backups.backup_file(path, reason=reason):
+            raise RuntimeError(f"Backup failed: {path}; modification cancelled")
+        checkpoint = self.checkpoint.create_checkpoint(
+            file_paths=[path], reason=reason,
+            task_id=self.autonomous.session.current_task_id)
+        if any(f.get("error") for f in checkpoint["files"]):
+            raise RuntimeError(f"Checkpoint failed: {path}; modification cancelled")
+        if reason == "sandbox_apply":
+            self._needs_verification = True
+            self._verification = None
+            self.autonomous.session.status = "unverified"
+            self.autonomous.session.outcome_reason = "Sandbox changes applied; verification pending."
+            self.autonomous.session.save()
+
+    def _verify_work(self) -> dict:
+        if self.sandbox.is_active and self.sandbox.get_pending_changes():
+            return {"passed": False, "status": "unverified", "results": [],
+                    "summary": "Changes are staged only; real project has not been verified."}
+        if self._verification is None:
+            try:
+                self._verification = self.autonomous.evaluator.run_verification()
+            except Exception as exc:
+                self._verification = {"passed": False, "status": "failed", "results": [],
+                                      "summary": f"Verification failed to run: {exc}"}
+        return self._verification
+
     def _execute_tool_safe(self, tool_name: str, args: dict) -> str:
-        """Execute a tool safely, catching TypeError and other exceptions."""
+        """All execution paths share preflight, staging and outcome recording."""
+        key = (tool_name, str(Path(args["path"]).resolve()) if "path" in args
+               else json.dumps(args, sort_keys=True))
         try:
-            return execute_tool(tool_name, args)
-        except TypeError as e:
-            log_error_details(
-                logger,
-                f"Tool execution TypeError in '{tool_name}'",
-                exc_info=True,
-                extra={"args": args},
-            )
-            return (
-                f"Error executing tool '{tool_name}': "
-                f"TypeError ({type(e).__name__}: {e}). "
-                "This usually means a required parameter was missing."
-            )
+            blocked = self._pre_tool_hook(tool_name, args)
+            if blocked:
+                result = f"Error executing tool '{tool_name}': {blocked}"
+            elif self.sandbox.is_active:
+                result = self.sandbox.execute(tool_name, args)
+            else:
+                if tool_name not in self.READ_ONLY_TOOLS and tool_name != "task_complete":
+                    self._needs_verification = True
+                    self._verification = None
+                result = execute_tool(tool_name, args)
+            self._post_tool_hook(tool_name, args, result)
+        except Exception as exc:
+            result = f"Error executing tool '{tool_name}': {type(exc).__name__}: {exc}"
+        if result.lstrip().lower().startswith("error executing tool") or result.startswith("❌"):
+            self._tool_failures[key] = result
+        else:
+            self._tool_failures.pop(key, None)
+        return result
+
+    def _finish_session(self) -> None:
+        if self._stop_outcome:
+            status, reason = self._stop_outcome
+        elif self._tool_failures:
+            status, reason = "failed", "Unresolved tool failures remain."
+        elif self.sandbox.get_pending_changes():
+            status, reason = "unverified", "Changes are staged, not applied or verified."
+        elif self._needs_verification:
+            verification = self._verify_work()
+            status = {"passed": "completed", "failed": "failed"}.get(
+                verification["status"], "unverified")
+            reason = verification["summary"]
+        else:
+            status, reason = "answered", "Response delivered; no implementation success claimed."
+        self.autonomous.on_session_end(status, reason)
+        self._save_session_memory()
+        console.print(Text(f"\nSession outcome: {status} — {reason}"))
+        if status == "completed":
+            self.notifications.notify_session_complete(
+                goal=self.autonomous.session.original_goal,
+                completed=len(self.autonomous.session.completed_tasks),
+                total=len(self.autonomous.session.completed_tasks))
 
     def _is_nudge_message(self, content: str) -> bool:
         """Check if a message is a system nudge (starts with [SYSTEM:)."""
@@ -300,6 +367,8 @@ class AgentEngine:
             self.memory.save_session_summary(
                 session_id=s.session_id,
                 goal=s.original_goal,
+                status=s.status,
+                outcome_reason=s.outcome_reason,
                 completed_tasks=s.completed_tasks,
                 total_tasks=len(s.completed_tasks) + (1 if s.current_task_id else 0),
                 errors_encountered=[e.get("error", "")[:100] for e in s.errors[-5:]],
@@ -323,7 +392,7 @@ class AgentEngine:
                 )
             )
             if is_project and (len(goal) > 20 or s.completed_tasks):
-                summary = goal[:150]
+                summary = f"[{s.status}] " + goal[:150]
                 if s.completed_tasks:
                     summary += f" — completed tasks: {s.completed_tasks}"
                 update_project_memory_file(summary, cwd=cwd)
@@ -340,20 +409,24 @@ class AgentEngine:
         if not allowed:
             return reason
 
-        # ── Auto-backup before file modifications ──
-        file_modifying_tools = {"write", "edit", "delete"}
-        if tool_name in file_modifying_tools:
-            path = tool_params.get("path", "")
-            if path and os.path.exists(path):
-                self.backups.backup_file(path, reason=tool_name)
+        if self.sandbox.is_active:
+            if tool_name not in {"read", "write", "edit", "delete"}:
+                return "Sandbox supports only read/write/edit/delete; this tool is not staged."
+            return None
 
-        # ── Checkpoint before write/edit ──
-        if tool_name in ("write", "edit") and tool_params.get("path"):
-            self.checkpoint.create_checkpoint(
-                file_paths=[tool_params["path"]],
-                reason=tool_name,
-                task_id=self.autonomous.session.current_task_id,
-            )
+        if tool_name == "task_complete":
+            if any(name != "task_complete" for name, _ in self._tool_failures):
+                return "Unresolved tool failures must be resolved before task completion"
+            verification = self._verify_work()
+            if not verification["passed"]:
+                return f"Task completion not verified: {verification['summary']}"
+            self._needs_verification = True
+
+        if tool_name in {"write", "edit", "delete"}:
+            path = tool_params.get("path")
+            if not path:
+                return "Missing file path"
+            self._snapshot_file(path, tool_name)
 
         return None  # Allow execution
 
@@ -456,9 +529,26 @@ class AgentEngine:
         console.print(
             f"\n  [bold yellow]⟳ Manual continuation #{self.continuation.count}/{self.continuation.max_continuations}[/bold yellow]"
         )
-        # Process the nudge directly, passing the current turn context
-        self._turn_count += 1
-        await self._process_turn(turn_number=self._turn_count)
+        self._stop_outcome = None
+        self.autonomous.session.status = "active"
+        self.autonomous.session.save()
+        while self._turn_count < MAX_TURNS:
+            self._turn_count += 1
+            try:
+                more = await self._process_turn(turn_number=self._turn_count)
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                self._stop_outcome = ("paused", "Execution interrupted")
+                self._finish_session()
+                raise
+            except Exception as exc:
+                self._stop_outcome = ("failed", str(exc))
+                self._finish_session()
+                raise
+            if not more:
+                self._finish_session()
+                return
+        self._stop_outcome = ("unverified", "Maximum turns reached")
+        self._finish_session()
 
     async def _process_turn(self, turn_number: int = 1) -> bool:
         """
@@ -486,6 +576,13 @@ class AgentEngine:
         # Track whether the stream was aborted mid-flight by Ctrl+C
         stream_aborted = False
 
+        if self._needs_verification and self._verification is None:
+            verification = await asyncio.to_thread(self._verify_work)
+            self.messages.append({"role": "user", "content":
+                "[SYSTEM: Verification status: " + verification["status"] + ". " +
+                verification["summary"] +
+                " Do not claim verified success unless checks passed; report limitations.]"})
+
         # Stream the response
         try:
             async for chunk in self.api.chat_completion(
@@ -500,6 +597,9 @@ class AgentEngine:
                     stream_aborted = True
                     break
 
+                if chunk.get("error"):
+                    self._stop_outcome = ("failed", str(chunk["error"]))
+                    return False
                 choices = chunk.get("choices", [])
                 if not choices:
                     continue
@@ -600,6 +700,7 @@ class AgentEngine:
                     "  [dim]Type [bold]/clear[/bold] to start a fresh conversation, "
                     "or [bold]/compact[/bold] if available.[/dim]\n"
                 )
+                self._stop_outcome = ("failed", "Context overflow")
                 return False  # Hard stop — no continuation
 
             self.continuation.had_stream_error = True
@@ -623,6 +724,7 @@ class AgentEngine:
                 )
                 self._append_nudge(nudge, "stream_interrupted")
                 return True  # Continue to next turn
+            self._stop_outcome = ("failed", error_msg)
             return False
 
         if has_started_output:
@@ -652,6 +754,7 @@ class AgentEngine:
                 "\n  [bold yellow]⏸ Stopped mid-response by user. "
                 "Type a new message to redirect, or /continue to resume.[/bold yellow]\n"
             )
+            self._stop_outcome = ("paused", "Stopped by user")
             return False  # Hard stop
 
         # ── Save finish_reason for continuation logic ──
@@ -683,6 +786,7 @@ class AgentEngine:
             if full_reasoning:
                 msg["reasoning_content"] = full_reasoning
             self.messages.append(msg)
+            self._stop_outcome = ("paused", "Stopped by user")
             return False  # Stop the loop
 
         # If no tool calls, store assistant message and check for continuation
@@ -716,6 +820,7 @@ class AgentEngine:
                     )
                     self._append_nudge(nudge, "token_limit")
                     return True  # Continue
+                self._stop_outcome = ("unverified", "Response truncated; continuation limit reached")
                 return False
 
             # ── No tool calls + not truncated = normal conversation → NEVER auto-continue ──
@@ -753,139 +858,32 @@ class AgentEngine:
             try:
                 args = json.loads(args_str) if args_str else {}
             except json.JSONDecodeError:
-                args = {}
+                args = None
+            if not isinstance(args, dict):
+                self.messages.append({"role": "tool", "tool_call_id": tc.get("id", ""),
+                                      "content": "Error executing tool: invalid or truncated JSON; retry complete arguments."})
+                self._tool_failures[(tc["name"], "invalid_arguments")] = "Invalid tool arguments"
+                continue
+            self._tool_failures.pop((tc["name"], "invalid_arguments"), None)
             parsed_calls.append({
                 "id": tc.get("id", ""),
                 "name": tc["name"],
                 "args": args,
             })
 
-        # ── If finish_reason is "length" AND we have partial tool calls ──
-        # This means the tool arguments were truncated. We still execute what we can,
-        # but the nudge will tell the model to continue from where it left off.
-        if finish_reason == "length" and parsed_calls:
-            # Execute what we have (even if partial)
-            for tc in parsed_calls:
-                self._show_tool_call(tc["name"], tc["args"])
-                try:
-                    result = execute_tool(tc["name"], tc["args"])
-                except Exception as e:
-                    log_error_details(
-                        logger,
-                        f"Tool execution error in '{tc['name']}'",
-                        exc_info=True,
-                        extra={"args": tc["args"]},
-                    )
-                    result = (
-                        f"Error executing tool '{tc['name']}': "
-                        f"{type(e).__name__}: {e}"
-                    )
-                self.messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc["id"],
-                    "content": result,
-                })
-                tool_results.append(result)
-                self._show_tool_result(result)
-                # ── Track tool result tokens ──
-                self.autonomous.budget.record_tool_result_tokens(
-                    max(1, len(str(result)) // 3),
-                    tool_name=tc["name"],
-                )
-
-            # Send continuation nudge with partial arguments
-            if self.continuation.can_continue():
-                nudge = generate_continuation_nudge(
-                    reason="token_limit",
-                    continuation_count=self.continuation.count,
-                    max_continuations=self.continuation.max_continuations,
-                    partial_content=full_content,
-                    partial_arguments=partial_arguments,
-                )
-                self.continuation.record_continuation("token_limit", nudge)
-                self._show_continuation_nudge(
-                    "token_limit",
-                    self.continuation.count,
-                    self.continuation.max_continuations,
-                )
-                self._append_nudge(nudge, "token_limit")
-                return True  # Continue
-
-        if len(parsed_calls) == 1:
-            tc = parsed_calls[0]
+        # Serialize tool batches: dependencies and same-file writes must preserve order.
+        # Complete calls received with finish_reason=length use this same preflight.
+        for tc in parsed_calls:
             self._show_tool_call(tc["name"], tc["args"])
-
-            # ── Pre-tool hook: backup, permission check ──
-            blocked = self._pre_tool_hook(tc["name"], tc["args"])
-            if blocked:
-                result = blocked
+            if self.cancel_requested:
+                result = "Error executing tool: skipped because user stopped the batch"
             else:
-                try:
-                    result = execute_tool(tc["name"], tc["args"])
-                except TypeError as e:
-                    log_error_details(
-                        logger,
-                        f"Tool execution TypeError in '{tc['name']}'",
-                        exc_info=True,
-                        extra={"args": tc["args"]},
-                    )
-                    result = (
-                        f"Error executing tool '{tc['name']}': "
-                        f"TypeError ({type(e).__name__}: {e}). "
-                        "This usually means a required parameter was missing."
-                    )
-                # ── Post-tool hook: decision log, notifications ──
-                self._post_tool_hook(tc["name"], tc["args"], result)
-            self.messages.append({
-                "role": "tool",
-                "tool_call_id": tc["id"],
-                "content": result,
-            })
+                result = await asyncio.to_thread(self._execute_tool_safe, tc["name"], tc["args"])
+            self.messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
             tool_results.append(result)
             self._show_tool_result(result)
-        else:
-            console.print(
-                f"\n  [bold cyan]⚡⚡⚡ Parallel execution: {len(parsed_calls)} tools[/bold cyan]"
-            )
-            for tc in parsed_calls:
-                self._show_tool_call(tc["name"], tc["args"])
-
-            loop = asyncio.get_event_loop()
-            with ThreadPoolExecutor(max_workers=len(parsed_calls)) as executor:
-                futures = []
-                for tc in parsed_calls:
-                    fut = loop.run_in_executor(
-                        executor,
-                        self._execute_tool_safe,
-                        tc["name"],
-                        tc["args"],
-                    )
-                    futures.append(fut)
-
-                results = await asyncio.gather(*futures, return_exceptions=True)
-
-            for i, (tc, result) in enumerate(zip(parsed_calls, results)):
-                if isinstance(result, Exception):
-                    result = (
-                        f"Error executing tool '{tc['name']}': "
-                        f"{type(result).__name__}: {result}"
-                    )
-                # ── Pre-tool hook for parallel (backup only, can't block) ──
-                self._pre_tool_hook(tc["name"], tc["args"])
-                # ── Post-tool hook ──
-                self._post_tool_hook(tc["name"], tc["args"], result)
-                self.messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc["id"],
-                    "content": result,
-                })
-                tool_results.append(result)
-                self._show_tool_result(result)
-                # ── Track tool result tokens ──
-                self.autonomous.budget.record_tool_result_tokens(
-                    max(1, len(str(result)) // 3),
-                    tool_name=tc["name"],
-                )
+            self.autonomous.budget.record_tool_result_tokens(
+                max(1, len(result) // 3), tool_name=tc["name"])
 
         # ── Check for cancel/stop BEFORE auto-continuation ──
         if self.cancel_requested:
@@ -893,6 +891,7 @@ class AgentEngine:
             console.print(
                 "\n  [bold yellow]⏸ Paused by user after tool execution. Type a new message to redirect, or /continue to resume.[/bold yellow]\n"
             )
+            self._stop_outcome = ("paused", "Stopped by user")
             return False  # Stop the loop
 
         # ── Autonomous Controller Hook (Phase 1 + Phase 5) ──
@@ -962,7 +961,8 @@ class AgentEngine:
                 return True  # Continue
 
         # ── Check if work is clearly done before auto-continuing ──
-        if not self._is_nudge_message(full_content) and detect_completion(full_content):
+        if (not self._needs_verification and not self._tool_failures
+                and not self._is_nudge_message(full_content) and detect_completion(full_content)):
             return False  # Work is done, stop
 
         return True  # Continue to next turn naturally (no nudge needed)
@@ -970,6 +970,10 @@ class AgentEngine:
     async def chat(self, user_message: str) -> None:
         """Send a user message and handle streaming + tool calls."""
         # Reset for new user message
+        self._stop_outcome = None
+        self._tool_failures = {}
+        self._needs_verification = False
+        self._verification = None
         self.continuation.reset(user_message)
         self._turn_count = 0
         # ── Start autonomous session tracking ──
@@ -988,6 +992,8 @@ class AgentEngine:
                     "\n  [bold yellow]⏸ Paused by user. Type a new message to "
                     "redirect, or /continue to resume.[/bold yellow]\n"
                 )
+                self._stop_outcome = ("paused", "Stopped by user")
+                self._finish_session()
                 return
 
             # ── Phase 5: Context Compaction for long sessions ──
@@ -1002,22 +1008,23 @@ class AgentEngine:
                 )
 
             self._turn_count += 1
-            should_continue = await self._process_turn(turn_number=self._turn_count)
+            try:
+                should_continue = await self._process_turn(turn_number=self._turn_count)
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                self._stop_outcome = ("paused", "Execution interrupted")
+                self._finish_session()
+                raise
+            except Exception as exc:
+                self._stop_outcome = ("failed", f"{type(exc).__name__}: {exc}")
+                self._finish_session()
+                raise
             if not should_continue:
-                self.autonomous.on_session_end()
-                self._save_session_memory()
-                self.notifications.notify_session_complete(
-                    goal=self.autonomous.session.original_goal,
-                    completed=len(self.autonomous.session.completed_tasks),
-                    total=len(self.autonomous.session.completed_tasks) + (
-                        1 if self.autonomous.session.current_task_id else 0
-                    ),
-                )
+                self._finish_session()
                 return
 
         console.print(
             f"\n  [bold yellow]Reached max conversation turns ({MAX_TURNS}). "
             "Stopping to prevent infinite loop.[/bold yellow]\n"
         )
-        self.autonomous.on_session_end()
-        self._save_session_memory()
+        self._stop_outcome = ("unverified", "Maximum turns reached")
+        self._finish_session()

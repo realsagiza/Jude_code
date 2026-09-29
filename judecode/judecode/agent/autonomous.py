@@ -14,6 +14,8 @@ whether to auto-continue, nudge, or stop.
 import json
 import os
 import time
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -106,7 +108,8 @@ class SessionState:
         self.total_turns: int = 0
         self.total_tool_calls: int = 0
         self.errors: list[dict[str, Any]] = []
-        self.status: str = "active"  # active | paused | completed | crashed
+        self.outcome_reason = ""
+        self.status: str = "active"  # active | paused | completed | failed | unverified | answered | crashed
 
     def save(self, **extra) -> None:
         """Save current state to disk."""
@@ -122,6 +125,7 @@ class SessionState:
             "total_tool_calls": self.total_tool_calls,
             "errors": self.errors,
             "status": self.status,
+            "outcome_reason": self.outcome_reason,
             **extra,
         }
         try:
@@ -191,7 +195,7 @@ class SessionState:
         for f in sessions_dir.glob("*.json"):
             try:
                 data = json.loads(f.read_text())
-                if data.get("status") in ("active", "crashed"):
+                if data.get("status") in ("active", "crashed", "paused", "failed", "unverified"):
                     session = cls(session_id=data["session_id"])
                     session.started_at = data.get("started_at", "")
                     session.original_goal = data.get("original_goal", "")
@@ -224,6 +228,7 @@ class SessionState:
             session.total_tool_calls = data.get("total_tool_calls", 0)
             session.errors = data.get("errors", [])
             session.status = data.get("status", "active")
+            session.outcome_reason = data.get("outcome_reason", "")
             session.last_saved_at = data.get("last_saved_at")
             return session
         except Exception:
@@ -233,22 +238,6 @@ class SessionState:
 # ═══════════════════════════════════════════════════════════════
 #  1.3 Self-Evaluation Loop
 # ═══════════════════════════════════════════════════════════════
-
-# Verification commands to try after task completion (in order of priority)
-DEFAULT_VERIFY_COMMANDS = [
-    # Python projects
-    {"pattern": "pytest", "cmd": "cd {root} && python -m pytest --tb=short -q 2>&1 | head -50"},
-    {"pattern": "unittest", "cmd": "cd {root} && python -m unittest discover -q 2>&1 | head -50"},
-    {"pattern": "tox", "cmd": "cd {root} && tox -q 2>&1 | head -50"},
-    # JavaScript/TypeScript projects
-    {"pattern": "jest", "cmd": "cd {root} && npx jest --no-coverage 2>&1 | head -50"},
-    {"pattern": "vitest", "cmd": "cd {root} && npx vitest run 2>&1 | head -50"},
-    # Linting
-    {"pattern": "ruff", "cmd": "cd {root} && ruff check . 2>&1 | head -30"},
-    {"pattern": "eslint", "cmd": "cd {root} && npx eslint . 2>&1 | head -30"},
-    # Build check
-    {"pattern": "build", "cmd": "cd {root} && python -c 'import {module}' 2>&1"},
-]
 
 # Max auto-retries before asking human
 MAX_SELF_EVAL_RETRIES = 3
@@ -285,74 +274,34 @@ class SelfEvaluator:
                 "summary": str,
             }
         """
+        root = Path(self.project_root).resolve()
+        commands = []
+        # Only local, installed runners; never download a runner with npx.
+        if (root / "tests").is_dir() or (root / "pytest.ini").exists():
+            commands.append([sys.executable, "-m", "pytest", "--tb=short", "-q"])
+        package = root / "package.json"
+        if package.exists():
+            data = json.loads(package.read_text())
+            if data.get("scripts", {}).get("test"):
+                commands.append(["npm", "test", "--", "--runInBand"] if
+                                "jest" in data["scripts"]["test"] else ["npm", "test"])
         results = []
-        root = self.project_root
-
-        # Detect what verification tools are available
-        for vcmd in DEFAULT_VERIFY_COMMANDS:
-            # Skip if config file doesn't exist
-            if vcmd["pattern"] == "pytest":
-                if not os.path.exists(os.path.join(root, "pytest.ini")) and \
-                   not os.path.exists(os.path.join(root, "pyproject.toml")) and \
-                   not os.path.exists(os.path.join(root, "setup.cfg")):
-                    continue
-            elif vcmd["pattern"] in ("jest", "vitest"):
-                if not os.path.exists(os.path.join(root, "package.json")):
-                    continue
-            elif vcmd["pattern"] == "ruff":
-                if not os.path.exists(os.path.join(root, "pyproject.toml")):
-                    continue
-            elif vcmd["pattern"] == "eslint":
-                if not os.path.exists(os.path.join(root, "package.json")):
-                    continue
-            else:
-                continue  # Skip unknown patterns
-
-            cmd = vcmd["cmd"].format(root=root, module=root.replace("/", "."))
+        for command in commands:
             try:
-                import subprocess
-                proc = subprocess.run(
-                    cmd, shell=True, capture_output=True, text=True, timeout=60
-                )
-                output = proc.stdout + proc.stderr
-                passed = proc.returncode == 0
-                results.append({
-                    "cmd": vcmd["pattern"],
-                    "output": output[:2000],  # Truncate long output
-                    "passed": passed,
-                })
-            except subprocess.TimeoutExpired:
-                results.append({
-                    "cmd": vcmd["pattern"],
-                    "output": "TIMEOUT (60s)",
-                    "passed": False,
-                })
-            except Exception as e:
-                results.append({
-                    "cmd": vcmd["pattern"],
-                    "output": f"Error: {e}",
-                    "passed": False,
-                })
-
-        all_passed = all(r["passed"] for r in results) if results else True
-
-        # Build summary
-        if not results:
-            summary = "No verification commands found for this project."
-        elif all_passed:
-            summary = "✅ All verifications passed!"
-        else:
-            failed = [r for r in results if not r["passed"]]
-            summary = f"❌ {len(failed)}/{len(results)} verification(s) failed:\n"
-            for f in failed:
-                summary += f"  - {f['cmd']}: {f['output'][:200]}\n"
-
+                proc = subprocess.run(command, cwd=str(root), capture_output=True,
+                                      text=True, timeout=60)
+                results.append({"cmd": command, "output": (proc.stdout + proc.stderr)[-4000:],
+                                "passed": proc.returncode == 0, "exit_code": proc.returncode})
+            except Exception as exc:
+                results.append({"cmd": command, "output": str(exc), "passed": False})
+        status = "unverified" if not results else (
+            "passed" if all(r["passed"] for r in results) else "failed")
+        summary = ("No verification commands found; outcome is unverified." if not results
+                   else "\n".join(f"{r['cmd']}: {'PASS' if r['passed'] else 'FAIL'}\n{r['output']}"
+                                  for r in results))
         self.last_verify_result = summary
-        return {
-            "passed": all_passed,
-            "results": results,
-            "summary": summary,
-        }
+        return {"passed": status == "passed", "status": status,
+                "results": results, "summary": summary}
 
     def should_auto_retry(self, task_id: int) -> bool:
         """Check if we should auto-retry after verification failure."""
@@ -775,22 +724,6 @@ class AutonomousController:
             if task_id:
                 self.session.record_task_complete(task_id)
 
-            # ── 1.3 Self-Evaluation ──
-            if self.evaluator.should_verify(tool_name, tool_result):
-                verify = self.evaluator.run_verification()
-                if not verify["passed"]:
-                    # Check if we can auto-retry
-                    current_task = tool_params.get("task_id", 0)
-                    if self.evaluator.should_auto_retry(current_task):
-                        self.evaluator.record_retry(current_task)
-                        return self.evaluator.get_retry_nudge(current_task, verify)
-                    else:
-                        return (
-                            f"[SYSTEM: ⚠️ Verification failed after {self.evaluator.max_retries} retries. "
-                            f"Please review manually.\n\n"
-                            f"Results:\n{verify['summary']}]"
-                        )
-
             return nudge
 
         # ── Track task starts ──
@@ -851,9 +784,11 @@ class AutonomousController:
         self._session_start_time = time.time()
         self.session.save()
 
-    def on_session_end(self) -> None:
+    def on_session_end(self, status: str = "unverified", reason: str = "") -> None:
         """Called when the session ends normally."""
-        self.session.mark_completed()
+        self.session.status = status
+        self.session.outcome_reason = reason
+        self.session.save()
         # Generate final progress report
         self.reporter.generate_report(
             session_state={
@@ -861,7 +796,7 @@ class AutonomousController:
                 "tool_calls": self.session.total_tool_calls,
                 "completed_tasks": len(self.session.completed_tasks),
                 "errors": len(self.session.errors),
-                "status": "completed",
+                "status": status,
             },
             health_status=self.health.last_health_status,
             budget_status=self.budget.get_status(),

@@ -21,6 +21,8 @@ Safety & Control for JudeCode — Phase 3
 
 import os
 import shutil
+import tempfile
+import hashlib
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -238,8 +240,10 @@ class SandboxManager:
 
     def __init__(self, project_root: str = "."):
         self.project_root = os.path.abspath(project_root)
-        self.sandbox_dir = Path.home() / ".judecode" / "sandbox"
-        self.sandbox_dir.mkdir(parents=True, exist_ok=True)
+        sandbox_root = Path.home() / ".judecode" / "sandbox"
+        sandbox_root.mkdir(parents=True, exist_ok=True)
+        self.sandbox_dir = Path(tempfile.mkdtemp(dir=sandbox_root))
+        self.before_apply = None
         self._active = False
         self._changes: list[dict[str, Any]] = []
 
@@ -250,19 +254,19 @@ class SandboxManager:
     def activate(self) -> str:
         """Activate sandbox mode."""
         self._active = True
-        self._changes = []
         return "🧪 Sandbox mode activated. Changes will be previewed before applying."
 
     def deactivate(self) -> str:
         """Deactivate sandbox mode."""
+        if self._changes:
+            return "Sandbox has pending changes; apply or discard before deactivating."
         self._active = False
-        self._changes = []
         return "🧪 Sandbox mode deactivated. Changes will be applied directly."
 
     def sandbox_path(self, real_path: str) -> str:
         """Get the sandbox equivalent of a real path."""
-        rel = os.path.relpath(os.path.abspath(real_path), self.project_root)
-        return str(self.sandbox_dir / rel)
+        resolved = str(Path(real_path).resolve())
+        return str(self.sandbox_dir / hashlib.sha256(resolved.encode()).hexdigest())
 
     def stage_change(
         self,
@@ -282,6 +286,7 @@ class SandboxManager:
         Returns:
             Staging result message
         """
+        path = str(Path(path).resolve())
         sbox_path = self.sandbox_path(path)
 
         if operation in ("write", "edit") and content is not None:
@@ -290,6 +295,7 @@ class SandboxManager:
             with open(sbox_path, "w", encoding="utf-8") as f:
                 f.write(content)
 
+        self._changes = [c for c in self._changes if c["path"] != path]
         self._changes.append({
             "operation": operation,
             "path": path,
@@ -298,6 +304,29 @@ class SandboxManager:
         })
 
         return f"🧪 Staged: {operation} {path} (in sandbox)"
+
+    def execute(self, tool_name: str, args: dict) -> str:
+        """Read and mutate the staged view only; unsupported tools fail closed."""
+        from judecode.utils.file_ops import read_file
+        path = str(Path(args["path"]).resolve())
+        change = next((c for c in self._changes if c["path"] == path), None)
+        source = change["sandbox_path"] if change else path
+        if tool_name == "write":
+            return self.stage_change("write", path, args["content"])
+        if change and change["operation"] == "delete":
+            raise FileNotFoundError(f"Deleted in sandbox: {path}")
+        if tool_name == "read":
+            return read_file(source, offset=args.get("offset", 1), limit=args.get("limit"))
+        if tool_name == "edit":
+            content = Path(source).read_text()
+            if content.count(args["old_string"]) != 1:
+                raise ValueError("old_string must occur exactly once in staged file")
+            return self.stage_change("edit", path, content.replace(args["old_string"], args["new_string"], 1))
+        if tool_name == "delete":
+            if not Path(source).is_file():
+                raise FileNotFoundError(path)
+            return self.stage_change("delete", path)
+        raise ValueError("Tool is not supported in sandbox")
 
     def get_pending_changes(self) -> list[dict[str, Any]]:
         """Get all pending changes."""
@@ -323,6 +352,9 @@ class SandboxManager:
 
         for change in self._changes:
             try:
+                if self.before_apply is None:
+                    raise RuntimeError("Sandbox apply requires backup/checkpoint callback")
+                self.before_apply(change["path"], "sandbox_apply")
                 if change["operation"] in ("write", "edit"):
                     sbox_path = change["sandbox_path"]
                     real_path = change["path"]
@@ -330,17 +362,22 @@ class SandboxManager:
                         os.makedirs(os.path.dirname(real_path), exist_ok=True)
                         shutil.copy2(sbox_path, real_path)
                         applied.append(change)
+                    else:
+                        raise FileNotFoundError(sbox_path)
                 elif change["operation"] == "delete":
                     real_path = change["path"]
                     if os.path.exists(real_path):
                         os.remove(real_path)
                         applied.append(change)
+                    else:
+                        raise FileNotFoundError(real_path)
             except Exception as e:
                 errors.append({"change": change, "error": str(e)})
 
-        # Clear sandbox
-        self._changes = []
-        self._cleanup_sandbox()
+        # Keep failed changes available for retry; never discard failed staging.
+        self._changes = [c for c in self._changes if c not in applied]
+        if not self._changes:
+            self._cleanup_sandbox()
 
         return {
             "applied": len(applied),
