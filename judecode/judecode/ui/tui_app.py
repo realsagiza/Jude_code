@@ -30,9 +30,15 @@ from rich.console import Group
 from rich.markup import MarkupError
 from rich.text import Span, Text
 
+try:
+    import pyperclip
+except Exception:  # pragma: no cover - optional dependency
+    pyperclip = None
+
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.strip import Strip
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
 from textual.widgets import Footer, Header, Input, RichLog, Static
@@ -61,7 +67,26 @@ WELCOME = """\
 
 
 class OutputLog(RichLog):
-    """The main scrolling output pane."""
+    """The main scrolling output pane.
+
+    RichLog's default ``render_line`` does **not** add the ``offset`` metadata
+    that Textual's text-selection compositor relies on. Without it, dragging in
+    the output pane does nothing. We mirror what ``textual.widgets.Log`` does:
+    crop to the visible window, then tag each rendered segment with its original
+    (x, y) content offset so the selection layer can map screen cells back to
+    the underlying text.
+    """
+
+    def render_line(self, y: int) -> Strip:
+        scroll_x, scroll_y = self.scroll_offset
+        rich_style = self.rich_style
+        line_y = scroll_y + y
+        if line_y >= len(self.lines):
+            return Strip.blank(self.scrollable_content_region.width, rich_style)
+        line = self.lines[line_y].crop_extend(
+            scroll_x, scroll_x + self.scrollable_content_region.width, rich_style
+        )
+        return line.apply_offsets(scroll_x, line_y)
 
 
 class StatusPanel(Static):
@@ -129,6 +154,8 @@ class JudeCodeTUI(App):
         Binding("ctrl+q", "quit", "Quit", priority=True),
         Binding("ctrl+l", "clear_conv", "Clear", priority=True),
         Binding("escape", "stop_agent", "Stop", show=False),
+        Binding("ctrl+y", "copy_output", "Copy output", priority=True),
+        Binding("ctrl+shift+c", "copy_selection", "Copy selection", priority=True),
     ]
 
     # ── reactive state shown in the sidebar ──
@@ -432,6 +459,10 @@ class JudeCodeTUI(App):
         t.append("clear   ", style="dim")
         t.append("^C  ", style="magenta")
         t.append("stop\n", style="dim")
+        t.append("  ^Y  ", style="magenta")
+        t.append("copy output\n", style="dim")
+        t.append("  ^⇧C ", style="magenta")
+        t.append("copy selection\n", style="dim")
 
         sb.update(t)
 
@@ -537,12 +568,17 @@ class JudeCodeTUI(App):
                 "  [magenta]/quit[/magenta]      exit Jude Code\n"
                 "  [magenta]/clear[/magenta]     clear conversation (or Ctrl+L)\n"
                 "  [magenta]/stop[/magenta]      pause the agent (or Ctrl+C / Esc)\n"
+                "  [magenta]/copy[/magenta]      copy the whole Output pane (or Ctrl+Y)\n"
                 "  [magenta]/queue[/magenta]     show pending prompt queue\n"
                 "  [magenta]/continue[/magenta]  trigger a continuation\n"
                 "  [magenta]/status[/magenta]    continuation status\n"
                 "  [magenta]/budget[/magenta]    token budget breakdown\n"
                 "  [magenta]/model[/magenta]     show model info\n"
             )
+            return
+
+        if c == "/copy":
+            self.action_copy_output()
             return
 
         if c == "/clear":
@@ -608,6 +644,53 @@ class JudeCodeTUI(App):
         self._console_sink(f"\n  [dim]Unknown command: {cmd}  (try /help)[/dim]")
 
     # ── Actions ─────────────────────────────────────────────────────────
+
+    def _copy_text(self, text: str, what: str) -> None:
+        """Put ``text`` on the system clipboard.
+
+        pyperclip (pbcopy on macOS / xclip on Linux / native on Windows) is
+        tried first because Textual's built-in OSC-52 clipboard escape does
+        **not** work on macOS Terminal. If pyperclip is unavailable or fails,
+        we fall back to Textual's ``copy_to_clipboard`` so terminal emulators
+        that support OSC 52 still get a working copy.
+        """
+        if not text:
+            self.notify(f"Nothing to copy ({what} is empty).", severity="warning")
+            return
+
+        try:
+            if pyperclip is not None:
+                pyperclip.copy(text)
+                self.notify(f"Copied {what} to clipboard ({len(text):,} chars).")
+                return
+        except Exception:
+            pass  # fall through to OSC 52
+
+        try:
+            self.copy_to_clipboard(text)
+            self.notify(f"Copied {what} to clipboard ({len(text):,} chars).")
+        except Exception as exc:
+            self.notify(f"Copy failed: {exc}", severity="error")
+
+    def action_copy_output(self) -> None:
+        """Copy the entire Output pane to the clipboard (Ctrl+Y)."""
+        try:
+            log = self.query_one("#output", OutputLog)
+            text = "\n".join(strip.text for strip in log.lines)
+        except Exception:
+            text = ""
+        self._copy_text(text, "output")
+
+    def action_copy_selection(self) -> None:
+        """Copy the currently selected text to the clipboard (Ctrl+Shift+C)."""
+        text = self.screen.get_selected_text() if hasattr(self.screen, "get_selected_text") else None
+        if not text:
+            self.notify(
+                "No text selected — drag to select in the Output pane first.",
+                severity="warning",
+            )
+            return
+        self._copy_text(text, "selection")
 
     def action_stop_agent(self) -> None:
         if self.ai_busy:
