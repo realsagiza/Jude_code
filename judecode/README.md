@@ -77,6 +77,14 @@ While in the CLI:
 |---------|-------------|
 | `/help` | Show help |
 | `/quit`, `Ctrl+D` | Exit |
+
+In the default full-screen TUI, drag over text in the Output pane to select it,
+then press **Ctrl+C** (or **Ctrl+Shift+C**) to copy the selection. Selected text
+is highlighted, including selections across lines and in scrolled output.
+**Ctrl+Y** or `/copy` copies the entire Output pane. With no selection, Ctrl+C
+keeps its Stop / Quit behavior; **Esc** stops work even when text is selected,
+and **Ctrl+Q** exits. This requires Textual 8.2.7 or newer. Restart JudeCode after
+updating to load the new UI code.
 | `/clear` | Reset conversation history |
 | `/model` | Show current model info |
 

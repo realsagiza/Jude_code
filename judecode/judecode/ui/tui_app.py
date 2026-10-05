@@ -41,6 +41,7 @@ from textual.binding import Binding
 from textual.strip import Strip
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
+from textual.selection import Selection
 from textual.widgets import Footer, Header, Input, RichLog, Static
 
 from judecode.config import (
@@ -77,13 +78,28 @@ class OutputLog(RichLog):
     the underlying text.
     """
 
+    def get_selection(self, selection: Selection) -> tuple[str, str]:
+        """Extract visible output text rather than RichLog's empty renderable."""
+        return selection.extract("\n".join(line.text for line in self.lines)), "\n"
+
     def render_line(self, y: int) -> Strip:
         scroll_x, scroll_y = self.scroll_offset
         rich_style = self.rich_style
         line_y = scroll_y + y
         if line_y >= len(self.lines):
             return Strip.blank(self.scrollable_content_region.width, rich_style)
-        line = self.lines[line_y].crop_extend(
+        line = self.lines[line_y]
+        selection = self.text_selection
+        if selection is not None:
+            span = selection.get_span(line_y)
+            if span is not None:
+                text = Text.assemble(*(Text(segment.text, style=segment.style)
+                                       for segment in line if not segment.control))
+                start, end = span
+                text.stylize(self.screen.get_component_rich_style("screen--selection"),
+                             start, len(text) if end == -1 else end)
+                line = Strip(text.render(self.app.console))
+        line = line.crop_extend(
             scroll_x, scroll_x + self.scrollable_content_region.width, rich_style
         )
         return line.apply_offsets(scroll_x, line_y)
@@ -150,7 +166,7 @@ class JudeCodeTUI(App):
     """
 
     BINDINGS = [
-        Binding("ctrl+c", "stop_or_quit", "Stop / Quit", priority=True),
+        Binding("ctrl+c", "stop_or_quit", "Copy / Stop / Quit", priority=True),
         Binding("ctrl+q", "quit", "Quit", priority=True),
         Binding("ctrl+l", "clear_conv", "Clear", priority=True),
         Binding("escape", "stop_agent", "Stop", show=False),
@@ -181,7 +197,7 @@ class JudeCodeTUI(App):
         yield Header(show_clock=True)
         with Horizontal(id="body"):
             log = OutputLog(id="output", wrap=True, markup=True, highlight=True)
-            log.border_title = "💬  Output"
+            log.border_title = "💬  Output · drag to select · Ctrl+C to copy"
             yield log
             sb = StatusPanel(id="sidebar")
             sb.border_title = "📋  Status & Queue"
@@ -458,7 +474,7 @@ class JudeCodeTUI(App):
         t.append("  ^L  ", style="magenta")
         t.append("clear   ", style="dim")
         t.append("^C  ", style="magenta")
-        t.append("stop\n", style="dim")
+        t.append("copy / stop\n", style="dim")
         t.append("  ^Y  ", style="magenta")
         t.append("copy output\n", style="dim")
         t.append("  ^⇧C ", style="magenta")
@@ -569,6 +585,7 @@ class JudeCodeTUI(App):
                 "  [magenta]/clear[/magenta]     clear conversation (or Ctrl+L)\n"
                 "  [magenta]/stop[/magenta]      pause the agent (or Ctrl+C / Esc)\n"
                 "  [magenta]/copy[/magenta]      copy the whole Output pane (or Ctrl+Y)\n"
+                "  Drag Output text, then Ctrl+C to copy selection; Esc stops work.\n"
                 "  [magenta]/queue[/magenta]     show pending prompt queue\n"
                 "  [magenta]/continue[/magenta]  trigger a continuation\n"
                 "  [magenta]/status[/magenta]    continuation status\n"
@@ -700,7 +717,10 @@ class JudeCodeTUI(App):
             self._console_sink("\n  [dim]Agent is not running.[/dim]")
 
     def action_stop_or_quit(self) -> None:
-        """Ctrl+C: stop the agent if busy, otherwise quit."""
+        """Copy selected output first; otherwise stop the agent or quit."""
+        if self.screen.get_selected_text():
+            self.action_copy_selection()
+            return
         if self.ai_busy:
             self.agent.request_stop()
             self._console_sink("\n  [yellow]⏸ Stop requested (Ctrl+C again or Ctrl+Q to quit)…[/yellow]")
