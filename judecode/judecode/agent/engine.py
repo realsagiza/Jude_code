@@ -94,6 +94,7 @@ class AgentEngine:
         # ── Notifications (Phase 4) ──
         self.notifications = NotificationManager()
         self._stop_outcome = None
+        self._context_recovery_attempts = 0
         self._tool_failures = {}
         self._needs_verification = False
         self._verification = None
@@ -189,6 +190,49 @@ class AgentEngine:
             new_messages.append(msg)
 
         self.messages = new_messages
+
+    def _recover_context(self) -> bool:
+        """Shrink bulky output after rejection, preserving instructions and tool pairs.
+
+        Archive the full current history before replacing any content. Never
+        alter tool arguments or replay executed tools. Bound retries even when
+        the provider's actual request limit is unknown.
+        """
+        if self.cancel_requested or self._context_recovery_attempts >= 3:
+            return False
+        limit = 4000 // (4 ** self._context_recovery_attempts)
+        reduced = []
+        for message in self.messages:
+            item = dict(message)
+            if item.get("role") in ("tool", "assistant"):
+                for field in ("content", "reasoning_content"):
+                    value = item.get(field)
+                    if isinstance(value, str) and len(value) > limit:
+                        item[field] = (value[:limit // 2] +
+                            "\n[Output shortened after API size rejection; full history archived locally.]\n" +
+                            value[-limit // 2:])
+            reduced.append(item)
+        if reduced == self.messages:
+            return False
+        try:
+            import tempfile
+            archive_dir = Path.home() / ".judecode" / "context-recovery"
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
+                    prefix="history-", suffix=".json", dir=archive_dir,
+                    delete=False) as archive:
+                json.dump(self.messages, archive, ensure_ascii=False)
+                archive_path = archive.name
+        except OSError:
+            logger.exception("Cannot archive history; preserving current context")
+            return False
+        self.messages = reduced
+        self._context_recovery_attempts += 1
+        console.print(Text(
+            f"\n  ↻ Request too large: shortened output, retrying "
+            f"({self._context_recovery_attempts}/3). History: {archive_path}\n",
+            style="yellow"))
+        return True
 
     def _show_thinking(self, turn: int) -> None:
         """Show a thinking indicator before each model response turn."""
@@ -470,9 +514,8 @@ class AgentEngine:
         """Detect if an error is caused by the context/prompt being too large.
 
         When the conversation grows too long, the API rejects the request with
-        a 'context length exceeded' / 'too large' style error. Auto-continuing
-        in that case is USELESS — the context is still too big, so it just loops
-        forever. We must detect this and STOP instead of continuing.
+        a 'context length exceeded' / 'too large' style error. Recovery must
+        reduce the request before retrying, with a bounded retry count.
         """
         if not error_text:
             return False
@@ -598,6 +641,8 @@ class AgentEngine:
                     break
 
                 if chunk.get("error"):
+                    if self._is_context_overflow_error(str(chunk["error"])):
+                        raise RuntimeError(str(chunk["error"]))
                     self._stop_outcome = ("failed", str(chunk["error"]))
                     return False
                 choices = chunk.get("choices", [])
@@ -683,11 +728,11 @@ class AgentEngine:
                 },
             )
 
-            # ── Context overflow → STOP, do NOT auto-continue ──
-            # Continuing would just re-send the same oversized context and loop
-            # forever. Tell the user to clear the conversation instead.
+            # Retry only after reducing context; never resend it unchanged.
             if self._is_context_overflow_error(error_msg):
-                # Save whatever partial assistant content we got so /clear works cleanly
+                if self._recover_context():
+                    return True
+                # Preserve partial prose when recovery is exhausted.
                 if full_content:
                     self.messages.append({
                         "role": "assistant",
@@ -697,8 +742,8 @@ class AgentEngine:
                     "\n  [bold red]⛔ Context too large — the conversation has grown "
                     "beyond the model's limit.[/bold red]\n"
                     "  [yellow]Auto-continuation stopped to prevent an infinite loop.[/yellow]\n"
-                    "  [dim]Type [bold]/clear[/bold] to start a fresh conversation, "
-                    "or [bold]/compact[/bold] if available.[/dim]\n"
+                    "  [dim]Your conversation and work are retained. Shorten oversized "
+                    "input or change the model, then use /continue.[/dim]\n"
                 )
                 self._stop_outcome = ("failed", "Context overflow")
                 return False  # Hard stop — no continuation
@@ -727,6 +772,7 @@ class AgentEngine:
             self._stop_outcome = ("failed", error_msg)
             return False
 
+        self._context_recovery_attempts = 0
         if has_started_output:
             console.print()
         elif has_shown_reasoning and not reasoning_completed:

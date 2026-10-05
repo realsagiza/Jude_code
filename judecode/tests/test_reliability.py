@@ -63,6 +63,52 @@ def test_read_only_answer_is_not_implementation_completion(agent):
     assert agent.autonomous.session.status == "answered"
 
 
+@pytest.mark.parametrize("as_chunk", [True, False])
+def test_oversized_request_recovers_without_replaying_tools(agent, as_chunk):
+    original = "ผลลัพธ์" * 20000
+    tool_call = {"role": "assistant", "content": None, "tool_calls": [
+        {"id": "done", "type": "function", "function": {
+            "name": "shell", "arguments": '{"command":"already executed"}'}}]}
+    agent.messages.extend([{"role": "user", "content": "Keep my requirements"},
+                           tool_call,
+                           {"role": "tool", "tool_call_id": "done", "content": original}])
+    error = "API error 413: Request Entity Too Large"
+    agent.api = ScriptedAPI(ApiClient._error_chunk(error) if as_chunk else RuntimeError(error))
+    asyncio.run(agent.chat("Continue my work"))
+    assert len(agent.api.requests) == 2
+    assert agent.autonomous.session.status == "answered"
+    request = agent.api.requests[-1]
+    assert tool_call in request
+    assert {"role": "user", "content": "Keep my requirements"} in request
+    assert len(next(m for m in request if m["role"] == "tool")["content"]) < 5000
+    archives = list((Path.home() / ".judecode/context-recovery").glob("*.json"))
+    assert len(archives) == 1
+    assert json.loads(archives[0].read_text())[-2]["content"] == original
+
+
+def test_context_recovery_has_bounded_retries(agent):
+    agent.messages.append({"role": "tool", "tool_call_id": "done", "content": "x" * 30000})
+    agent.api = ScriptedAPI(*[ApiClient._error_chunk("API error 413") for _ in range(10)])
+    asyncio.run(agent.chat("work"))
+    assert len(agent.api.requests) == 4
+    assert agent.autonomous.session.status == "failed"
+
+
+def test_context_recovery_preserves_history_if_archive_fails(agent, monkeypatch):
+    agent.messages.append({"role": "assistant", "content": "x" * 20000})
+    original = list(agent.messages)
+    def denied(*args, **kwargs):
+        raise PermissionError("denied")
+    monkeypatch.setattr("tempfile.NamedTemporaryFile", denied)
+    assert not agent._recover_context()
+    assert agent.messages == original
+
+
+def test_context_recovery_does_not_change_user_input_or_tool_arguments(agent):
+    agent.messages.append({"role": "user", "content": "x" * 30000})
+    assert not agent._recover_context()
+
+
 def test_cancel_is_paused(agent):
     agent.cancel_requested = True
     asyncio.run(agent.chat("work"))

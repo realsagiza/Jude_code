@@ -28,4 +28,8 @@ Stopping skips the remaining calls in a batch after the current action finishes.
 
 ## Validation and remaining scope
 
-Regression tests cover isolated fake API streams and temporary files, including real failing pytest execution. They do not call paid APIs. Model capability benchmarks, stream retry reconstruction, monetary budget enforcement, cross-session resume/context compaction, packaging, and default TUI command parity remain outside this change.
+API size rejections (including HTTP 413 synthetic error chunks) now archive the current conversation to `~/.judecode/context-recovery/` and shorten bulky tool output and assistant text before retrying. User instructions, tool arguments, and tool/result pairing are retained. Up to three reductions are attempted; an unchanged request is never retried by this recovery path. Archive failure preserves the history unchanged. Successful requests reset the recovery counter. This does not re-execute tools or reload an already running Python process.
+
+If instructions, tool arguments or tool definitions alone exceed the provider limit, recovery stops while retaining the conversation; reduce the oversized input or change model before `/continue`. Archives preserve the history available at rejection, after ordinary context pruning; they are not automatic cross-session restore files.
+
+Regression tests cover isolated fake API streams and temporary files, including real failing pytest execution, 413 recovery, retry exhaustion, and archive failure. They do not call paid APIs. Model capability benchmarks, stream retry reconstruction, monetary budget enforcement, cross-session resume, semantic context summarization, packaging, and default TUI command parity remain outside this change.
