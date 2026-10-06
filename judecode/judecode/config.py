@@ -306,3 +306,8 @@ Rules (follow strictly):
 
 if COMPACT_PROMPT:
     SYSTEM_PROMPT = SYSTEM_PROMPT_COMPACT
+
+# Recoverable context reduction: soft estimated input target, not a model limit.
+CONTEXT_TARGET_TOKENS = _env_int("CONTEXT_TARGET_TOKENS", 24000)
+CONTEXT_RESULT_CHARS = _env_int("CONTEXT_RESULT_CHARS", 1200)
+CONTEXT_RECENT_RESULTS = _env_int("CONTEXT_RECENT_RESULTS", 3)

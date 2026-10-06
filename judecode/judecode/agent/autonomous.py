@@ -388,6 +388,8 @@ class BudgetTracker:
 
         # Turn counter for per-turn stats
         self.turn_count: int = 0
+        self.context_tokens_saved = 0
+        self.context_input_tokens = 0
         self.tokens_this_turn: int = 0  # total tokens consumed in current turn
 
         # Cost rates (can be overridden per model)
@@ -429,7 +431,7 @@ class BudgetTracker:
         )
 
     def record_system_prompt(self, tokens: int) -> None:
-        """Record system prompt tokens (call once at init)."""
+        """Record system prompt tokens each time they are sent."""
         self._add_tokens("system_prompt", tokens, "System prompt loaded")
 
     def record_input_message(self, tokens: int, note: str = "") -> None:
@@ -547,10 +549,13 @@ class BudgetTracker:
         token_pct = (total_tokens / self.max_tokens) * 100 if self.max_tokens > 0 else 0
 
         lines = [
-            f"💰 Budget: ${self.total_cost:.2f}/${self.max_cost:.2f} ({budget_pct:.0f}%)",
-            f"📊 Tokens: {total_tokens:,}/{self.max_tokens:,} ({token_pct:.0f}%)  |  Turns: {self.turn_count}",
+            f"💰 Estimated budget: ${self.total_cost:.2f}/${self.max_cost:.2f} ({budget_pct:.0f}%)",
+            f"📊 Estimated tokens: {total_tokens:,}/{self.max_tokens:,} ({token_pct:.0f}%)  |  Turns: {self.turn_count}",
             f"🔴 Errors: {self.consecutive_errors} consecutive  |  CB: {'⚡TRIGGERED' if self.circuit_breaker_triggered else '✅OK'}",
             "",
+            f"Context: ~{self.context_input_tokens:,} tokens; "
+            f"~{self.context_tokens_saved:,} tokens removed by recoverable pruning",
+            "Estimates include resends; provider usage and cache discounts may differ.",
             f"📋 Token Breakdown:",
         ]
 
@@ -592,6 +597,9 @@ class BudgetTracker:
             "total_output": self.total_output_tokens,
             "cost": self.total_cost,
             "turns": self.turn_count,
+            "estimated": True,
+            "context_input_tokens": self.context_input_tokens,
+            "context_tokens_saved": self.context_tokens_saved,
             "categories": dict(self.tokens),
             "category_pct": {
                 cat: (cnt / total * 100) if total > 0 else 0

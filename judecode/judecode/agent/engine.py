@@ -25,7 +25,11 @@ from judecode.config import (
     AUTONOMOUS_MAX_BUDGET,
     AUTO_ROLLBACK_ENABLED,
     HEALTH_MONITOR_ENABLED,
+    CONTEXT_TARGET_TOKENS,
+    CONTEXT_RESULT_CHARS,
+    CONTEXT_RECENT_RESULTS,
 )
+from judecode.agent.context import ContextManager, estimate_tokens
 from judecode.agent.autonomous import AutonomousController
 from judecode.agent.checkpoint import CheckpointManager
 from judecode.agent.safety import PermissionManager, BackupManager, SandboxManager
@@ -72,9 +76,9 @@ class AgentEngine:
             enabled=AUTONOMOUS_MODE,
             auto_rollback=AUTO_ROLLBACK_ENABLED,
         )
-        # Record system prompt tokens upfront (one-time cost per session)
-        sys_prompt_tokens = max(1, len(system_prompt) // 3)
-        self.autonomous.budget.record_system_prompt(sys_prompt_tokens)
+        self.context = ContextManager(
+            CONTEXT_TARGET_TOKENS, CONTEXT_RESULT_CHARS, CONTEXT_RECENT_RESULTS
+        )
         # ── Checkpoint Manager (Phase 2) ──
         self.checkpoint = CheckpointManager(
             session_id=self.autonomous.session.session_id
@@ -103,93 +107,11 @@ class AgentEngine:
 
     # ── Context Management (Token Optimization) ──
 
-    # Maximum chars for a tool result stored in message history.
-    # Old tool results are truncated to save context tokens on every API call.
-    # The model has already processed the full result when it first arrived.
-    _MAX_TOOL_RESULT_IN_HISTORY = 4000
-
-    # Number of recent tool results to keep in full (not truncated)
-    _KEEP_FULL_RECENT_RESULTS = 3
-
-    # Maximum nudge messages to keep in history
-    _MAX_NUDGE_MESSAGES = 2
-
     def _prune_context(self) -> None:
-        """Prune conversation history to reduce token usage without losing key context.
-
-        Optimizations applied:
-        1. Truncate old tool results (keep recent ones in full)
-        2. Remove old nudge messages (keep last 2)
-        3. Remove reasoning_content from old assistant messages
-        4. Replace old verbose tool results with short summaries
-
-        This is called before each API call to keep context lean.
-        """
-        messages = self.messages
-        if len(messages) <= 4:  # system + user + at least 1 exchange
-            return
-
-        # ── 1. Count recent tool results (from the end) to keep in full ──
-        recent_tool_ids = set()
-        tool_count = 0
-        for msg in reversed(messages):
-            if msg.get("role") == "tool":
-                tool_count += 1
-                if tool_count <= self._KEEP_FULL_RECENT_RESULTS:
-                    recent_tool_ids.add(msg.get("tool_call_id", ""))
-                else:
-                    break
-
-        # ── 2. Track nudge messages and keep only the last N ──
-        nudge_indices = []
-        for i, msg in enumerate(messages):
-            if msg.get("role") == "user" and self._is_nudge_message(msg.get("content", "")):
-                nudge_indices.append(i)
-
-        # Remove old nudges (keep last _MAX_NUDGE_MESSAGES)
-        indices_to_remove = set()
-        if len(nudge_indices) > self._MAX_NUDGE_MESSAGES:
-            for idx in nudge_indices[: -self._MAX_NUDGE_MESSAGES]:
-                indices_to_remove.add(idx)
-
-        # ── 3. Process messages ──
-        new_messages = []
-        for i, msg in enumerate(messages):
-            # Skip old nudge messages
-            if i in indices_to_remove:
-                continue
-
-            # Truncate old tool results
-            if msg.get("role") == "tool":
-                tool_id = msg.get("tool_call_id", "")
-                content = msg.get("content", "")
-                if (
-                    tool_id not in recent_tool_ids
-                    and len(content) > self._MAX_TOOL_RESULT_IN_HISTORY
-                ):
-                    head = content[: self._MAX_TOOL_RESULT_IN_HISTORY // 3]
-                    tail_len = self._MAX_TOOL_RESULT_IN_HISTORY // 2
-                    tail = content[-tail_len:]
-                    truncated = (
-                        f"{head}\n\n"
-                        f"... [{len(content):,} chars total, "
-                        f"truncated to save context] ...\n\n"
-                        f"{tail}"
-                    )
-                    msg = {**msg, "content": truncated}
-
-            # Remove reasoning from old assistant messages (keep last 2)
-            if msg.get("role") == "assistant" and "reasoning_content" in msg:
-                # Check if this is one of the last 2 assistant messages
-                assistant_count_after = sum(
-                    1 for m in messages[i:] if m.get("role") == "assistant"
-                )
-                if assistant_count_after > 2:
-                    msg = {k: v for k, v in msg.items() if k != "reasoning_content"}
-
-            new_messages.append(msg)
-
-        self.messages = new_messages
+        """Reduce old output only after saving a retrievable full copy."""
+        self.messages = self.context.prune(self.messages, TOOL_DEFINITIONS)
+        self.autonomous.budget.context_tokens_saved = self.context.saved_tokens
+        self.autonomous.budget.context_input_tokens = self.context.last_input_tokens
 
     def _recover_context(self) -> bool:
         """Shrink bulky output after rejection, preserving instructions and tool pairs.
@@ -364,45 +286,31 @@ class AgentEngine:
         return content.strip().startswith("[SYSTEM:")
 
     def _append_nudge(self, content: str, reason: str = "") -> None:
-        """Append a nudge message and track its token cost."""
+        """Append a nudge; count its cost when it is actually sent."""
         self.messages.append({"role": "user", "content": content})
-        nudge_tokens = max(1, len(content) // 3)
-        self.autonomous.budget.record_nudge(nudge_tokens, reason)
 
-    def _track_token_usage(self, content: str, reasoning: str = "") -> None:
-        """Estimate and track token usage with category breakdown for budget monitoring.
+    def _record_request_tokens(self) -> None:
+        """Count the whole outgoing request on every turn, including tool schemas."""
+        budget = self.autonomous.budget
+        budget.new_turn()
+        budget.record_tool_request(estimate_tokens(TOOL_DEFINITIONS))
+        for message in self.messages:
+            count = estimate_tokens(message)
+            role = message.get("role")
+            if role == "system":
+                budget.record_system_prompt(count)
+            elif role == "tool":
+                budget.record_tool_result_tokens(count)
+            else:
+                budget.record_input_message(count, "Estimated resent context")
 
-        Uses rough estimation: ~4 chars per token for English,
-        ~2 chars per token for CJK/Thai content.
-        This is approximate but sufficient for budget guardrails.
-        """
-        # Combine content + reasoning for output tokens
-        total_text = content + reasoning
-        if total_text:
-            estimated_output_tokens = max(1, len(total_text) // 3)
-            self.autonomous.budget.record_output_message(
-                estimated_output_tokens, f"Turn {self._turn_count}"
-            )
-
-        # Estimate input tokens from message history length.
-        # NOTE: the full history is re-sent to the API every turn, so counting
-        # the whole history each time is technically correct for API cost.
-        # BUT we only record the *delta* vs. the previous turn as "new" input
-        # for budget guardrails, otherwise a 50-turn session would count the
-        # system prompt 50x and trip the budget limit far too early.
-        total_input_chars = sum(
-            len(str(m.get("content", ""))) for m in self.messages
-        )
-        estimated_input_tokens = max(1, total_input_chars // 3)
-        prev = getattr(self, "_last_input_token_estimate", 0)
-        new_input_tokens = max(1, estimated_input_tokens - prev)
-        self._last_input_token_estimate = estimated_input_tokens
-
-        # Legacy call for backward compat (also updates totals)
-        self.autonomous.budget.record_usage(
-            input_tokens=new_input_tokens,
-            output_tokens=estimated_output_tokens if total_text else 0,
-        )
+    def _track_token_usage(self, content: str, reasoning: str = "", tool_calls=None) -> None:
+        """Count generated text/reasoning/arguments exactly once, including partial streams."""
+        count = estimate_tokens(content) + estimate_tokens(reasoning)
+        if tool_calls:
+            count += estimate_tokens(tool_calls)
+        if count:
+            self.autonomous.budget.record_output_message(count, "Estimated API output")
 
     def _save_session_memory(self) -> None:
         """Save session summary to cross-session memory on session end."""
@@ -612,10 +520,6 @@ class AgentEngine:
         # Show thinking indicator
         self._show_thinking(turn_number)
 
-        # ── Prune context before API call to save tokens ──
-        # Truncates old tool results, removes old nudges, prunes old reasoning
-        self._prune_context()
-
         # Track whether the stream was aborted mid-flight by Ctrl+C
         stream_aborted = False
 
@@ -626,6 +530,10 @@ class AgentEngine:
                 verification["summary"] +
                 " Do not claim verified success unless checks passed; report limitations.]"})
 
+        # Include fresh verification context before estimating/pruning the request.
+        self._prune_context()
+        # Estimates include resends; provider billing/cache discounts may differ.
+        self._record_request_tokens()
         # Stream the response
         try:
             async for chunk in self.api.chat_completion(
@@ -772,6 +680,10 @@ class AgentEngine:
             self._stop_outcome = ("failed", error_msg)
             return False
 
+        finally:
+            self._track_token_usage(full_content, full_reasoning, tool_calls)
+            self.autonomous.on_turn_complete()
+
         self._context_recovery_attempts = 0
         if has_started_output:
             console.print()
@@ -844,10 +756,6 @@ class AgentEngine:
             if full_reasoning:
                 msg["reasoning_content"] = full_reasoning
             self.messages.append(msg)
-
-            # ── Track estimated tokens for budget ──
-            self._track_token_usage(full_content, full_reasoning)
-            self.autonomous.on_turn_complete()
 
             # ── Check for token limit truncation (only valid no-tool-call continuation) ──
             if finish_reason == "length":
@@ -928,8 +836,6 @@ class AgentEngine:
             self.messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
             tool_results.append(result)
             self._show_tool_result(result)
-            self.autonomous.budget.record_tool_result_tokens(
-                max(1, len(result) // 3), tool_name=tc["name"])
 
         # ── Check for cancel/stop BEFORE auto-continuation ──
         if self.cancel_requested:
@@ -1026,9 +932,6 @@ class AgentEngine:
         self.autonomous.on_session_start(goal=user_message)
 
         self.messages.append({"role": "user", "content": user_message})
-        # ── Track user input tokens ──
-        user_tokens = max(1, len(user_message) // 3)
-        self.autonomous.budget.record_input_message(user_tokens, "User message")
 
         while self._turn_count < MAX_TURNS:
             # ── Stop before starting a new turn if user requested it ──
@@ -1041,17 +944,6 @@ class AgentEngine:
                 self._stop_outcome = ("paused", "Stopped by user")
                 self._finish_session()
                 return
-
-            # ── Phase 5: Context Compaction for long sessions ──
-            if self.autonomous.enabled and self.autonomous.should_compact_context(self.messages):
-                console.print(
-                    "\n  [bold cyan]🧠 Context compaction: trimming old messages "
-                    "to keep session running smoothly...[/bold cyan]"
-                )
-                self.messages = self.autonomous.compact_context(self.messages)
-                console.print(
-                    f"  [dim green]✓ Compacted to {len(self.messages)} messages[/dim green]"
-                )
 
             self._turn_count += 1
             try:

@@ -33,3 +33,38 @@ API size rejections (including HTTP 413 synthetic error chunks) now archive the 
 If instructions, tool arguments or tool definitions alone exceed the provider limit, recovery stops while retaining the conversation; reduce the oversized input or change model before `/continue`. Archives preserve the history available at rejection, after ordinary context pruning; they are not automatic cross-session restore files.
 
 Regression tests cover isolated fake API streams and temporary files, including real failing pytest execution, 413 recovery, retry exhaustion, and archive failure. They do not call paid APIs. Model capability benchmarks, stream retry reconstruction, monetary budget enforcement, cross-session resume, semantic context summarization, packaging, and default TUI command parity remain outside this change.
+
+## Recoverable token savings
+
+Before every model request (including `/continue` and with autonomous mode off),
+the engine replaces older tool output with an excerpt and an absolute path to a
+private UTF-8 file under `~/.judecode/context-results/`. Use `read` with offset and
+limit, or search that file, to recover omitted evidence without rerunning the
+original command. Archive failures leave the original message intact. Existing
+excerpts are stable across requests; there is no summarization API cost.
+
+User/system messages, assistant decisions, tool arguments, and message ordering
+are preserved. The last three tool results and every result in the newest batch
+stay intact. This replaces the engine's previous destructive pruning and separate
+80-message compaction pass. It does not summarize assistant prose or guarantee a
+hard context limit; a very large recent result, user input or tool schema can still
+require the existing size-rejection recovery. Archives are local data, persist
+until removed by the user, and are not an automatic cross-session resume feature.
+
+Optional environment settings (restart JudeCode after changes):
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `JUDECODE_CONTEXT_TARGET_TOKENS` | `24000` | Soft estimated input target, including schemas; above it old excerpts shrink to 600 characters |
+| `JUDECODE_CONTEXT_RESULT_CHARS` | `1200` | Normal old-result excerpt size including archive reference (minimum 500) |
+| `JUDECODE_CONTEXT_RECENT_RESULTS` | `3` | Minimum number of recent full results (minimum 1; newest batch always retained) |
+
+`/budget` now estimates full resent input on each engine request, including tool
+schemas/arguments, and counts generated text/reasoning/tool calls once, including
+partial or failed streams. Newly created results are charged only when sent to the
+model. UTF-8 estimates account for Thai text, but are not provider tokenization or
+billing usage. Rejected requests are conservatively counted; API-client-internal
+retries and cache discounts are not resolved by these estimates. Dollar amounts
+still use configured tracker rates; budget limits remain monitor-only. The report
+also shows the current estimated context and tokens removed by pruning (not a
+cumulative dollar saving or a measured provider billing reduction).
