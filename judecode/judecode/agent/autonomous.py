@@ -12,6 +12,7 @@ whether to auto-continue, nudge, or stop.
 """
 
 import json
+import uuid
 import os
 import time
 import subprocess
@@ -94,7 +95,7 @@ class SessionState:
     """
 
     def __init__(self, session_id: Optional[str] = None):
-        self.session_id = session_id or datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.session_id = session_id or (datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:12])
         self.state_dir = Path.home() / ".judecode" / "sessions"
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.state_file = self.state_dir / f"{self.session_id}.json"

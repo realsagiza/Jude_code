@@ -132,23 +132,7 @@ def print_greeting() -> None:
     console.print(Rule(style="dim cyan"))
     console.print()
 
-    # ── Check for incomplete sessions (crash recovery) ──
-    try:
-        from judecode.agent.autonomous import SessionState
-        incomplete = SessionState.find_incomplete_sessions()
-        if incomplete:
-            console.print("\n  [bold yellow]🔄 Incomplete sessions detected:[/bold yellow]")
-            for s in incomplete[-3:]:  # Show last 3
-                console.print(
-                    f"    • {s.session_id} — {s.status} — "
-                    f"{len(s.completed_tasks)} tasks done — "
-                    f"Goal: {s.original_goal[:60]}..."
-                )
-            console.print(
-                "  [dim]Type /resume <session_id> to continue, or start a new task.[/dim]\n"
-            )
-    except Exception:
-        pass  # Don't block startup if session check fails
+    console.print("Use /sessions to find saved conversations for this project.", markup=False)
 
 
 def print_goodbye() -> None:
@@ -279,7 +263,8 @@ async def run_agent_interactive() -> None:
   [bold]/budget[/bold]         - Show budget usage and circuit breaker
 
 [bold cyan]Persistence & Recovery:[/bold cyan]
-  [bold]/resume[/bold]         - Resume an incomplete session
+  [bold]/sessions[/bold]       - List saved conversations in this project
+  [bold]/resume ID[/bold]      - Restore conversation (or latest); /continue to run
   [bold]/checkpoint[/bold]     - Show checkpoint history
   [bold]/rollback[/bold]       - Rollback to checkpoint (e.g. /rollback 3)
   [bold]/diff[/bold]           - Show diff between checkpoint and current
@@ -306,9 +291,11 @@ async def run_agent_interactive() -> None:
                 continue
 
             if user_input.lower() == "/clear":
-                agent.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-                agent.reset_stop()
-                agent._turn_count = 0
+                try:
+                    agent.new_conversation()
+                except (OSError, ValueError) as exc:
+                    console.print(str(exc), markup=False, style="red")
+                    continue
                 console.print("  [dim]Conversation cleared[/dim]\n", style="cyan")
                 continue
 
@@ -562,46 +549,16 @@ async def run_agent_interactive() -> None:
                 console.print(f"\n  🔔 Notification results: {result}\n")
                 continue
 
-            if user_input.lower().startswith("/resume"):
+            if user_input.lower() in ("/sessions", "/resume") or user_input.lower().startswith("/resume "):
                 parts = user_input.strip().split(maxsplit=1)
-                session_id = parts[1] if len(parts) > 1 else ""
-                if not session_id:
-                    # List incomplete sessions
-                    from judecode.agent.autonomous import SessionState
-                    incomplete = SessionState.find_incomplete_sessions()
-                    if incomplete:
-                        console.print("\n  [bold yellow]📋 Incomplete sessions:[/bold yellow]")
-                        for s in incomplete[-5:]:
-                            console.print(
-                                f"    • {s.session_id} — {s.status} — "
-                                f"{len(s.completed_tasks)} tasks done"
-                            )
-                        console.print("  [dim]Usage: /resume <session_id>[/dim]\n")
-                    else:
-                        console.print("  [dim]No incomplete sessions found.[/dim]\n")
-                else:
-                    from judecode.agent.autonomous import SessionState
-                    session = SessionState.load(session_id.strip())
-                    if session:
-                        agent.autonomous.session = session
-                        console.print(f"\n  [bold green]✅ Session {session_id} loaded![/bold green]")
-                        console.print(session.get_progress_summary())
-                        console.print()
-                        # Nudge agent to continue
-                        nudge = (
-                            f"[SYSTEM: Resuming session {session_id}. "
-                            f"Original goal: {session.original_goal}. "
-                            f"Completed {len(session.completed_tasks)} tasks. "
-                            f"Current task: #{session.current_task_id}. "
-                            f"Please continue from where we left off.]"
-                        )
-                        agent_running = True
-                        try:
-                            await agent.chat(nudge)
-                        finally:
-                            agent_running = False
-                    else:
-                        console.print(f"  [red]❌ Session '{session_id}' not found.[/red]\n")
+                try:
+                    message = (agent.resume_session(parts[1]) if len(parts) > 1
+                               else agent.sessions_summary())
+                    console.print(message, markup=False)
+                    if len(parts) > 1:
+                        console.print(agent.restored_preview(), markup=False)
+                except (ValueError, OSError, KeyError, TypeError) as exc:
+                    console.print(str(exc), markup=False, style="red")
                 continue
 
             if user_input.lower() == "/status":

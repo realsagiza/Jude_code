@@ -222,6 +222,7 @@ class JudeCodeTUI(App):
 
         log = self.query_one("#output", OutputLog)
         log.write(Text.from_markup(WELCOME))
+        log.write(Text(self.agent.sessions_summary()))
 
         self._render_sidebar()
         self.query_one("#message", Input).focus()
@@ -587,11 +588,29 @@ class JudeCodeTUI(App):
                 "  [magenta]/copy[/magenta]      copy the whole Output pane (or Ctrl+Y)\n"
                 "  Drag Output text, then Ctrl+C to copy selection; Esc stops work.\n"
                 "  [magenta]/queue[/magenta]     show pending prompt queue\n"
+                "  [magenta]/sessions[/magenta]  list saved conversations for this project\n"
+                "  [magenta]/resume ID[/magenta] restore a conversation (or latest)\n"
                 "  [magenta]/continue[/magenta]  trigger a continuation\n"
                 "  [magenta]/status[/magenta]    continuation status\n"
                 "  [magenta]/budget[/magenta]    token budget breakdown\n"
                 "  [magenta]/model[/magenta]     show model info\n"
             )
+            return
+
+        if c in ("/sessions", "/resume") or c.startswith("/resume "):
+            if self.ai_busy:
+                self._console_sink("Pause the agent before restoring a conversation.")
+                return
+            try:
+                parts = cmd.strip().split(maxsplit=1)
+                message = (self.agent.resume_session(parts[1]) if len(parts) > 1
+                           else self.agent.sessions_summary())
+                self.query_one("#output", OutputLog).write(Text(message))
+                if len(parts) > 1:
+                    self.query_one("#output", OutputLog).write(Text(self.agent.restored_preview()))
+                self._render_sidebar()
+            except (ValueError, OSError, KeyError, TypeError) as exc:
+                self.query_one("#output", OutputLog).write(Text(str(exc), style="red"))
             return
 
         if c == "/copy":
@@ -731,9 +750,11 @@ class JudeCodeTUI(App):
         if self.ai_busy:
             self._console_sink("\n  [yellow]⚠ Cannot clear while the agent is busy.[/yellow]")
             return
-        self.agent.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-        self.agent.reset_stop()
-        self.agent._turn_count = 0
+        try:
+            self.agent.new_conversation()
+        except (OSError, ValueError) as exc:
+            self.query_one("#output", OutputLog).write(Text(str(exc), style="red"))
+            return
         self.queued_previews.clear()
         log = self.query_one("#output", OutputLog)
         log.clear()

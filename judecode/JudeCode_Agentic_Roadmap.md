@@ -5,6 +5,12 @@
 >
 > **✅ Phase 1-5 IMPLEMENTED — Agentic Level: ~95%**
 
+> **อัปเดต 2026-10-06:** เพิ่ม transcript restore ผ่าน `/sessions` และ `/resume`
+> ใน TUI/terminal แล้ว พร้อมบันทึกผลเครื่องมือและแยกกรณีผลไม่แน่นอนหลัง crash
+> ตัวเลข ~95% ด้านล่างเป็นการประเมินเดิม ไม่ใช่ benchmark ความพร้อมใช้งานจริง
+> Budget ยังเป็น monitor-only; stream reconstruction, subprocess stop และ packaging
+> ยังต้องพัฒนาต่อ ดูข้อจำกัดปัจจุบันใน `docs/reliability.md`
+
 ---
 
 ## 📊 สถานะปัจจุบัน: Agentic ~95%

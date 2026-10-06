@@ -32,7 +32,7 @@ API size rejections (including HTTP 413 synthetic error chunks) now archive the 
 
 If instructions, tool arguments or tool definitions alone exceed the provider limit, recovery stops while retaining the conversation; reduce the oversized input or change model before `/continue`. Archives preserve the history available at rejection, after ordinary context pruning; they are not automatic cross-session restore files.
 
-Regression tests cover isolated fake API streams and temporary files, including real failing pytest execution, 413 recovery, retry exhaustion, and archive failure. They do not call paid APIs. Model capability benchmarks, stream retry reconstruction, monetary budget enforcement, cross-session resume, semantic context summarization, packaging, and default TUI command parity remain outside this change.
+Regression tests cover isolated fake API streams and temporary files, including real failing pytest execution, 413 recovery, retry exhaustion, and archive failure. They do not call paid APIs. Model capability benchmarks, stream retry reconstruction, monetary budget enforcement, semantic context summarization, packaging, and default TUI command parity remain outside this change.
 
 ## Recoverable token savings
 
@@ -68,3 +68,44 @@ retries and cache discounts are not resolved by these estimates. Dollar amounts
 still use configured tracker rates; budget limits remain monitor-only. The report
 also shows the current estimated context and tokens removed by pruning (not a
 cumulative dollar saving or a measured provider billing reduction).
+
+
+## Conversation restore
+
+Both the default TUI and legacy terminal support `/sessions`, `/resume <id>`,
+and `/resume latest`. Lists are limited to the current resolved working directory;
+open the original directory to restore its conversation. Restore loads context
+without calling the model or executing tools. `/continue` or a new instruction
+starts work. The output pane shows a bounded preview of recent user/assistant
+messages; the complete saved context is loaded into the engine.
+
+The engine atomically saves versioned, private JSON snapshots in
+`~/.judecode/transcripts/` before model requests and tool execution, after tool
+results and assistant responses, and when a turn finishes. Snapshots include
+messages/tool results, task state, unresolved failures, verification requirements,
+and estimated token/cost totals. Existing context excerpts still refer to the
+full output in `~/.judecode/context-results/`; retain those files to retrieve it.
+A failed save before execution stops that action. A failed final save is reported;
+the last successfully saved snapshot remains available. Files use owner-only
+permissions on POSIX and are local plaintext, not encrypted. No retention deletion
+is performed automatically.
+
+Restore forks into a unique session ID, with new checkpoint and decision-log
+ownership. It keeps the original snapshot/checkpoints available and does not
+rewind project files. Verification is rerun when needed, because files may have
+changed while JudeCode was closed. `/clear` archives the current conversation and
+starts a fresh session instead of overwriting the previous transcript.
+
+If the process dies after starting an action but before saving its result, the
+snapshot cannot prove whether that action happened. Restore adds an explicit
+unknown-outcome tool result to complete the API message pairing; it never replays
+saved tool calls. `/continue` is blocked for that restored conversation until the
+user inspects state and sends a new instruction. This is not an exactly-once
+execution guarantee: external side effects must be checked before requesting a
+retry. Tokens from an interrupted unsaved stream may be absent from estimates.
+
+Old sessions without transcripts cannot be reconstructed. Corrupt snapshots are
+skipped in listings and rejected on restore without replacing the current context.
+Pending sandbox changes are not restored: apply or resolve them in their original
+session. Restoring does not restore live subprocesses, queued UI prompts, provider
+connections, or the original terminal scrollback; it uses the current API client.

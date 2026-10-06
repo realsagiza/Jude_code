@@ -77,6 +77,12 @@ While in the CLI:
 |---------|-------------|
 | `/help` | Show help |
 | `/quit`, `Ctrl+D` | Exit |
+| `/clear` | Start a new conversation; keep the previous saved conversation |
+| `/model` | Show current model info |
+| `/sessions` | List saved conversations in the current project |
+| `/resume latest` | Restore the latest previous conversation without executing tools |
+| `/resume <id>` | Restore a specific saved conversation |
+| `/continue` | Continue working with the restored context |
 
 In the default full-screen TUI, drag over text in the Output pane to select it,
 then press **Ctrl+C** (or **Ctrl+Shift+C**) to copy the selection. Selected text
@@ -85,8 +91,13 @@ is highlighted, including selections across lines and in scrolled output.
 keeps its Stop / Quit behavior; **Esc** stops work even when text is selected,
 and **Ctrl+Q** exits. This requires Textual 8.2.7 or newer. Restart JudeCode after
 updating to load the new UI code.
-| `/clear` | Reset conversation history |
-| `/model` | Show current model info |
+Conversations are saved automatically on this machine. After restarting JudeCode
+in the same project directory, use `/sessions`, `/resume latest`, then `/continue`.
+Restoring opens a new session with the saved conversation, task progress and
+estimated token totals; it preserves the original snapshot. If a tool was
+interrupted and its outcome is unknown, inspect the project and send a new
+instruction before continuing. Sessions created before this feature have no
+restorable transcript. See [recovery details](docs/reliability.md#conversation-restore).
 
 ## Configuration
 

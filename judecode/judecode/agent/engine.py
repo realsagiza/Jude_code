@@ -103,7 +103,108 @@ class AgentEngine:
         self._needs_verification = False
         self._verification = None
         self.sandbox.before_apply = self._snapshot_file
+        self._resume_uncertain = False
+        self._restored_session = False
 
+
+    def save_transcript(self) -> None:
+        """Persist before requests/actions and after results; fail closed on I/O errors."""
+        from judecode.agent.transcripts import TranscriptStore
+        session = self.autonomous.session
+        state = {key: getattr(session, key) for key in (
+            "original_goal", "completed_tasks", "current_task_id", "total_turns",
+            "total_tool_calls", "status", "outcome_reason", "errors", "started_at")}
+        budget = self.autonomous.budget
+        TranscriptStore().save(session.session_id, {
+            "cwd": str(Path.cwd().resolve()), "messages": self.messages,
+            "state": state, "needs_verification": self._needs_verification,
+            "failures": [[list(key), value] for key, value in self._tool_failures.items()],
+            "uncertain": self._resume_uncertain,
+            "staged": bool(self.sandbox.get_pending_changes()),
+            "budget": {key: getattr(budget, key) for key in (
+                "total_input_tokens", "total_output_tokens", "total_cost", "tokens")},
+        })
+
+    def sessions_summary(self) -> str:
+        from judecode.agent.transcripts import TranscriptStore
+        rows = TranscriptStore().list(Path.cwd())[:10]
+        if not rows:
+            return "No saved conversations for this project yet."
+        return "Saved conversations (newest first):\n" + "\n".join(
+            f"{row['session_id']} | {row['state']['status']} | "
+            f"{str(row['state']['original_goal'])[:100]}" for row in rows
+        ) + "\nUse /resume <id> or /resume latest."
+
+    def resume_session(self, session_id: str) -> str:
+        from judecode.agent.transcripts import TranscriptStore
+        store = TranscriptStore()
+        if self.sandbox.get_pending_changes():
+            raise ValueError("Apply or resolve current staged changes before resuming")
+        if session_id == "latest":
+            rows = [row for row in store.list(Path.cwd())
+                    if row['session_id'] != self.autonomous.session.session_id]
+            if not rows:
+                raise ValueError("No previous saved conversation for this project")
+            session_id = rows[0]['session_id']
+        data, pending = store.load(session_id, Path.cwd())
+        if data.get('staged'):
+            raise ValueError("This snapshot has staged changes; sandbox restoration is not supported")
+        state = data.get('state')
+        if not isinstance(state, dict) or not isinstance(data.get('budget'), dict):
+            raise ValueError("Invalid saved session state")
+        # Construct a fresh engine first: forks preserve the source snapshot and
+        # avoid two processes writing the same session/checkpoint directory.
+        restored = AgentEngine(self.system_prompt, self.api,
+            max_continuations=self.continuation.max_continuations,
+            continue_on_stream_error=self.continuation.continue_on_stream_error,
+            continue_on_incomplete_work=self.continuation.continue_on_incomplete_work,
+            continue_on_tool_error=self.continuation.continue_on_tool_error)
+        restored.autonomous.enabled = self.autonomous.enabled
+        for key in ('original_goal', 'completed_tasks', 'current_task_id',
+                    'total_turns', 'total_tool_calls', 'errors', 'started_at'):
+            setattr(restored.autonomous.session, key, state[key])
+        for key in ('total_input_tokens', 'total_output_tokens', 'total_cost', 'tokens'):
+            setattr(restored.autonomous.budget, key, data['budget'][key])
+        restored._restored_session = True
+        restored.messages = data['messages']
+        restored._tool_failures = {tuple(key): value for key, value in data.get('failures', [])}
+        restored._needs_verification = bool(data.get('needs_verification')) or bool(pending)
+        restored._resume_uncertain = bool(pending) or bool(data.get('uncertain'))
+        for identifier in sorted(pending):
+            restored.messages.append({"role": "tool", "tool_call_id": identifier,
+                "content": "Execution outcome unknown after interruption. Do not replay this action. Inspect current state before deciding what remains."})
+        restored.autonomous.session.status = 'paused'
+        restored.autonomous.session.outcome_reason = 'Restored from ' + session_id
+        restored.continuation.reset(state['original_goal'])
+        restored.save_transcript()
+        if len(self.messages) > 1:
+            self.save_transcript()
+        self.__dict__.update(restored.__dict__)
+        # Bound callback was constructed on the temporary engine.
+        self.sandbox.before_apply = self._snapshot_file
+        self.autonomous.session.save()
+        note = ("Some tool outcomes are unknown. Inspect the project and send a new instruction; "
+                "/continue is blocked until then." if self._resume_uncertain else
+                "Use /continue or send a new instruction to proceed.")
+        return f"Restored {session_id} as {self.autonomous.session.session_id}: {len(self.messages)} messages. No tools executed.\n{note}"
+
+    def restored_preview(self) -> str:
+        """A bounded display preview; the engine retains the entire saved history."""
+        visible = [message for message in self.messages
+                   if message['role'] in ('user', 'assistant') and message.get('content')]
+        return "\n\n".join(
+            f"{message['role'].capitalize()}: {str(message['content'])[:3000]}"
+            for message in visible[-6:])
+
+    def new_conversation(self) -> None:
+        if self.sandbox.get_pending_changes():
+            raise ValueError("Resolve staged changes before clearing the conversation")
+        if len(self.messages) > 1:
+            self.save_transcript()
+        fresh = AgentEngine(self.system_prompt, self.api)
+        fresh.autonomous.enabled = self.autonomous.enabled
+        self.__dict__.update(fresh.__dict__)
+        self.sandbox.before_apply = self._snapshot_file
 
     # ── Context Management (Token Optimization) ──
 
@@ -274,6 +375,10 @@ class AgentEngine:
             status, reason = "answered", "Response delivered; no implementation success claimed."
         self.autonomous.on_session_end(status, reason)
         self._save_session_memory()
+        try:
+            self.save_transcript()
+        except (OSError, ValueError) as exc:
+            console.print(Text(f"Session snapshot could not be saved: {exc}", style="red"))
         console.print(Text(f"\nSession outcome: {status} — {reason}"))
         if status == "completed":
             self.notifications.notify_session_complete(
@@ -464,6 +569,10 @@ class AgentEngine:
         Manually trigger a continuation nudge.
         Called when user types /continue.
         """
+        if self._resume_uncertain:
+            console.print(Text("Cannot continue: interrupted tool outcomes are unknown. Inspect state and send a new instruction.", style="yellow"))
+            return
+        self.reset_stop()
         if not self.continuation.can_continue():
             console.print(
                 "\n  [bold red]Max continuations reached. Start a new task or clear the conversation.[/bold red]\n"
@@ -533,6 +642,7 @@ class AgentEngine:
         # Include fresh verification context before estimating/pruning the request.
         self._prune_context()
         # Estimates include resends; provider billing/cache discounts may differ.
+        self.save_transcript()
         self._record_request_tokens()
         # Stream the response
         try:
@@ -708,6 +818,7 @@ class AgentEngine:
             if full_reasoning:
                 msg["reasoning_content"] = full_reasoning
             self.messages.append(msg)
+            self.save_transcript()
             console.print(
                 "\n  [bold yellow]⏸ Stopped mid-response by user. "
                 "Type a new message to redirect, or /continue to resume.[/bold yellow]\n"
@@ -744,6 +855,7 @@ class AgentEngine:
             if full_reasoning:
                 msg["reasoning_content"] = full_reasoning
             self.messages.append(msg)
+            self.save_transcript()
             self._stop_outcome = ("paused", "Stopped by user")
             return False  # Stop the loop
 
@@ -756,6 +868,7 @@ class AgentEngine:
             if full_reasoning:
                 msg["reasoning_content"] = full_reasoning
             self.messages.append(msg)
+            self.save_transcript()
 
             # ── Check for token limit truncation (only valid no-tool-call continuation) ──
             if finish_reason == "length":
@@ -799,6 +912,7 @@ class AgentEngine:
         if full_reasoning:
             msg["reasoning_content"] = full_reasoning
         self.messages.append(msg)
+        self.save_transcript()
 
         if not has_started_output:
             console.print()
@@ -832,8 +946,10 @@ class AgentEngine:
             if self.cancel_requested:
                 result = "Error executing tool: skipped because user stopped the batch"
             else:
+                self.save_transcript()
                 result = await asyncio.to_thread(self._execute_tool_safe, tc["name"], tc["args"])
             self.messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
+            self.save_transcript()
             tool_results.append(result)
             self._show_tool_result(result)
 
@@ -921,10 +1037,14 @@ class AgentEngine:
 
     async def chat(self, user_message: str) -> None:
         """Send a user message and handle streaming + tool calls."""
+        # A new explicit instruction permits inspecting uncertain interrupted work.
+        self._resume_uncertain = False
         # Reset for new user message
         self._stop_outcome = None
-        self._tool_failures = {}
-        self._needs_verification = False
+        if not self._restored_session:
+            self._tool_failures = {}
+            self._needs_verification = False
+        self._restored_session = False
         self._verification = None
         self.continuation.reset(user_message)
         self._turn_count = 0
