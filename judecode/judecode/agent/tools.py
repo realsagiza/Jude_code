@@ -13,6 +13,7 @@ from judecode.utils.file_ops import read_file, write_file, edit_file, delete_fil
 from judecode.utils.shell import execute_shell
 from judecode.utils.search_tools import glob_search, grep_search
 from judecode.utils.web_tools import web_fetch, web_search
+from judecode.utils.media_director import DIRECTOR_DEFINITIONS, DIRECTOR_FUNCTIONS, execute_director_tool
 from judecode.utils.media_tools import MEDIA_TOOL_DEFINITIONS, MEDIA_FUNCTIONS, execute_media_tool
 
 # ── Task Management Tools ──
@@ -1326,12 +1327,15 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
 
 
 TOOL_DEFINITIONS.extend(MEDIA_TOOL_DEFINITIONS)
+TOOL_DEFINITIONS.extend(DIRECTOR_DEFINITIONS)
 
 def execute_tool(
     tool_name: str,
     tool_params: dict[str, Any],
 ) -> str:
     try:
+        if tool_name in DIRECTOR_FUNCTIONS:
+            return execute_director_tool(tool_name, tool_params)
         if tool_name in MEDIA_FUNCTIONS:
             return execute_media_tool(tool_name, tool_params)
 

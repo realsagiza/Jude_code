@@ -339,8 +339,22 @@ CONTEXT_RESULT_CHARS = _env_int("CONTEXT_RESULT_CHARS", 1200)
 CONTEXT_RECENT_RESULTS = _env_int("CONTEXT_RECENT_RESULTS", 3)
 
 
-# Media models are explicit/discovered rather than pinned to a stale catalogue.
-MEDIA_IMAGE_MODEL = _env("MEDIA_IMAGE_MODEL", "")
-MEDIA_VIDEO_MODEL = _env("MEDIA_VIDEO_MODEL", "")
+# Budget media defaults; discover availability before production. Explicit env overrides remain supported.
+MEDIA_IMAGE_MODEL = _env("MEDIA_IMAGE_MODEL", "black-forest-labs/flux.2-klein-4b")
+MEDIA_VIDEO_MODEL = _env("MEDIA_VIDEO_MODEL", "x-ai/grok-imagine-video-1.5-lite")
 MEDIA_AUDIO_MODEL = _env("MEDIA_AUDIO_MODEL", "")
 MEDIA_OUTPUT_DIR = _env("MEDIA_OUTPUT_DIR", str(Path.home() / ".judecode" / "media"))
+
+MEDIA_DIRECTOR_PROMPT = """
+For films/multi-scene media act as director: write a brief storyboard and continuity bible,
+then director_plan -> sequential director_step -> director_status to resume. Prefer still
+scenes, FLUX Klein, Grok Lite 480p only for necessary motion, and existing Thai TTS.
+Check media_models for configured model support/pricing; never silently upgrade or retry
+uncertain paid jobs. Preserve exact Thai narration. For cut shots reuse identity references;
+for continuous action use link=continue. Report final paths, actual available receipts and
+limitations. Check scene outputs for continuity; do not claim visual inspection without it.
+Thai text overlays/subtitles and lip sync are not provided by director tools; don't promise
+them. Do not start a paid sample just because the user asks to configure these tools.
+"""
+SYSTEM_PROMPT += MEDIA_DIRECTOR_PROMPT
+SYSTEM_PROMPT_COMPACT += MEDIA_DIRECTOR_PROMPT

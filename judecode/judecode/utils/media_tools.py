@@ -139,7 +139,8 @@ def media_models(kind: str, query: str = '') -> dict:
         rows = client.json('GET', endpoints[kind]).get('data', [])
     selected = [r for r in rows if query.lower() in (r.get('id', '') + ' ' + r.get('name', '')).lower()]
     fields = ('id', 'name', 'supported_parameters', 'supported_durations', 'supported_resolutions',
-              'supported_aspect_ratios', 'generate_audio', 'pricing', 'pricing_skus', 'endpoints')
+              'supported_aspect_ratios', 'generate_audio', 'pricing', 'pricing_skus', 'endpoints',
+              'supported_voices', 'supported_languages')
     return {'models': [{k: r[k] for k in fields if k in r} for r in selected[:30]],
             'matches': len(selected), 'hint': 'Refine query if truncated; choose a model and supported options before generating.'}
 
@@ -202,6 +203,10 @@ def media_video(prompt: str, model: str = '', duration: int | None = None,
     model = model or config.MEDIA_VIDEO_MODEL
     if not model or not prompt.strip():
         raise MediaError('Provide prompt and model; discover models with media_models(kind="video")')
+    if model == 'x-ai/grok-imagine-video-1.5-lite':
+        resolution = resolution or '480p'
+        duration = 5 if duration is None else duration
+        generate_audio = False if generate_audio is None else generate_audio
     payload = {'model': model, 'prompt': prompt}
     if duration is not None:
         if type(duration) is not int or not 1 <= duration <= 120:

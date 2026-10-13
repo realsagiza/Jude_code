@@ -232,3 +232,18 @@ def test_video_download_rejects_insecure_redirect(monkeypatch):
     transport(monkeypatch, handler)
     with pytest.raises(media.MediaError, match='non-HTTPS'):
         media.media_video_status('job-1')
+
+
+def test_budget_video_defaults_and_explicit_overrides(monkeypatch):
+    bodies = []
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(202, json={'id': 'budget-job', 'status': 'pending'})
+    transport(monkeypatch, handler)
+    media.media_video('x', model='x-ai/grok-imagine-video-1.5-lite')
+    assert bodies[0]['resolution'] == '480p'
+    assert bodies[0]['duration'] == 5
+    assert bodies[0]['generate_audio'] is False
+    media.media_video('x', model='x-ai/grok-imagine-video-1.5-lite', resolution='720p', duration=3, generate_audio=True)
+    assert bodies[1]['resolution'] == '720p' and bodies[1]['duration'] == 3
+    assert bodies[1]['generate_audio'] is True

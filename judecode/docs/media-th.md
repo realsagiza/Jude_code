@@ -37,9 +37,9 @@ JSON เก็บ job_id, สถานะ, path, และ usage/cost เมื�
 
 ```dotenv
 JUDECODE_MEDIA_OUTPUT_DIR=/absolute/path/to/media
-# ไม่บังคับ: หากว่าง Jude ต้องเลือกชื่อโมเดลจาก media_models ก่อนสร้างภาพ/วิดีโอ
-JUDECODE_MEDIA_IMAGE_MODEL=
-JUDECODE_MEDIA_VIDEO_MODEL=
+# ค่าเริ่มต้นประหยัด (แก้ได้); ตรวจ availability/pricing ด้วย media_models
+JUDECODE_MEDIA_IMAGE_MODEL=black-forest-labs/flux.2-klein-4b
+JUDECODE_MEDIA_VIDEO_MODEL=x-ai/grok-imagine-video-1.5-lite
 JUDECODE_MEDIA_AUDIO_MODEL=
 ```
 
@@ -66,3 +66,27 @@ python -m pip install -r requirements-media.txt
 - https://openrouter.ai/docs/guides/overview/multimodal/image-generation
 - https://openrouter.ai/docs/guides/overview/multimodal/video-generation
 - https://openrouter.ai/docs/guides/overview/multimodal/tts
+
+## โหมดผู้กำกับแบบประหยัด
+
+สั่งได้ว่า “ทำคลิปแมวกลับบ้าน 3 ฉาก เน้นประหยัด ตัวละครต่อเนื่อง เสียงบรรยายไทย”
+Jude จะเขียน storyboard และ continuity bible (ตัวละคร เสื้อผ้า อุปกรณ์ สถานที่ แสง ทิศทางการเคลื่อนไหว)
+แล้วใช้ `director_plan` บันทึกฉากเรียงลำดับ ก่อนเรียก `director_step` ทีละขั้นจนได้ MP4
+
+- ค่าเริ่มต้นเป็นภาพนิ่ง FLUX.2 Klein 4B; ฉากที่ต้องเคลื่อนไหวเลือก mode=video ใช้ Grok Imagine 1.5 Lite ที่ 480p ไม่มีเสียงจากโมเดลคลิป
+- เสียงใช้ VOICE_TTS_MODEL/VOICE_NAME เดิม (MAI เสียงไทย Nattapong โดย default); narration เป็นบทที่อ่านจริงรายฉาก
+- link=cut ส่งภาพฉากแรกเป็น reference รักษาเอกลักษณ์; link=continue ส่งเฟรมท้ายคลิปก่อนหน้า (หรือภาพก่อนหน้า) พร้อมภาพฉากแรก
+- สร้างภาพก่อนแล้วส่งเป็น first_frame ของคลิป; เก็บ job_id และ poll งานเดิม ไม่ submit ซ้ำ
+- วัดความยาวเสียงจริงก่อนรวมแต่ละฉาก ถ้าเสียงยาวกว่าฉากจะค้างเฟรมท้ายเพิ่ม ไม่ตัดบทพูด; เกิน 120 วินาทีต้องแบ่งฉาก
+- รวมฉากที่มีเสียงบรรยายแล้วตามลำดับเป็นหนัง; รองรับ 16:9, 9:16, 1:1
+- ไม่มี automatic upgrade ไปโมเดลแพง และไม่มีการลอง paid generation ซ้ำเมื่อผลไม่แน่นอน
+
+แผนและสถานะอยู่ `~/.judecode/media/projects/<project_id>.json`
+ใช้ `director_status(project_id)` ดูงานและขั้นถัดไปหลัง restart แล้ว `director_step(project_id)` ทำต่อ
+หาก pending operation ค้างจาก timeout/crash ระบบจะหยุดเพื่อกันคิดเงินซ้ำ: ตรวจ receipt และ OpenRouter Activity
+แล้วกู้ asset/job_id เข้าแผนที่บันทึกไว้หลังตรวจยืนยัน (ยังไม่มีปุ่มกู้อัตโนมัติ); ห้ามสร้าง project ใหม่เพื่อเลี่ยงสถานะนี้
+การล็อกการทำงานต่อ project ใช้ POSIX file lock (macOS/Linux)
+
+ความต่อเนื่องเป็นการชี้นำด้วย prompt/reference ไม่รับประกันหน้าตาและท่าทางตรงทุกเฟรม ต้องตรวจผลงาน
+ระบบนี้ยังไม่มี lip sync, ซับ หรือการวางฟอนต์ไทยอัตโนมัติ และไม่ได้วัดคุณภาพด้วยสายตาให้เอง
+`receipts` เก็บค่าใช้จ่ายที่ provider รายงาน ไม่ใช่ยอดรวมสมบูรณ์และยังไม่เชื่อม `/budget`
