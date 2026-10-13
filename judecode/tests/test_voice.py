@@ -192,7 +192,7 @@ def test_tui_voice_roundtrip(monkeypatch, tmp_path):
         monkeypatch.setattr(tui, 'play_audio', playback)
         monkeypatch.setattr(app.agent, 'chat', chat)
         async with app.run_test() as pilot:
-            await app._handle_command('/voice on')
+            await app._handle_command('/voice read')
             await app._handle_command('/listen 1')
             await app._voice_task
             assert app.query_one('#message', Input).value == 'ช่วยตอบภาษาไทย'

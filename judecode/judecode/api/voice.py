@@ -19,14 +19,14 @@ class VoiceError(Exception):
     """A user-facing voice failure (never includes credentials or HTTP bodies)."""
 
 
-def spoken_text(text: str, limit: int = 3000) -> str:
+def spoken_text(text: str, limit: int | None = 3000) -> str:
     """Read prose rather than fenced code, URLs, and Markdown decoration."""
     text = re.sub(r"```.*?(?:```|\Z)", " โค้ดแสดงอยู่ในหน้าจอ ", text, flags=re.S)
     text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
     text = re.sub(r"https?://\S+", "", text)
     text = re.sub(r"[*#`>|]", "", text)
     text = re.sub(r"\s+", " ", text).strip()
-    if len(text) > limit:
+    if limit is not None and len(text) > limit:
         text = text[:limit] + " อ่านรายละเอียดที่เหลือได้ในหน้าจอครับ"
     return text
 

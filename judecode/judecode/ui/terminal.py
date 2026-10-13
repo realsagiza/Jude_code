@@ -612,6 +612,7 @@ def main_cli() -> None:
             print("  --help, -h      Show this help message and exit")
             print("  --classic       Use the classic scrolling async UI")
             print("  --legacy        Use the legacy single-thread UI")
+            print("  --voice         Start hands-free Thai voice conversation")
             print()
             print("Default: Beautiful full-screen TUI (Textual).")
             return
@@ -626,8 +627,11 @@ def main_cli() -> None:
     # Default: beautiful Textual TUI
     try:
         from judecode.ui.tui_app import run_tui
-        run_tui()
+        run_tui(voice_conversation='--voice' in sys.argv[1:])
     except Exception as e:
+        if '--voice' in sys.argv[1:]:
+            console.print('[red]Voice TUI failed to start. Please check terminal and audio setup.[/red]')
+            return
         # Fall back to the classic async UI if the TUI can't start
         console.print(f"[yellow]TUI failed to start ({e}); falling back to classic UI.[/yellow]")
         from judecode.ui.async_terminal import main_cli as async_main
