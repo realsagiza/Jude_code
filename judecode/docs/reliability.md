@@ -119,3 +119,19 @@ results are preserved. An archive failure stops recovery without changing histor
 This prevents strict providers from repeatedly rejecting a conversation containing
 a malformed historical call. Recovery does not reconstruct or replay the failed
 action: the model must generate a fresh complete call, preferably in smaller steps.
+
+Transport retries are allowed only before a client has yielded any response chunk.
+After a partial response, a connection failure stops that generation; its tool
+fragments cannot be concatenated with another attempt or executed. Missing finish
+markers and malformed SSE JSON are failures, including clean-but-premature EOF.
+The engine validates tool IDs/indexes and requires a finish reason before tool
+execution. JSON arguments must be objects without duplicate keys or NaN/Infinity.
+
+Three consecutive invalid-argument turns stop automatic recovery with an explicit
+failure while retaining history. Exceptions during streaming also have a separate
+three-turn recovery limit. A new user instruction or manual `/continue` starts a
+new recovery allowance. API-boundary checks cover both streaming and non-streaming
+OpenAI-compatible calls and Anthropic conversion. These safeguards prevent a bad
+generation from poisoning later requests; they cannot guarantee provider/network
+availability or that a model always emits valid JSON. Restart running processes
+after updating to activate the safeguards.

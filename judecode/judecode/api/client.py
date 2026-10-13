@@ -54,13 +54,14 @@ class ApiClient:
         """
         Send a chat completion request and yield response chunks.
         For non-streaming, yields a single final dict.
-        Auto-retries on stream errors up to max_retries.
+        Retries transport failures up to max_retries only before yielding output.
         If all retries exhausted, yields a synthetic error chunk
         so the agent can recover gracefully instead of crashing.
         """
         # ── Sanitize messages: ensure assistant messages always have content or tool_calls ──
         sanitized = []
-        for msg in messages:
+        from judecode.agent.tool_history import repair_tool_history
+        for msg in repair_tool_history(messages):
             if msg.get("role") == "assistant":
                 has_content = bool(msg.get("content"))
                 has_tool_calls = bool(msg.get("tool_calls"))
@@ -87,6 +88,7 @@ class ApiClient:
 
         while attempt < self.max_retries:
             attempt += 1
+            emitted = False
             try:
                 async with self._client.stream(
                     "POST", url, json=payload, headers=headers
@@ -123,24 +125,28 @@ class ApiClient:
 
                     remaining_content = ""
                     if stream:
+                        finished = False
                         try:
                             async for line in response.aiter_lines():
-                                if not line.startswith("data: "):
+                                if not line.startswith("data:"):
                                     continue
-                                data_str = line[6:].strip()
+                                data_str = line[5:].strip()
                                 if not data_str or data_str == "[DONE]":
                                     continue
                                 try:
                                     chunk = json.loads(data_str)
+                                    if chunk.get("choices"):
+                                        finished = finished or bool(chunk["choices"][0].get("finish_reason"))
                                     remaining_content += self._extract_content(chunk)
+                                    emitted = True
                                     yield chunk
                                 except json.JSONDecodeError:
-                                    continue
+                                    raise RuntimeError("Malformed JSON in provider stream; response discarded")
+                            if not finished:
+                                raise RuntimeError("Provider stream ended without finish_reason; response discarded")
                         except (httpx.StreamError, httpx.RemoteProtocolError, TypeError) as e:
-                            # Connection interrupted mid-stream (or internal type error in Python 3.14):
-                            # remember what we got and retry.  On the final attempt we yield
-                            # the error as a synthetic chunk so the agent can decide how to
-                            # proceed instead of crashing.
+                            # Never merge a new generation into already-yielded deltas.
+                            # Retry only when the engine has seen no output at all.
                             last_error = e
                             log_error_details(
                                 logger,
@@ -153,7 +159,7 @@ class ApiClient:
                                     "remaining_content_length": len(remaining_content),
                                 },
                             )
-                            if attempt >= self.max_retries:
+                            if emitted or attempt >= self.max_retries:
                                 yield self._error_chunk(
                                     f"Stream interrupted after receiving partial content.\n"
                                     f"Partial content so far:\n{remaining_content}\n\n"
@@ -180,7 +186,7 @@ class ApiClient:
                         "attempt": attempt,
                     },
                 )
-                if attempt >= self.max_retries:
+                if emitted or attempt >= self.max_retries:
                     yield self._error_chunk(
                         f"Connection failed after {self.max_retries} attempts.\n"
                         f"Error: {type(e).__name__}: {e}\n"
@@ -215,7 +221,7 @@ class ApiClient:
                         "attempt": attempt,
                     },
                 )
-                if attempt >= self.max_retries:
+                if emitted or attempt >= self.max_retries:
                     yield self._error_chunk(
                         f"HTTP error after {self.max_retries} attempts.\n"
                         f"Error: {type(e).__name__}: {e}\n"
@@ -282,7 +288,8 @@ class ApiClient:
         """Non-streaming completion. Returns the final response dict."""
         # ── Sanitize messages: ensure assistant messages always have content or tool_calls ──
         sanitized = []
-        for msg in messages:
+        from judecode.agent.tool_history import repair_tool_history
+        for msg in repair_tool_history(messages):
             if msg.get("role") == "assistant":
                 has_content = bool(msg.get("content"))
                 has_tool_calls = bool(msg.get("tool_calls"))
@@ -337,4 +344,3 @@ class ApiClient:
 
     async def close(self):
         await self._client.aclose()
-

@@ -10,7 +10,16 @@ def parse_tool_arguments(raw):
     def reject_constant(value):
         raise ValueError("Non-JSON constant: " + value)
 
-    value = json.loads(raw, parse_constant=reject_constant)
+    def unique_object(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("Duplicate argument key: " + key)
+            value[key] = item
+        return value
+
+    value = json.loads(raw, parse_constant=reject_constant,
+                       object_pairs_hook=unique_object)
     if not isinstance(value, dict):
         raise ValueError("Tool arguments must be an object")
     return value

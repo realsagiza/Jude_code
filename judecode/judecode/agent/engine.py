@@ -100,6 +100,8 @@ class AgentEngine:
         self.notifications = NotificationManager()
         self._stop_outcome = None
         self._context_recovery_attempts = 0
+        self._invalid_tool_rounds = 0
+        self._stream_error_rounds = 0
         self._tool_failures = {}
         self._needs_verification = False
         self._verification = None
@@ -574,6 +576,8 @@ class AgentEngine:
             console.print(Text("Cannot continue: interrupted tool outcomes are unknown. Inspect state and send a new instruction.", style="yellow"))
             return
         self.reset_stop()
+        self._invalid_tool_rounds = 0
+        self._stream_error_rounds = 0
         if not self.continuation.can_continue():
             console.print(
                 "\n  [bold red]Max continuations reached. Start a new task or clear the conversation.[/bold red]\n"
@@ -719,6 +723,8 @@ class AgentEngine:
                 tool_call_pieces = delta.get("tool_calls", [])
                 for tc in tool_call_pieces:
                     index = tc.get("index", 0)
+                    if type(index) is not int or not 0 <= index < 128:
+                        raise ValueError("Invalid streamed tool index")
                     if index >= len(tool_calls):
                         tool_calls.extend(
                             [{} for _ in range(index - len(tool_calls) + 1)]
@@ -733,6 +739,19 @@ class AgentEngine:
                             if "arguments" not in tool_calls[index]:
                                 tool_calls[index]["arguments"] = ""
                             tool_calls[index]["arguments"] += fn["arguments"]
+
+            if not stream_aborted and not finish_reason:
+                raise RuntimeError("Provider stream ended without finish_reason; no tools executed")
+            if not stream_aborted and tool_calls and finish_reason not in ("tool_calls", "stop", "length"):
+                raise RuntimeError("Provider stopped tool generation: " + finish_reason)
+            # Anthropic content indexes can include text/reasoning gaps.
+            tool_calls = [tc for tc in tool_calls if tc]
+            identifiers = [tc.get("id") for tc in tool_calls]
+            if (tool_calls and not stream_aborted and
+                    (any(not isinstance(identifier, str) or not identifier for identifier in identifiers)
+                     or len(set(identifiers)) != len(identifiers)
+                     or any(not isinstance(tc.get("name"), str) or not tc["name"] for tc in tool_calls))):
+                raise ValueError("Incomplete or duplicate tool call identity; no tools executed")
 
         except Exception as e:
             error_msg = f"Stream error: {type(e).__name__}: {e}"
@@ -769,11 +788,13 @@ class AgentEngine:
                 return False  # Hard stop — no continuation
 
             self.continuation.had_stream_error = True
+            self._stream_error_rounds += 1
             self.continuation.partial_content_buffer = full_content
 
             if (
                 self.continuation.continue_on_stream_error
                 and self.continuation.can_continue()
+                and self._stream_error_rounds < 3
             ):
                 nudge = generate_continuation_nudge(
                     reason="stream_interrupted",
@@ -797,6 +818,7 @@ class AgentEngine:
             self.autonomous.on_turn_complete()
 
         self._context_recovery_attempts = 0
+        self._stream_error_rounds = 0
         if has_started_output:
             console.print()
         elif has_shown_reasoning and not reasoning_completed:
@@ -863,6 +885,7 @@ class AgentEngine:
 
         # If no tool calls, store assistant message and check for continuation
         if not has_tool_calls:
+            self._invalid_tool_rounds = 0
             msg: dict[str, Any] = {
                 "role": "assistant",
                 "content": full_content,  # Keep "" instead of None — API requires content or tool_calls
@@ -922,15 +945,17 @@ class AgentEngine:
 
         # Parse all tool calls
         parsed_calls = []
+        invalid_calls = 0
         for tc in tool_calls:
             if "name" not in tc:
                 continue
-            args_str = tc.get("arguments", "{}")
+            args_str = tc.get("arguments", "")
             try:
                 args = parse_tool_arguments(args_str)
             except (ValueError, TypeError):
                 args = None
             if not isinstance(args, dict):
+                invalid_calls += 1
                 self.messages.append({"role": "tool", "tool_call_id": tc.get("id", ""),
                                       "content": "Error executing tool: invalid or truncated JSON; retry complete arguments."})
                 self._tool_failures[(tc["name"], "invalid_arguments")] = "Invalid tool arguments"
@@ -941,6 +966,9 @@ class AgentEngine:
                 "name": tc["name"],
                 "args": args,
             })
+
+        self._invalid_tool_rounds = self._invalid_tool_rounds + 1 if invalid_calls else 0
+        self.save_transcript()
 
         # Serialize tool batches: dependencies and same-file writes must preserve order.
         # Complete calls received with finish_reason=length use this same preflight.
@@ -955,6 +983,11 @@ class AgentEngine:
             self.save_transcript()
             tool_results.append(result)
             self._show_tool_result(result)
+
+        if self._invalid_tool_rounds >= 3:
+            self._stop_outcome = ("failed", "Model returned invalid tool JSON for 3 consecutive turns. "
+                                  "History is preserved; request smaller writes or change model before continuing.")
+            return False
 
         # ── Check for cancel/stop BEFORE auto-continuation ──
         if self.cancel_requested:
@@ -1043,6 +1076,8 @@ class AgentEngine:
         # A new explicit instruction permits inspecting uncertain interrupted work.
         self._resume_uncertain = False
         # Reset for new user message
+        self._invalid_tool_rounds = 0
+        self._stream_error_rounds = 0
         self._stop_outcome = None
         if not self._restored_session:
             self._tool_failures = {}

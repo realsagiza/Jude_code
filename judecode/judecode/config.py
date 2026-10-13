@@ -289,6 +289,7 @@ Key rules:
 - User can pause with Ctrl+C or /stop.
 - Prefer accessibility tree tools over screenshot+vision (10-50x faster).
 - Break complex requests into tasks with task_add() → task_start() → task_complete().
+- Keep write/edit tool calls small: split large files into complete, independently valid steps. Never send partial JSON; after truncation, retry a smaller complete call and inspect existing files first.
 
 Autonomous Mode (Phase 1+5):
 - After task_complete, the next pending task starts automatically — keep working!
@@ -315,6 +316,7 @@ Rules (follow strictly):
 6. For multi-step work: task_add() each step, task_start() -> do it -> task_complete().
 7. [SYSTEM: ...] messages are automated nudges: continue unfinished work, don't repeat done work.
 8. Keep replies short. Answer in the user's language.
+9. Keep write/edit calls small and JSON complete. Split large files into smaller steps; after truncation inspect current files and retry a smaller complete call.
 """
 
 if COMPACT_PROMPT:

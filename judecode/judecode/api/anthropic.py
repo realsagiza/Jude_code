@@ -107,6 +107,10 @@ class AnthropicClient:
         last_error: Optional[BaseException] = None
 
         for attempt in range(1, self.max_retries + 1):
+            emitted = False
+            self._tool_use_blocks = []
+            self._current_content_index = -1
+            self._content_blocks = []
             try:
                 async with self._client.stream(
                     "POST", url, json=payload
@@ -132,6 +136,7 @@ class AnthropicClient:
 
                     if stream:
                         full_content = ""
+                        finished = False
                         try:
                             async for line in response.aiter_lines():
                                 if not line:
@@ -148,15 +153,21 @@ class AnthropicClient:
                                 try:
                                     event = json.loads(data_str)
                                 except json.JSONDecodeError:
-                                    continue
+                                    raise RuntimeError("Malformed JSON in provider stream; response discarded")
 
                                 chunk = self._translate_event(event)
                                 if chunk:
+                                    if chunk.get("choices"):
+                                        finished = finished or bool(chunk["choices"][0].get("finish_reason"))
                                     # Accumulate content for error recovery
                                     content = self._extract_content(chunk)
                                     if content:
                                         full_content += content
+                                    emitted = True
                                     yield chunk
+
+                            if not finished:
+                                raise RuntimeError("Provider stream ended without finish_reason; response discarded")
 
                         except (httpx.StreamError, httpx.RemoteProtocolError, TypeError) as e:
                             last_error = e
@@ -171,7 +182,7 @@ class AnthropicClient:
                                     "content_length": len(full_content),
                                 },
                             )
-                            if attempt >= self.max_retries:
+                            if emitted or attempt >= self.max_retries:
                                 yield self._error_chunk(
                                     f"Stream interrupted after receiving partial content.\n"
                                     f"Partial content so far:\n{full_content}\n\n"
@@ -200,7 +211,7 @@ class AnthropicClient:
                         "attempt": attempt,
                     },
                 )
-                if attempt >= self.max_retries:
+                if emitted or attempt >= self.max_retries:
                     yield self._error_chunk(
                         f"Connection failed after {self.max_retries} attempts.\n"
                         f"Error: {type(e).__name__}: {e}\n"
@@ -222,7 +233,7 @@ class AnthropicClient:
                         "attempt": attempt,
                     },
                 )
-                if attempt >= self.max_retries:
+                if emitted or attempt >= self.max_retries:
                     yield self._error_chunk(
                         f"HTTP error after {self.max_retries} attempts.\n"
                         f"Error: {type(e).__name__}: {e}\n"
@@ -242,7 +253,7 @@ class AnthropicClient:
                         "attempt": attempt,
                     },
                 )
-                if attempt >= self.max_retries:
+                if emitted or attempt >= self.max_retries:
                     yield self._error_chunk(
                         f"Unexpected error after {self.max_retries} attempts.\n"
                         f"Error: {type(e).__name__}: {e}\n"
@@ -311,6 +322,8 @@ class AnthropicClient:
 
         Returns: (system_prompt, anthropic_messages, anthropic_tools)
         """
+        from judecode.agent.tool_history import repair_tool_history
+        messages = repair_tool_history(messages)
         system_prompt = ""
         # Extract system prompt from messages
         for msg in messages:
