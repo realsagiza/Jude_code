@@ -1,0 +1,2 @@
+# Optional microphone support; install in the same Python environment as JudeCode.
+sounddevice>=0.5.0

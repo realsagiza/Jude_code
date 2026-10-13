@@ -49,6 +49,7 @@ from judecode.config import (
     SYSTEM_PROMPT, MODEL, BASE_URL, MAX_CONTINUATIONS, PROVIDER,
 )
 from judecode.api import create_api_client
+from judecode.api.voice import VoiceClient, VoiceError, final_reply, record_wav, play_audio, player_command
 from judecode.agent.engine import AgentEngine
 from judecode.ui.console import console, set_console_sink
 
@@ -191,6 +192,9 @@ class JudeCodeTUI(App):
         self._stream_text_buffer: Optional[Text] = None  # accumulates Text objects during streaming
         self._quit_armed = False
         self._sidebar_refresh_timer: Optional[asyncio.Task] = None
+        self._voice_client = VoiceClient()
+        self._voice_enabled = False
+        self._voice_task: Optional[asyncio.Task] = None
 
     # ── Layout ──────────────────────────────────────────────────────────
 
@@ -235,6 +239,11 @@ class JudeCodeTUI(App):
         set_console_sink(None)
         if self._agent_loop_task and not self._agent_loop_task.done():
             self._agent_loop_task.cancel()
+            await asyncio.gather(self._agent_loop_task, return_exceptions=True)
+        self._cancel_voice()
+        if self._voice_task:
+            await asyncio.gather(self._voice_task, return_exceptions=True)
+        await self._voice_client.close()
         try:
             await self.api_client.close()
         except Exception:
@@ -501,6 +510,7 @@ class JudeCodeTUI(App):
             return
 
         # Echo the user message into the output pane.
+        self._cancel_voice()
         self._echo_user(text)
 
         self.queued_previews.append(text)
@@ -534,6 +544,7 @@ class JudeCodeTUI(App):
             try:
                 self.agent.reset_stop()
                 await self.agent.chat(message)
+                self._speak_reply()
             except asyncio.CancelledError:
                 break
             except Exception as e:  # noqa: BLE001
@@ -572,8 +583,85 @@ class JudeCodeTUI(App):
 
     # ── Commands ────────────────────────────────────────────────────────
 
+    def _cancel_voice(self) -> None:
+        if self._voice_task and not self._voice_task.done():
+            self._voice_task.cancel()
+
+    def _speak_reply(self) -> None:
+        if self._voice_enabled and not self.agent._stop_outcome and self.input_queue.empty():
+            text = final_reply(self.agent.messages)
+            if text:
+                self._cancel_voice()
+                self._voice_task = asyncio.create_task(self._speak(text))
+
+    async def _speak(self, text: str) -> None:
+        try:
+            player_command()  # Fail before incurring synthesis charges.
+            await play_audio(await self._voice_client.synthesize(text))
+        except VoiceError as exc:
+            self.query_one('#output', OutputLog).write(Text(str(exc), style='yellow'))
+
+    async def _listen(self, seconds: int) -> None:
+        try:
+            self._voice_client.check_key()
+            self._console_sink(f'🎙 เริ่มอัดเสียง {seconds} วินาที พูดได้เลย — Esc ยกเลิก')
+            audio = await record_wav(seconds)
+            self._console_sink('กำลังถอดเสียงภาษาไทย…')
+            text = await self._voice_client.transcribe(audio)
+            inp = self.query_one('#message', Input)
+            # Preserve anything typed while the API was working.
+            if not inp.value:
+                inp.value = text
+                inp.cursor_position = len(text)
+                inp.focus()
+                self._console_sink('ตรวจข้อความในช่องพิมพ์ แล้วกด Enter เพื่อส่ง')
+            else:
+                self.query_one('#output', OutputLog).write(Text('ข้อความจากเสียง (ยังไม่ส่ง): ' + text))
+        except VoiceError as exc:
+            self.query_one('#output', OutputLog).write(Text(str(exc), style='yellow'))
+
     async def _handle_command(self, cmd: str) -> None:
         c = cmd.lower().strip()
+
+        if c == '/voice' or c.startswith('/voice '):
+            option = c.split(maxsplit=1)[1] if ' ' in c else 'status'
+            if option == 'on':
+                try:
+                    self._voice_client.check_key()
+                    player_command()
+                except VoiceError as exc:
+                    self.query_one('#output', OutputLog).write(Text(str(exc), style='yellow'))
+                    return
+                self._voice_enabled = True
+                self._console_sink('🔊 เปิดอ่านคำตอบด้วยเสียง AI ผ่าน OpenRouter แล้ว (มีค่า API เพิ่ม)')
+            elif option in ('off', 'stop'):
+                self._cancel_voice()
+                if option == 'off':
+                    self._voice_enabled = False
+                self._console_sink('หยุดเสียงแล้ว' if option == 'stop' else 'ปิดอ่านคำตอบแล้ว')
+            elif option == 'status':
+                self._console_sink('เสียง: ' + ('เปิด' if self._voice_enabled else 'ปิด') + ' • /listen 8 เพื่อพูด • /voice on|off|stop')
+            else:
+                self._console_sink('ใช้ /voice on, /voice off, /voice stop หรือ /voice status')
+            return
+
+        if c == '/listen' or c.startswith('/listen '):
+            if self.ai_busy:
+                self._console_sink('รอให้งานจบหรือ /stop ก่อนเปิดไมค์')
+                return
+            try:
+                parts = c.split()
+                seconds = int(parts[1]) if len(parts) == 2 else 8
+                if len(parts) > 2 or not 1 <= seconds <= 60:
+                    raise ValueError
+            except ValueError:
+                self._console_sink('ใช้ /listen หรือ /listen 8 (1–60 วินาที)')
+                return
+            self._cancel_voice()
+            if self._voice_task:
+                await asyncio.gather(self._voice_task, return_exceptions=True)
+            self._voice_task = asyncio.create_task(self._listen(seconds))
+            return
 
         if c in ("/quit", "/exit", ":q", "quit", "exit"):
             self.exit()
@@ -587,6 +675,7 @@ class JudeCodeTUI(App):
             if self.ai_busy:
                 self._console_sink("Pause the agent before restoring a conversation.")
                 return
+            self._cancel_voice()
             try:
                 parts = cmd.strip().split(maxsplit=1)
                 message = (self.agent.resume_session(parts[1]) if len(parts) > 1
@@ -629,12 +718,14 @@ class JudeCodeTUI(App):
             if self.ai_busy:
                 self._console_sink("\n  [dim]Agent is already running.[/dim]")
             elif self.agent.continuation.can_continue():
+                self._cancel_voice()
                 self.ai_busy = True
                 self.current_msg = "(manual continuation)"
                 self._render_sidebar()
                 self._start_sidebar_timer()
                 try:
                     await self.agent.continue_task()
+                    self._speak_reply()
                 finally:
                     self._stop_sidebar_timer()
                     self.ai_busy = False
@@ -715,6 +806,7 @@ class JudeCodeTUI(App):
         self._copy_text(text, "selection")
 
     def action_stop_agent(self) -> None:
+        self._cancel_voice()
         if self.ai_busy:
             self.agent.request_stop()
             self._console_sink("\n  [yellow]⏸ Stop requested…[/yellow]")
@@ -726,6 +818,10 @@ class JudeCodeTUI(App):
         if self.screen.get_selected_text():
             self.action_copy_selection()
             return
+        if self._voice_task and not self._voice_task.done():
+            self._cancel_voice()
+            self._console_sink('หยุดเสียงแล้ว')
+            return
         if self.ai_busy:
             self.agent.request_stop()
             self._console_sink("\n  [yellow]⏸ Stop requested (Ctrl+C again or Ctrl+Q to quit)…[/yellow]")
@@ -736,6 +832,7 @@ class JudeCodeTUI(App):
         if self.ai_busy:
             self._console_sink("\n  [yellow]⚠ Cannot clear while the agent is busy.[/yellow]")
             return
+        self._cancel_voice()
         try:
             self.agent.new_conversation()
         except (OSError, ValueError) as exc:

@@ -5,6 +5,8 @@ MODES = {'tui': 'หน้าจอหลัก (TUI)', 'classic': 'Classic (--c
 ALL = ('tui', 'classic', 'legacy')
 # category, usage, description, example, modes, aliases
 COMMANDS = [
+    ('เสียงภาษาไทย', '/listen [วินาที]', 'อัดเสียง 1–60 วินาที (ค่าเริ่มต้น 8) แล้วถอดเสียงผ่าน OpenRouter ใส่ช่องพิมพ์ให้ตรวจและกด Enter; Esc ยกเลิก', '/listen 8', ('tui',), ()),
+    ('เสียงภาษาไทย', '/voice on|off|stop|status', 'เปิด/ปิดอ่านคำตอบด้วยเสียง AI หรือหยุดเสียง; ใช้คีย์ OpenRouter และมีค่า API เพิ่มนอก /budget', '/voice on', ('tui',), ()),
     ('เริ่มต้น', '/help', 'ดูคำสั่งในโหมดปัจจุบัน; /help all ดูทุกโหมด; /help คำค้น ค้นชื่อหรือคำอธิบาย', '/help resume', ALL, ()),
     ('เริ่มต้น', '/model', 'ดู provider, โมเดล และ API ที่ตั้งค่าไว้ (ไม่ได้เปลี่ยนโมเดล)', '/model', ALL, ()),
     ('เริ่มต้น', '/quit', 'ออกจากโปรแกรม; Classic ขณะทำงานต้องสั่งซ้ำเพื่อยืนยัน', '/quit', ALL, ('/exit', ':q')),

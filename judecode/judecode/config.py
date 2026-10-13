@@ -111,6 +111,12 @@ OPENROUTER_BASE_URL = _env("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
 OPENROUTER_API_KEY = _env("OPENROUTER_API_KEY", os.environ.get("OPENROUTER_API_KEY", ""))
 OPENROUTER_MODEL = _env("OPENROUTER_MODEL", "deepseek/deepseek-v3.2")
 
+# Voice uses the same OpenRouter key regardless of the coding model/provider.
+VOICE_STT_MODEL = _env("VOICE_STT_MODEL", "openai/gpt-4o-mini-transcribe")
+VOICE_TTS_MODEL = _env("VOICE_TTS_MODEL", "google/gemini-3.8-flash-tts")
+VOICE_NAME = _env("VOICE_NAME", "Kore")
+VOICE_SAMPLE_RATE = _env_int("VOICE_SAMPLE_RATE", 24000)
+
 # ── Custom provider (any OpenAI-compatible endpoint) ──
 # สำหรับ model ใหม่ๆ ในอนาคต (เช่น fable หรืออื่นๆ) โดยไม่ต้องแก้โค้ด:
 #   JUDECODE_PROVIDER=custom
