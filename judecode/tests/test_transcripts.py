@@ -128,7 +128,7 @@ def test_clear_keeps_previous_and_uses_new_id(engine):
     asyncio.run(engine.chat('save me'))
     identifier = engine.autonomous.session.session_id
     engine.new_conversation()
-    assert engine.messages == [{'role': 'system', 'content': 'system'}]
+    assert engine.messages == [{'role': 'system', 'content': engine.system_prompt}]
     assert engine.autonomous.session.session_id != identifier
     engine.resume_session('latest')
     assert any(m.get('content') == 'save me' for m in engine.messages)

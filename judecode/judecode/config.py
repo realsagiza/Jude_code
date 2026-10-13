@@ -111,6 +111,13 @@ OPENROUTER_BASE_URL = _env("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
 OPENROUTER_API_KEY = _env("OPENROUTER_API_KEY", os.environ.get("OPENROUTER_API_KEY", ""))
 OPENROUTER_MODEL = _env("OPENROUTER_MODEL", "deepseek/deepseek-v3.2")
 
+# Sequential expert handoff; primary model selection is unchanged.
+EXPERT_ENABLED = _env_bool("EXPERT_ENABLED", True)
+EXPERT_MODEL = _env("EXPERT_MODEL", "z-ai/glm-5.3")
+EXPERT_MAX_TURNS = max(1, min(100, _env_int("EXPERT_MAX_TURNS", 24)))
+EXPERT_MAX_HANDOFFS = max(1, min(5, _env_int("EXPERT_MAX_HANDOFFS", 2)))
+EXPERT_MAX_TOKENS = max(1024, min(32768, _env_int("EXPERT_MAX_TOKENS", 16384)))
+
 # Voice uses the same OpenRouter key regardless of the coding model/provider.
 VOICE_STT_MODEL = _env("VOICE_STT_MODEL", "openai/gpt-4o-mini-transcribe")
 VOICE_TTS_MODEL = _env("VOICE_TTS_MODEL", "microsoft/mai-voice-2.1-flash")

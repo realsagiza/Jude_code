@@ -94,6 +94,8 @@ DANGEROUS_SHELL_PATTERNS = [
 
 # Tool name → permission category mapping
 TOOL_CATEGORY_MAP: dict[str, str] = {
+    "expert_help": "network",
+    "expert_return": "read",
     "schedule_create": "write",
     "schedule_manage": "write",
     "schedule_checkpoint": "write",

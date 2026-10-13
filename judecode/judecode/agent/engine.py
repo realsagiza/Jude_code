@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 from judecode.api.client import ApiClient
 from judecode.agent.tools import TOOL_DEFINITIONS, execute_tool
+from judecode.agent.expert import ExpertRouting, ROUTING_PROMPT, NAMES as EXPERT_TOOLS
 from judecode.agent.continuation import (
     ContinuationTracker,
     detect_incomplete_work,
@@ -56,6 +57,9 @@ class AgentEngine:
         continue_on_incomplete_work: bool = CONTINUE_ON_INCOMPLETE_WORK,
         continue_on_tool_error: bool = CONTINUE_ON_TOOL_ERROR,
     ):
+        self.expert = ExpertRouting()
+        if self.expert.available and ROUTING_PROMPT not in system_prompt:
+            system_prompt += ROUTING_PROMPT
         self.system_prompt = system_prompt
         self.api = api_client
         self.messages: list[dict[str, Any]] = [
@@ -120,6 +124,7 @@ class AgentEngine:
         budget = self.autonomous.budget
         TranscriptStore().save(session.session_id, {
             "cwd": str(Path.cwd().resolve()), "messages": self.messages,
+            "expert": self.expert.snapshot(),
             "state": state, "needs_verification": self._needs_verification,
             "failures": [[list(key), value] for key, value in self._tool_failures.items()],
             "uncertain": self._resume_uncertain,
@@ -168,6 +173,7 @@ class AgentEngine:
             setattr(restored.autonomous.session, key, state[key])
         for key in ('total_input_tokens', 'total_output_tokens', 'total_cost', 'tokens'):
             setattr(restored.autonomous.budget, key, data['budget'][key])
+        restored.expert.restore(data.get("expert"))
         restored._restored_session = True
         restored.messages = repair_tool_history(data['messages'])
         restored._tool_failures = {tuple(key): value for key, value in data.get('failures', [])}
@@ -213,7 +219,7 @@ class AgentEngine:
 
     def _prune_context(self) -> None:
         """Reduce old output only after saving a retrievable full copy."""
-        self.messages = self.context.prune(self.messages, TOOL_DEFINITIONS)
+        self.messages = self.context.prune(self.messages, self.expert.tools(TOOL_DEFINITIONS))
         self.autonomous.budget.context_tokens_saved = self.context.saved_tokens
         self.autonomous.budget.context_input_tokens = self.context.last_input_tokens
 
@@ -348,6 +354,8 @@ class AgentEngine:
             blocked = self._pre_tool_hook(tool_name, args)
             if blocked:
                 result = f"Error executing tool '{tool_name}': {blocked}"
+            elif tool_name in EXPERT_TOOLS:
+                result = self.expert.execute(tool_name, args)
             elif self.sandbox.is_active:
                 result = self.sandbox.execute(tool_name, args)
             else:
@@ -403,7 +411,7 @@ class AgentEngine:
         """Count the whole outgoing request on every turn, including tool schemas."""
         budget = self.autonomous.budget
         budget.new_turn()
-        budget.record_tool_request(estimate_tokens(TOOL_DEFINITIONS))
+        budget.record_tool_request(estimate_tokens(self.expert.tools(TOOL_DEFINITIONS)))
         for message in self.messages:
             count = estimate_tokens(message)
             role = message.get("role")
@@ -624,6 +632,11 @@ class AgentEngine:
             turn_number: The current turn number (for display purposes)
         Returns True if more turns should follow, False if done.
         """
+        # UI clear and older restored transcripts may contain only the base prompt.
+        if self.expert.available and self.messages and self.messages[0].get("role") == "system":
+            content = self.messages[0].get("content", "")
+            if isinstance(content, str) and ROUTING_PROMPT not in content:
+                self.messages[0]["content"] = content + ROUTING_PROMPT
         full_content = ""
         full_reasoning = ""
         tool_calls: list[dict[str, Any]] = []
@@ -654,8 +667,8 @@ class AgentEngine:
         self._record_request_tokens()
         # Stream the response
         try:
-            async for chunk in self.api.chat_completion(
-                self.messages, tools=TOOL_DEFINITIONS
+            async for chunk in self.expert.completion(
+                self.api, self.messages, self.expert.tools(TOOL_DEFINITIONS)
             ):
                 # ── Abort streaming IMMEDIATELY if user pressed Ctrl+C ──
                 # This is the key fix: previously cancel was only checked AFTER
@@ -917,6 +930,14 @@ class AgentEngine:
                 self._stop_outcome = ("unverified", "Response truncated; continuation limit reached")
                 return False
 
+            if self.expert.active:
+                self.expert.active = False
+                self.messages.append({"role": "user", "content":
+                    "[SYSTEM: Expert returned the preceding report. Primary model: inspect evidence, "
+                    "report unresolved work honestly and summarize for the user.]"})
+                self.save_transcript()
+                return True
+
             # ── No tool calls + not truncated = normal conversation → NEVER auto-continue ──
             return False  # Done
 
@@ -976,7 +997,9 @@ class AgentEngine:
         # Complete calls received with finish_reason=length use this same preflight.
         for tc in parsed_calls:
             self._show_tool_call(tc["name"], tc["args"])
-            if self.cancel_requested:
+            if len(tool_calls) != 1 and any(c["name"] in EXPERT_TOOLS for c in parsed_calls):
+                result = "Error executing tool: handoff must be the only tool call in this response"
+            elif self.cancel_requested:
                 result = "Error executing tool: skipped because user stopped the batch"
             else:
                 self.save_transcript()
@@ -1066,6 +1089,10 @@ class AgentEngine:
                 self._append_nudge(nudge, "incomplete_work")
                 return True  # Continue
 
+        if any(tc["name"] in EXPERT_TOOLS for tc in parsed_calls) and not any(
+                result.startswith("Error executing tool") for result in tool_results):
+            return True  # The newly selected model must receive the handoff result.
+
         # ── Check if work is clearly done before auto-continuing ──
         if (not self._needs_verification and not self._tool_failures
                 and not self._is_nudge_message(full_content) and detect_completion(full_content)):
@@ -1075,6 +1102,8 @@ class AgentEngine:
 
     async def chat(self, user_message: str) -> None:
         """Send a user message and handle streaming + tool calls."""
+        # A fresh request starts with the primary; /continue preserves the active expert.
+        self.expert = ExpertRouting()
         # A new explicit instruction permits inspecting uncertain interrupted work.
         self._resume_uncertain = False
         # Reset for new user message

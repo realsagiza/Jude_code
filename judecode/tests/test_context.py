@@ -78,12 +78,12 @@ def test_every_request_counts_full_context_and_tools_without_double_output(agent
     agent.api = ScriptedAPI()
     agent.messages.append({"role": "user", "content": "hello"})
     assert agent.autonomous.budget.total_input_tokens == 0
-    expected = sum(estimate_tokens(m) for m in agent.messages) + estimate_tokens(TOOL_DEFINITIONS)
+    expected = sum(estimate_tokens(m) for m in agent.messages) + estimate_tokens(agent.expert.tools(TOOL_DEFINITIONS))
     asyncio.run(agent._process_turn(1))
     budget = agent.autonomous.budget
     assert budget.total_input_tokens == expected
     assert budget.total_output_tokens == estimate_tokens("Finished response")
-    second = sum(estimate_tokens(m) for m in agent.messages) + estimate_tokens(TOOL_DEFINITIONS)
+    second = sum(estimate_tokens(m) for m in agent.messages) + estimate_tokens(agent.expert.tools(TOOL_DEFINITIONS))
     asyncio.run(agent._process_turn(2))
     assert budget.total_input_tokens == expected + second
     assert budget.total_output_tokens == 2 * estimate_tokens("Finished response")
@@ -121,6 +121,9 @@ def test_long_engine_history_preserves_requirements_and_pairs(agent):
     messages += copy.deepcopy(messages[2:]) * 3
     agent.messages = messages
     original = copy.deepcopy(messages)
+    if agent.expert.available:
+        from judecode.agent.expert import ROUTING_PROMPT
+        original[0]["content"] += ROUTING_PROMPT
     asyncio.run(agent._process_turn(1))
     sent = agent.api.requests[0]
     assert len(sent) == len(original)
