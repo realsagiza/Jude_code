@@ -71,11 +71,14 @@ class VoiceClient:
     async def transcribe(self, audio: bytes) -> str:
         if not audio or len(audio) > 25 * 1024 * 1024:
             raise VoiceError("เสียงว่างหรือใหญ่เกิน 25 MB")
-        response = await self._post('/audio/transcriptions', {
+        payload = {
             'model': config.VOICE_STT_MODEL,
             'input_audio': {'data': base64.b64encode(audio).decode('ascii'), 'format': 'wav'},
             'language': 'th',
-        })
+        }
+        if config.VOICE_STT_MODEL.startswith('openai/') and config.VOICE_STT_PROMPT:
+            payload['provider'] = {'options': {'openai': {'prompt': config.VOICE_STT_PROMPT}}}
+        response = await self._post('/audio/transcriptions', payload)
         try:
             text = response.json()['text']
         except (ValueError, KeyError, TypeError):
@@ -84,27 +87,79 @@ class VoiceClient:
             raise VoiceError("ไม่ได้ยินคำพูด กรุณาลองอีกครั้ง")
         return text.strip()
 
-    async def synthesize(self, text: str) -> bytes:
+    async def stream_speech(self, text: str):
+        """Yield mono int16 PCM as it arrives, without buffering a whole reply."""
         text = spoken_text(text)
         if not text:
-            return b''
+            return
+        self.check_key()
         if not 8000 <= config.VOICE_SAMPLE_RATE <= 48000:
             raise VoiceError("VOICE_SAMPLE_RATE ต้องอยู่ระหว่าง 8000–48000 Hz")
-        response = await self._post('/audio/speech', {
-            'model': config.VOICE_TTS_MODEL, 'input': text,
-            'voice': config.VOICE_NAME, 'response_format': 'pcm',
-        })
-        if not response.content or not response.headers.get('content-type', '').lower().startswith(('audio/', 'application/octet-stream')):
+        received = 0
+        try:
+            async with self._client.stream(
+                'POST', config.OPENROUTER_BASE_URL.rstrip('/') + '/audio/speech',
+                headers={"Authorization": f"Bearer {config.OPENROUTER_API_KEY}"},
+                json={'model': config.VOICE_TTS_MODEL, 'input': text,
+                      'voice': config.VOICE_NAME, 'response_format': 'pcm'},
+            ) as response:
+                response.raise_for_status()
+                content_type = response.headers.get('content-type', '').lower().split(';')[0]
+                if content_type not in ('audio/pcm', 'audio/l16', 'application/octet-stream'):
+                    raise VoiceError("OpenRouter ไม่ได้ส่งข้อมูลเสียง PCM กลับมา")
+                async for chunk in response.aiter_bytes(chunk_size=4800):
+                    received += len(chunk)
+                    if len(chunk) % 2:
+                        raise VoiceError("ข้อมูลเสียง PCM ไม่ครบ กรุณาลองใหม่")
+                    if chunk:
+                        yield chunk
+        except httpx.HTTPStatusError as exc:
+            raise VoiceError(f"OpenRouter เสียง: HTTP {exc.response.status_code} — ตรวจเครดิต คีย์ และชื่อโมเดล") from None
+        except httpx.RequestError:
+            raise VoiceError("เชื่อมต่อ OpenRouter เสียงไม่ได้หรือหมดเวลา กรุณาลองใหม่") from None
+        if not received:
             raise VoiceError("OpenRouter ไม่ได้ส่งไฟล์เสียงกลับมา")
-        if len(response.content) % 2:
-            raise VoiceError("ข้อมูลเสียง PCM ไม่ครบ กรุณาลองใหม่")
+
+    async def synthesize(self, text: str) -> bytes:
+        chunks = [chunk async for chunk in self.stream_speech(text)]
+        if not chunks:
+            return b''
         output = io.BytesIO()
         with wave.open(output, 'wb') as wav:
             wav.setnchannels(1)
             wav.setsampwidth(2)
             wav.setframerate(config.VOICE_SAMPLE_RATE)
-            wav.writeframes(response.content)
+            wav.writeframes(b''.join(chunks))
         return output.getvalue()
+
+
+async def play_pcm_stream(chunks, sample_rate, on_first_audio=lambda: None):
+    """Play small network chunks immediately; cancellation closes both resources."""
+    try:
+        import sounddevice as sd
+    except (ImportError, OSError):
+        raise VoiceError('ติดตั้ง sounddevice เพื่อเล่นเสียงแบบสตรีม') from None
+    first = True
+    try:
+        with sd.RawOutputStream(samplerate=sample_rate, channels=1, dtype='int16') as output:
+            async for chunk in chunks:
+                if first:
+                    on_first_audio()
+                    first = False
+                # Each write is <=100 ms at 24 kHz. Keep the UI loop responsive.
+                write = asyncio.create_task(asyncio.to_thread(output.write, chunk))
+                try:
+                    await asyncio.shield(write)
+                except asyncio.CancelledError:
+                    output.abort()
+                    await asyncio.gather(write, return_exceptions=True)
+                    raise
+    except VoiceError:
+        raise
+    except Exception:
+        raise VoiceError('เล่นเสียงสตรีมไม่ได้ ตรวจอุปกรณ์ลำโพงและ sample rate') from None
+    finally:
+        await chunks.aclose()
 
 
 async def record_wav(seconds: int) -> bytes:

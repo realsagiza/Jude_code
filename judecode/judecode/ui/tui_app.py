@@ -642,6 +642,7 @@ class JudeCodeTUI(App):
         self.queued_previews.append(text)
         await self.input_queue.put(text + '\n\n[โหมดสนทนาด้วยเสียง: ตอบเป็นภาษาไทยที่ฟังเข้าใจได้ '
                                    'สรุปผลและคำถามด้วยคำพูด ไม่ให้ผู้ใช้ต้องพิมพ์หรืออ่านหน้าจอ '
+                                   'ตอบกระชับ ถ้าคำสั่งกำกวมหรือเหมือนถอดเสียงผิดให้ถามกลับสั้นๆ อย่าเดา '
                                    'หากมีโค้ดให้ทำงานตามคำสั่งและอธิบายผลด้วยคำพูดด้วย]')
         self._render_sidebar()
 
@@ -702,6 +703,8 @@ class JudeCodeTUI(App):
             elif option == 'status':
                 mode = 'สนทนาอัตโนมัติ' if self._handsfree and self._handsfree.active else ('อ่านคำตอบ' if self._voice_enabled else 'ปิด')
                 self._console_sink('เสียง: ' + mode + ' • /voice on|off|read')
+                if self._handsfree:
+                    self.query_one('#output', OutputLog).write(Text('เวลาล่าสุด (วินาที): ' + str(self._handsfree.timings)))
             else:
                 self._console_sink('ใช้ /voice on (คุยอัตโนมัติ), /voice read, /voice off, /voice stop หรือ /voice status')
             return

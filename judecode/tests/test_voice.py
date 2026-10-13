@@ -230,3 +230,52 @@ def test_timeout_is_recoverable(monkeypatch):
         finally:
             await client.close()
     asyncio.run(run())
+
+
+def test_speech_stream_yields_before_response_finishes(monkeypatch):
+    monkeypatch.setattr(voice.config, 'OPENROUTER_API_KEY', 'test')
+    class Stream(httpx.AsyncByteStream):
+        closed = False
+        async def __aiter__(self):
+            yield bytes(4800)
+            await asyncio.Event().wait()
+        async def aclose(self):
+            self.closed = True
+    stream = Stream()
+    async def run():
+        client = voice.VoiceClient(transport=httpx.MockTransport(
+            lambda r: httpx.Response(200, stream=stream, headers={'Content-Type': 'audio/pcm'})))
+        generator = client.stream_speech('สวัสดี')
+        try:
+            assert await asyncio.wait_for(generator.__anext__(), 1) == bytes(4800)
+        finally:
+            await generator.aclose()
+            await client.close()
+        assert stream.closed
+    asyncio.run(run())
+
+
+def test_pcm_playback_starts_before_network_finishes_and_cleans_up(monkeypatch):
+    events = []
+    class Output:
+        def __init__(self, **kwargs):
+            pass
+        def __enter__(self):
+            events.append('open'); return self
+        def write(self, chunk):
+            events.append('write')
+        def __exit__(self, *args):
+            events.append('close')
+    monkeypatch.setitem(sys.modules, 'sounddevice', SimpleNamespace(RawOutputStream=Output))
+    async def chunks():
+        try:
+            yield bytes(4800)
+            assert 'write' in events
+            events.append('next-chunk')
+            yield bytes(4800)
+        finally:
+            events.append('network-closed')
+    asyncio.run(voice.play_pcm_stream(chunks(), 24000, lambda: events.append('first-audio')))
+    assert events.index('first-audio') < events.index('next-chunk')
+    assert events.count('write') == 2
+    assert 'close' in events and 'network-closed' in events

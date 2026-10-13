@@ -113,9 +113,13 @@ OPENROUTER_MODEL = _env("OPENROUTER_MODEL", "deepseek/deepseek-v3.2")
 
 # Voice uses the same OpenRouter key regardless of the coding model/provider.
 VOICE_STT_MODEL = _env("VOICE_STT_MODEL", "openai/gpt-4o-mini-transcribe")
-VOICE_TTS_MODEL = _env("VOICE_TTS_MODEL", "google/gemini-3.8-flash-tts")
-VOICE_NAME = _env("VOICE_NAME", "Kore")
+VOICE_TTS_MODEL = _env("VOICE_TTS_MODEL", "microsoft/mai-voice-2.1-flash")
+VOICE_NAME = _env("VOICE_NAME", "th-TH-Nattapong:MAI-Voice-2.1-Flash")
 VOICE_SAMPLE_RATE = _env_int("VOICE_SAMPLE_RATE", 24000)
+VOICE_END_SILENCE_MS = _env_int("VOICE_END_SILENCE_MS", 2100)
+VOICE_MAX_UTTERANCE_SECONDS = _env_int("VOICE_MAX_UTTERANCE_SECONDS", 90)
+VOICE_VAD_MODE = _env_int("VOICE_VAD_MODE", 1)
+VOICE_STT_PROMPT = _env("VOICE_STT_PROMPT", "บทสนทนาภาษาไทยเกี่ยวกับการเขียนโปรแกรม คำศัพท์: JudeCode, จูดโค้ด, OpenRouter, API, Git, commit, push, Python")
 
 # ── Custom provider (any OpenAI-compatible endpoint) ──
 # สำหรับ model ใหม่ๆ ในอนาคต (เช่น fable หรืออื่นๆ) โดยไม่ต้องแก้โค้ด:

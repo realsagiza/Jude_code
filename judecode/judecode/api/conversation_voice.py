@@ -4,14 +4,19 @@ from collections import deque
 import io
 import re
 import wave
+import math
+import time
 
-from judecode.api.voice import VoiceError, play_audio, spoken_text
+from judecode import config
+from judecode.api.voice import VoiceError, play_audio, play_pcm_stream, spoken_text
 
 
 class UtteranceDetector:
-    """30 ms PCM frames, 300 ms pre-roll, 1.2 s endpoint, 30 s utterance cap."""
-    def __init__(self, classify):
+    """30 ms frames; tolerate thinking pauses, never submit a capped fragment."""
+    def __init__(self, classify, *, silence_ms=None, max_seconds=None):
         self.classify = classify
+        self.end_frames = math.ceil(max(600, min(5000, silence_ms if silence_ms is not None else config.VOICE_END_SILENCE_MS)) / 30)
+        self.max_frames = math.ceil(max(10, min(120, max_seconds if max_seconds is not None else config.VOICE_MAX_UTTERANCE_SECONDS)) * 1000 / 30)
         self.pre = deque(maxlen=10)
         self.frames = []
         self.silent = 0
@@ -28,7 +33,9 @@ class UtteranceDetector:
         else:
             self.frames.append(frame)
         self.silent = 0 if voiced else self.silent + 1
-        if self.silent >= 40 or len(self.frames) >= 1000:
+        if len(self.frames) >= self.max_frames:
+            raise VoiceError('พูดยาวเกินช่วงรับเสียง ยังไม่ได้ส่งคำสั่งครับ กรุณาแบ่งคำสั่งแล้วพูดใหม่')
+        if self.silent >= self.end_frames:
             output = io.BytesIO()
             with wave.open(output, 'wb') as wav:
                 wav.setnchannels(1)
@@ -52,7 +59,7 @@ async def record_utterance(on_start=lambda: None):
     check_microphone_support()
     import sounddevice as sd
     import webrtcvad
-    detector = UtteranceDetector(webrtcvad.Vad(2).is_speech)
+    detector = UtteranceDetector(webrtcvad.Vad(max(0, min(3, config.VOICE_VAD_MODE))).is_speech)
     loop = asyncio.get_running_loop()
     queue = asyncio.Queue(maxsize=100)
     active = True
@@ -104,12 +111,27 @@ def voice_command(text):
     return None
 
 
+def speech_chunks(text):
+    """Prefer phrase boundaries instead of cutting Thai words at character 500."""
+    while text:
+        if len(text) <= 500:
+            yield text
+            return
+        end = text.rfind(' ', 0, 501)
+        if end < 100:
+            end = text.find(' ', 500, 2500)
+        end = end + 1 if end >= 100 else min(2500, len(text))
+        yield text[:end]
+        text = text[end:]
+
+
 class VoiceConversation:
     """One microphone owner; never listen during playback (prevents self-trigger)."""
     def __init__(self, client, submit, stop, status):
         self.client, self.submit, self.stop, self.status = client, submit, stop, status
         self.replies = asyncio.Queue()
         self.active = True
+        self.timings = {}
 
     def reply(self, text):
         if self.active and text:
@@ -119,9 +141,47 @@ class VoiceConversation:
         self.status('🔊 Jude กำลังพูด')
         prose = spoken_text(text, limit=None)
         # Speak all prose, including long answers, without requiring screen reading.
-        for start in range(0, len(prose), 2500):
-            await play_audio(await self.client.synthesize(prose[start:start + 2500]))
+        # Short opening chunk reduces time to first audio for long answers.
+        for chunk in speech_chunks(prose):
+            if hasattr(self.client, 'stream_speech'):
+                began = time.monotonic()
+                def first_audio():
+                    self.timings['tts_first_audio_seconds'] = round(time.monotonic() - began, 3)
+                await play_pcm_stream(self.client.stream_speech(chunk), config.VOICE_SAMPLE_RATE, first_audio)
+            else:
+                await play_audio(await self.client.synthesize(chunk))
         await asyncio.sleep(0.3)  # Let speaker reverberation settle before reopening the mic.
+
+    async def _transcribe_turn(self, audio):
+        """Keep listening during STT; resumed speech extends this same command."""
+        while True:
+            resumed = asyncio.Event()
+            followup = asyncio.create_task(record_utterance(resumed.set))
+            try:
+                began = time.monotonic()
+                text = await self.client.transcribe(audio)
+                self.timings['stt_seconds'] = round(time.monotonic() - began, 3)
+                if not resumed.is_set() and not followup.done():
+                    return text
+                extra = await followup
+                # Re-transcribe the complete audio, preserving negations/context.
+                frames = []
+                for part in (audio, extra):
+                    with wave.open(io.BytesIO(part)) as wav:
+                        frames.append(wav.readframes(wav.getnframes()))
+                if sum(map(len, frames)) > 16000 * 2 * 120:
+                    raise VoiceError('คำสั่งยาวเกินสองนาที ยังไม่ได้ส่ง กรุณาแบ่งคำสั่งใหม่ครับ')
+                merged = io.BytesIO()
+                with wave.open(merged, 'wb') as wav:
+                    wav.setnchannels(1)
+                    wav.setsampwidth(2)
+                    wav.setframerate(16000)
+                    wav.writeframes(b''.join(frames))
+                audio = merged.getvalue()
+                self.status('🎙 ได้ยินว่าพูดต่อ กำลังรวมคำสั่งให้ครบ')
+            finally:
+                followup.cancel()
+                await asyncio.gather(followup, return_exceptions=True)
 
     async def run(self):
         failures = 0
@@ -154,7 +214,7 @@ class VoiceConversation:
                         if not reply.cancelled():
                             self.replies.put_nowait(reply.result())
                     self.status('กำลังฟังความหมาย…')
-                    text = await self.client.transcribe(audio)
+                    text = await self._transcribe_turn(audio)
                     failures = 0
                     command = voice_command(text)
                     if command == 'off':
@@ -168,13 +228,13 @@ class VoiceConversation:
                         await self.say('ขอหยุดงานแล้วครับ บอกคำสั่งใหม่ได้เลย')
                     else:
                         await self.submit(text)
-                        await self.say('รับคำสั่งแล้วครับ กำลังดำเนินการ')
+                        self.status('รับคำสั่งแล้ว กำลังดำเนินการ…')
                 except VoiceError as exc:
                     failures += 1
                     self.status(str(exc))
                     if failures >= 3:
                         raise VoiceError('โหมดสนทนาหยุดหลังเกิดข้อผิดพลาด 3 ครั้ง กรุณาตรวจไมค์หรือ OpenRouter') from exc
-                    await self.say('รับเสียงไม่สำเร็จครับ กรุณาลองพูดอีกครั้ง')
+                    await self.say('รับเสียงไม่สำเร็จครับ ' + str(exc))
                     await asyncio.sleep(1)
                 finally:
                     for task in (capture, reply):
