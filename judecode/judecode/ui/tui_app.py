@@ -44,6 +44,7 @@ from textual.reactive import reactive
 from textual.selection import Selection
 from textual.widgets import Footer, Header, Input, RichLog, Static
 
+from judecode.ui.command_help import is_help_command, render_help
 from judecode.config import (
     SYSTEM_PROMPT, MODEL, BASE_URL, MAX_CONTINUATIONS, PROVIDER,
 )
@@ -471,7 +472,7 @@ class JudeCodeTUI(App):
         # ── Hints ──
         t.append("SHORTCUTS\n", style="bold cyan")
         t.append("  /help  ", style="magenta")
-        t.append("commands\n", style="dim")
+        t.append("คำสั่ง • /help all ดูทั้งหมด\n", style="dim")
         t.append("  ^L  ", style="magenta")
         t.append("clear   ", style="dim")
         t.append("^C  ", style="magenta")
@@ -578,23 +579,8 @@ class JudeCodeTUI(App):
             self.exit()
             return
 
-        if c == "/help":
-            self._console_sink(
-                "\n[bold cyan]Commands[/bold cyan]\n"
-                "  [magenta]/help[/magenta]      show this help\n"
-                "  [magenta]/quit[/magenta]      exit Jude Code\n"
-                "  [magenta]/clear[/magenta]     clear conversation (or Ctrl+L)\n"
-                "  [magenta]/stop[/magenta]      pause the agent (or Ctrl+C / Esc)\n"
-                "  [magenta]/copy[/magenta]      copy the whole Output pane (or Ctrl+Y)\n"
-                "  Drag Output text, then Ctrl+C to copy selection; Esc stops work.\n"
-                "  [magenta]/queue[/magenta]     show pending prompt queue\n"
-                "  [magenta]/sessions[/magenta]  list saved conversations for this project\n"
-                "  [magenta]/resume ID[/magenta] restore a conversation (or latest)\n"
-                "  [magenta]/continue[/magenta]  trigger a continuation\n"
-                "  [magenta]/status[/magenta]    continuation status\n"
-                "  [magenta]/budget[/magenta]    token budget breakdown\n"
-                "  [magenta]/model[/magenta]     show model info\n"
-            )
+        if is_help_command(cmd):
+            self._console_sink(render_help("tui", cmd))
             return
 
         if c in ("/sessions", "/resume") or c.startswith("/resume "):

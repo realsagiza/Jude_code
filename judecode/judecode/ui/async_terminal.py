@@ -20,6 +20,7 @@ from rich.rule import Rule
 from rich.panel import Panel
 from rich.box import HEAVY_EDGE, DOUBLE_EDGE
 
+from judecode.ui.command_help import is_help_command, render_help
 from judecode.config import (
     SYSTEM_PROMPT, MODEL, BASE_URL, MAX_CONTINUATIONS, PROVIDER,
 )
@@ -302,19 +303,8 @@ class AsyncAgentRunner:
                 self.agent.request_stop()
             return
 
-        if cmd_lower == "/help":
-            console.print("""
-[bold cyan]Commands:[/bold cyan]
-  /help      Show help
-  /quit      Exit (twice when AI busy)
-  /clear     Clear conversation
-  /stop      Pause agent
-  /queue     Show pending queue
-  /continue  Trigger continuation
-  /status    Continuation status
-  /budget    Token budget breakdown
-  Ctrl+C     Pause agent / Exit when idle
-""")
+        if is_help_command(cmd):
+            console.print(render_help("classic", cmd))
             return
 
         if cmd_lower == "/clear":

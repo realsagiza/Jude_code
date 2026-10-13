@@ -23,6 +23,7 @@ from rich.align import Align
 from rich.rule import Rule
 from rich.box import DOUBLE_EDGE, HEAVY_EDGE
 
+from judecode.ui.command_help import is_help_command, render_help
 from judecode.config import (
     SYSTEM_PROMPT, MODEL, BASE_URL, MAX_CONTINUATIONS, PROVIDER,
 )
@@ -249,45 +250,8 @@ async def run_agent_interactive() -> None:
                 print_goodbye()
                 break
 
-            if user_input.lower() == "/help":
-                console.print("""
-[bold cyan]Jude Code Commands:[/bold cyan]
-  [bold]/help[/bold]           - Show this help
-  [bold]/quit[/bold]           - Exit Jude Code
-  [bold]/clear[/bold]          - Clear the conversation history
-  [bold]/compact[/bold]        - Compact conversation (save tokens)
-  [bold]/model[/bold]          - Show current model info
-  [bold]/continue[/bold]       - Manually trigger continuation
-  [bold]/stop[/bold]           - Pause the agent (same as Ctrl+C)
-  [bold]/status[/bold]         - Show continuation + autonomous status
-  [bold]/budget[/bold]         - Show budget usage and circuit breaker
-
-[bold cyan]Persistence & Recovery:[/bold cyan]
-  [bold]/sessions[/bold]       - List saved conversations in this project
-  [bold]/resume ID[/bold]      - Restore conversation (or latest); /continue to run
-  [bold]/checkpoint[/bold]     - Show checkpoint history
-  [bold]/rollback[/bold]       - Rollback to checkpoint (e.g. /rollback 3)
-  [bold]/diff[/bold]           - Show diff between checkpoint and current
-  [bold]/decisions[/bold]      - Decision log (/decisions search <query>)
-  [bold]/memory[/bold]         - Cross-session memory (/memory patterns|sessions)
-
-[bold cyan]Safety & Control:[/bold cyan]
-  [bold]/sandbox[/bold]        - Toggle sandbox mode (preview before apply)
-  [bold]/sandbox apply[/bold]  - Apply sandboxed changes
-  [bold]/sandbox discard[/bold] - Discard sandboxed changes
-  [bold]/permissions[/bold]    - Show permission levels
-  [bold]/permissions set[/bold] - Set permission (/permissions set delete=ask)
-
-[bold cyan]Daemon & Automation:[/bold cyan]
-  [bold]/daemon[/bold]         - Show daemon status
-  [bold]/daemon start[/bold]   - Start background daemon with goal
-  [bold]/daemon stop[/bold]    - Stop daemon
-  [bold]/daemon logs[/bold]    - Show daemon logs
-  [bold]/notify[/bold]         - Test notification system
-
-[bold]Ctrl+C[/bold]            - Pause agent / exit if idle
-[bold]Ctrl+C twice[/bold]      - Force exit
-""")
+            if is_help_command(user_input):
+                console.print(render_help("legacy", user_input))
                 continue
 
             if user_input.lower() == "/clear":
@@ -413,7 +377,7 @@ async def run_agent_interactive() -> None:
                 from judecode.agent.memory import DecisionLog
                 parts = user_input.strip().split(maxsplit=1)
                 dl = DecisionLog(session_id=agent.autonomous.session.session_id)
-                if len(parts) > 1 and parts[1] == "search":
+                if len(parts) > 1 and parts[1].split(maxsplit=1)[0] == "search":
                     # /decisions search <query>
                     query_parts = user_input.strip().split(maxsplit=2)
                     query = query_parts[2] if len(query_parts) > 2 else ""
