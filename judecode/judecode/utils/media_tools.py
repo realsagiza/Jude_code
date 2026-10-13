@@ -349,7 +349,7 @@ MEDIA_TOOL_DEFINITIONS = [
            'resolution': _STRING, 'generate_audio': {'type': 'boolean'}, 'first_frame': _STRING}, ['prompt']),
     _tool('media_video_status', 'Check an existing video job once and download completed MP4. Wait about 30 seconds between checks. Reuse job_id across restarts. Terminal failures must be reported, not automatically resubmitted.',
           {'job_id': _STRING, 'download': {'type': 'boolean'}}, ['job_id']),
-    _tool('media_movie', 'Assemble a local MP4 film from ordered images/clips; preserves scene audio and optionally mixes narration. Create scenes with media_image/media_video, download clips first. Each scene needs path and duration in seconds; clips are trimmed or last frame held. Requires FFmpeg. No API charge.',
+    _tool('media_movie', 'Assemble a local MP4 film from ordered images/clips; preserves scene audio and optionally mixes narration. This is an assembler, not video generation: requested videos/films must use moving clips from media_video or existing video assets. Images are only for explicitly requested still-image scenes/slideshows; never substitute them for failed video generation or to save cost. Download clips first. Each scene needs path and duration in seconds; clips are trimmed or last frame held. Requires FFmpeg. No API charge.',
           {'scenes': {'type': 'array', 'items': {'type': 'object', 'properties': {'path': _STRING, 'duration': {'type': 'number'}}, 'required': ['path', 'duration']}},
            'narration': _STRING, 'width': {'type': 'integer'}, 'height': {'type': 'integer'}}, ['scenes']),
 ]

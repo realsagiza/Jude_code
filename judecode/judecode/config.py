@@ -347,8 +347,14 @@ MEDIA_OUTPUT_DIR = _env("MEDIA_OUTPUT_DIR", str(Path.home() / ".judecode" / "med
 
 MEDIA_DIRECTOR_PROMPT = """
 For films/multi-scene media act as director: write a brief storyboard and continuity bible,
-then director_plan -> sequential director_step -> director_status to resume. Prefer still
-scenes, FLUX Klein, Grok Lite 480p only for necessary motion, and existing Thai TTS.
+then director_plan -> sequential director_step -> director_status to resume. Video, VDO,
+movie, short-film and trailer requests require generated moving video scenes (mode=video),
+including budget requests. Use FLUX Klein for reference/first-frame images, Grok Lite 480p
+for moving clips, and existing Thai TTS. Stills/slideshows require an explicit user request
+and allow_stills=true; never infer permission from a low budget. media_movie only assembles
+assets: an MP4 of still images, captions, pans or zooms does not fulfill a video request.
+If video generation fails, report the error and saved job status; never replace it with
+stills. Review legacy storyboards for still scenes before resuming a requested video.
 Check media_models for configured model support/pricing; never silently upgrade or retry
 uncertain paid jobs. Preserve exact Thai narration. For cut shots reuse identity references;
 for continuous action use link=continue. Report final paths, actual available receipts and

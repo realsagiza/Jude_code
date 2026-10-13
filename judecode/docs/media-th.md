@@ -73,7 +73,10 @@ python -m pip install -r requirements-media.txt
 Jude จะเขียน storyboard และ continuity bible (ตัวละคร เสื้อผ้า อุปกรณ์ สถานที่ แสง ทิศทางการเคลื่อนไหว)
 แล้วใช้ `director_plan` บันทึกฉากเรียงลำดับ ก่อนเรียก `director_step` ทีละขั้นจนได้ MP4
 
-- ค่าเริ่มต้นเป็นภาพนิ่ง FLUX.2 Klein 4B; ฉากที่ต้องเคลื่อนไหวเลือก mode=video ใช้ Grok Imagine 1.5 Lite ที่ 480p ไม่มีเสียงจากโมเดลคลิป
+- ค่าเริ่มต้นทุกฉากเป็นวิดีโอเคลื่อนไหว (`mode=video`) ใช้ Grok Imagine 1.5 Lite ที่ 480p ไม่มีเสียงจากโมเดลคลิป; FLUX.2 Klein 4B ใช้สร้างภาพอ้างอิง/เฟรมแรก
+- คำสั่งวิดีโอ/VDO/หนังสั้น/ตัวอย่างหนัง รวมถึงงานเน้นประหยัด ต้องใช้คลิปเคลื่อนไหว ไม่ใช้ภาพนิ่งใส่คำบรรยายหรือแพน/ซูมแทน
+- `mode=still` ใช้ได้เฉพาะผู้ใช้ขอภาพนิ่งหรือสไลด์ โดยระบุ `allow_stills=true` ใน `director_plan`; หากไม่ระบุระบบจะปฏิเสธแผนภาพนิ่งก่อนมีค่าใช้จ่าย
+- หาก API วิดีโอล้มเหลวหรือไม่ทราบผล ให้รายงานข้อผิดพลาดและสถานะงานเดิม ไม่เปลี่ยนเป็นภาพนิ่งหรือส่งงานคิดเงินซ้ำเอง
 - เสียงใช้ VOICE_TTS_MODEL/VOICE_NAME เดิม (MAI เสียงไทย Nattapong โดย default); narration เป็นบทที่อ่านจริงรายฉาก
 - link=cut ส่งภาพฉากแรกเป็น reference รักษาเอกลักษณ์; link=continue ส่งเฟรมท้ายคลิปก่อนหน้า (หรือภาพก่อนหน้า) พร้อมภาพฉากแรก
 - สร้างภาพก่อนแล้วส่งเป็น first_frame ของคลิป; เก็บ job_id และ poll งานเดิม ไม่ submit ซ้ำ
@@ -83,6 +86,7 @@ Jude จะเขียน storyboard และ continuity bible (ตัวล�
 
 แผนและสถานะอยู่ `~/.judecode/media/projects/<project_id>.json`
 ใช้ `director_status(project_id)` ดูงานและขั้นถัดไปหลัง restart แล้ว `director_step(project_id)` ทำต่อ
+หลังอัปเดตต้อง restart JudeCode เพื่อโหลดคำสั่งและ tools ใหม่ แผนเก่าที่มีฉากภาพนิ่งแต่ไม่มี `allow_stills=true` จะหยุดให้ตรวจแก้ storyboard ตามคำขอจริงก่อนทำต่อ; ไม่แปลงแผนหรือสร้างคลิปใหม่ให้อัตโนมัติ และต้องรักษา job_id/receipts เดิม
 หาก pending operation ค้างจาก timeout/crash ระบบจะหยุดเพื่อกันคิดเงินซ้ำ: ตรวจ receipt และ OpenRouter Activity
 แล้วกู้ asset/job_id เข้าแผนที่บันทึกไว้หลังตรวจยืนยัน (ยังไม่มีปุ่มกู้อัตโนมัติ); ห้ามสร้าง project ใหม่เพื่อเลี่ยงสถานะนี้
 การล็อกการทำงานต่อ project ใช้ POSIX file lock (macOS/Linux)

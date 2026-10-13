@@ -27,7 +27,7 @@ def test_resume_full_pipeline_and_reference_handoff(monkeypatch):
         return {'files': [f'image{len(calls)}.png'], 'receipt': f'image{len(calls)}.json'}
     monkeypatch.setattr(m, 'media_image', image)
     monkeypatch.setattr(m, 'media_video', lambda *a, **kw: calls.append(('video', kw)) or {'job_id': 'job1', 'status': 'pending'})
-    polls = iter([{'job_id': 'job1', 'status': 'pending'}, {'job_id': 'job1', 'status': 'completed', 'files': ['clip.mp4']}])
+    polls = iter([{'job_id': 'job1', 'status': 'pending'}, {'job_id': 'job1', 'status': 'completed', 'files': ['clip.mp4']}] * 2)
     monkeypatch.setattr(m, 'media_video_status', lambda job: next(polls))
     monkeypatch.setattr(d, '_last_frame', lambda p: 'last-frame.png')
     monkeypatch.setattr(m, 'media_audio', lambda text, **kw: calls.append(('audio', text)) or {'files': ['thai.mp3']})
@@ -36,7 +36,7 @@ def test_resume_full_pipeline_and_reference_handoff(monkeypatch):
         calls.append(('movie', scenes, kw))
         return {'files': [f'render{len(calls)}.mp4'], 'duration_seconds': sum(s['duration'] for s in scenes)}
     monkeypatch.setattr(m, 'media_movie', movie)
-    pid = plan([{'prompt': 'เดินไปประตู', 'mode': 'video', 'narration': 'กลับบ้านกันครับ'},
+    pid = plan([{'prompt': 'เดินไปประตู', 'narration': 'กลับบ้านกันครับ'},
                 {'prompt': 'เดินผ่านประตู', 'link': 'continue'}])
     for _ in range(15):
         result = d.director_step(pid)
@@ -49,9 +49,10 @@ def test_resume_full_pipeline_and_reference_handoff(monkeypatch):
     video = next(c for c in calls if c[0] == 'video')[1]
     assert video['first_frame'] == 'image1.png' and video['resolution'] == '480p'
     assert video['generate_audio'] is False
-    assert sum(c[0] == 'video' for c in calls) == 1
+    assert sum(c[0] == 'video' for c in calls) == 2
     assert ('audio', 'กลับบ้านกันครับ') in calls
     renders = [c for c in calls if c[0] == 'movie']
+    assert all(c[1][0]['path'] == 'clip.mp4' for c in renders[:-1])
     assert renders[0][1][0]['duration'] == 7.25
     assert renders[-1][1][0]['path'] == result['scenes'][0]['assets']['render']['files'][0]
     count = len(calls)
@@ -73,13 +74,67 @@ def test_uncertain_paid_call_never_repeated(monkeypatch):
     assert len(calls) == 1
 
 
-def test_failed_video_stops_pipeline():
+@pytest.mark.parametrize('status', ['failed', 'cancelled', 'expired'])
+def test_failed_video_stops_pipeline(monkeypatch, status):
     pid = plan([{'prompt': 'cat', 'mode': 'video'}])
     path = d._path(pid)
     p = json.loads(path.read_text())
-    p['scenes'][0]['assets'] = {'image': {'files': ['cat.png']}, 'video': {'status': 'failed', 'job_id': 'x'}}
+    p['scenes'][0]['assets'] = {'image': {'files': ['cat.png']}, 'video': {'status': status, 'job_id': 'x'}}
     m._receipt(p, path)
+    monkeypatch.setattr(m, 'media_movie', lambda *a, **kw: pytest.fail('Must not render still fallback'))
+    monkeypatch.setattr(m, 'media_video', lambda *a, **kw: pytest.fail('Must not resubmit'))
     assert d.director_step(pid)['next']['action'] == 'blocked'
+    assert d.director_status(pid)['scenes'][0]['mode'] == 'video'
+
+
+def test_still_plan_requires_explicit_opt_in(tmp_path):
+    with pytest.raises(m.MediaError, match='Video is required'):
+        plan([{'prompt': 'cat', 'mode': 'still'}])
+    assert not list(tmp_path.rglob('*.json'))
+
+
+def test_requested_still_scene_remains_supported(monkeypatch):
+    p = d.director_plan('Slideshow', 'cat', [{'prompt': 'cat', 'mode': 'still'}], allow_stills=True)
+    monkeypatch.setattr(m, 'media_image', lambda *a, **kw: {'files': ['cat.png']})
+    monkeypatch.setattr(m, 'media_video', lambda *a, **kw: pytest.fail('Explicit slideshow needs no video'))
+    assert d.director_step(p['id'])['next']['action'] == 'render'
+
+
+@pytest.mark.parametrize('value', ['false', 'true', 1, None])
+def test_still_opt_in_cannot_be_truthy_string(value):
+    with pytest.raises(m.MediaError, match='boolean'):
+        d.director_plan('film', 'cat', [{'prompt': 'cat', 'mode': 'still'}], allow_stills=value)
+
+
+def test_legacy_still_plan_blocks_before_spending(monkeypatch):
+    pid = plan([{'prompt': 'cat'}])
+    path = d._path(pid)
+    p = json.loads(path.read_text())
+    p.pop('allow_stills')
+    p['scenes'][0]['mode'] = 'still'
+    m._receipt(p, path)
+    monkeypatch.setattr(m, 'media_image', lambda *a, **kw: pytest.fail('Legacy still plan must be reviewed'))
+    assert d.director_step(pid)['next']['action'] == 'blocked'
+    assert json.loads(path.read_text()) == p
+
+
+def test_uncertain_video_submission_blocks_without_still_fallback(monkeypatch):
+    pid = plan([{'prompt': 'cat walking'}])
+    monkeypatch.setattr(m, 'media_image', lambda *a, **kw: {'files': ['cat.png']})
+    assert d.director_step(pid)['next']['action'] == 'video'
+    calls = []
+    def fail(*a, **kw):
+        calls.append(1)
+        raise m.MediaError('video API timeout')
+    monkeypatch.setattr(m, 'media_video', fail)
+    monkeypatch.setattr(m, 'media_movie', lambda *a, **kw: pytest.fail('Must not render still fallback'))
+    with pytest.raises(m.MediaError, match='video API timeout'):
+        d.director_step(pid)
+    result = d.director_step(pid)
+    assert result['next']['action'] == 'blocked'
+    assert result['pending']['operation'] == 'video'
+    assert result['scenes'][0]['mode'] == 'video'
+    assert len(calls) == 1
 
 
 @pytest.mark.parametrize('scene', [{'prompt': ''}, {'prompt': 'x', 'duration': True}, {'prompt': 'x', 'duration': 16}, {'prompt': 'x', 'mode': 'bad'}, {'prompt': 'x', 'narration': 3}])

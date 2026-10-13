@@ -19,17 +19,20 @@ def _path(project_id):
     return root / (project_id + '.json')
 
 
-def director_plan(title: str, continuity: str, scenes: list[dict], aspect_ratio: str = '16:9'):
+def director_plan(title: str, continuity: str, scenes: list[dict], aspect_ratio: str = '16:9',
+                  allow_stills: bool = False):
     """The agent writes the creative plan; this tool validates and persists it."""
     if not title.strip() or not continuity.strip() or not 1 <= len(scenes) <= 30:
         raise media.MediaError('Provide title, continuity bible and 1–30 scenes')
     if aspect_ratio not in ('16:9', '9:16', '1:1'):
         raise media.MediaError('Use 16:9, 9:16 or 1:1')
+    if type(allow_stills) is not bool:
+        raise media.MediaError('allow_stills must be a boolean; enable only when the user explicitly requests still images or a slideshow')
     clean = []
     for i, scene in enumerate(scenes):
         prompt = scene.get('prompt', '')
         duration = scene.get('duration', 5)
-        mode = scene.get('mode', 'still')
+        mode = scene.get('mode', 'video')
         link = scene.get('link', 'cut')
         if not isinstance(prompt, str) or not prompt.strip():
             raise media.MediaError('Each scene needs a visual/action prompt')
@@ -37,6 +40,8 @@ def director_plan(title: str, continuity: str, scenes: list[dict], aspect_ratio:
             raise media.MediaError('Scene duration must be an integer from 1 to 15 seconds')
         if mode not in ('still', 'video') or link not in ('cut', 'continue'):
             raise media.MediaError('mode: still/video; link: cut/continue')
+        if mode == 'still' and not allow_stills:
+            raise media.MediaError('Video is required by default. Use mode=video; allow_stills=true is only for user-requested still images or slideshows, never a cost-saving or API-error fallback')
         narration = scene.get('narration', '')
         if not isinstance(narration, str):
             raise media.MediaError('Narration must be text')
@@ -46,7 +51,7 @@ def director_plan(title: str, continuity: str, scenes: list[dict], aspect_ratio:
     project = dict(id=project_id, title=title, continuity=continuity, scenes=clean,
                    aspect_ratio=aspect_ratio, models=dict(image=config.MEDIA_IMAGE_MODEL,
                    video=config.MEDIA_VIDEO_MODEL, audio=config.MEDIA_AUDIO_MODEL or config.VOICE_TTS_MODEL),
-                   voice=config.VOICE_NAME, receipts=[], status='planned')
+                   voice=config.VOICE_NAME, allow_stills=allow_stills, receipts=[], status='planned')
     if project['models']['audio'] != config.VOICE_TTS_MODEL:
         raise media.MediaError('Director narration uses VOICE_TTS_MODEL/VOICE_NAME; align MEDIA_AUDIO_MODEL first')
     media._receipt(project, _path(project_id))
@@ -58,6 +63,8 @@ def _next(p):
         return {'action': 'blocked', 'reason': 'Previous operation has uncertain outcome. Inspect receipts/Activity; never resubmit automatically.', **p['pending']}
     if p.get('final'):
         return {'action': 'done', 'files': p['final']['files']}
+    if not p.get('allow_stills', False) and any(s['mode'] == 'still' for s in p['scenes']):
+        return dict(action='blocked', reason='Storyboard contains still scenes without explicit still-image authorization (possibly a legacy plan). Review the saved storyboard against the user request before continuing; do not silently deliver a slideshow or resubmit existing paid jobs.')
     for i, s in enumerate(p['scenes']):
         a = s['assets']
         if 'image' not in a:
@@ -149,7 +156,7 @@ def director_step(project_id: str):
         elif action == 'render':
             narration = a.get('audio', {}).get('files', [''])[0]
             duration = max(s['duration'], _audio_duration(narration)) if narration else s['duration']
-            source = a.get('video', a['image'])['files'][0]
+            source = a['video' if s['mode'] == 'video' else 'image']['files'][0]
             width, height = {'16:9': (854, 480), '9:16': (480, 854), '1:1': (480, 480)}[p['aspect_ratio']]
             result = media.media_movie([dict(path=source, duration=duration)], narration=narration, width=width, height=height)
         else:
@@ -170,11 +177,12 @@ def director_step(project_id: str):
 
 _STRING = {'type': 'string'}
 DIRECTOR_DEFINITIONS = [
-    media._tool('director_plan', 'Save a film storyboard BEFORE production. Agent authors ordered scene prompts and verbatim Thai narration plus continuity bible (characters, clothes, props, setting, lighting, camera/action direction). Defaults to cheap stills; use video only when motion is needed. link=continue uses previous end frame, cut uses master identity reference. No API charge. Discover configured models/options first. Return project_id for resume.',
+    media._tool('director_plan', 'Save a film storyboard BEFORE production. Agent authors ordered scene prompts and verbatim Thai narration plus continuity bible (characters, clothes, props, setting, lighting, camera/action direction). Defaults to generated moving video in every scene, including budget films. Still scenes require allow_stills=true and an explicit user request for still images/slideshows. Never replace requested video with stills after API errors or to save cost. link=continue uses previous end frame, cut uses master identity reference. No API charge. Discover configured models/options first. Return project_id for resume.',
         {'title': _STRING, 'continuity': _STRING, 'aspect_ratio': {'type': 'string', 'enum': ['16:9', '9:16', '1:1']},
+         'allow_stills': {'type': 'boolean', 'default': False, 'description': 'True only when the user explicitly requests still images or a slideshow. Budget requests do not authorize this.'},
          'scenes': {'type': 'array', 'items': {'type': 'object', 'properties': {
              'prompt': _STRING, 'narration': _STRING, 'duration': {'type': 'integer', 'minimum': 1, 'maximum': 15},
-             'mode': {'type': 'string', 'enum': ['still', 'video']}, 'link': {'type': 'string', 'enum': ['cut', 'continue']}}, 'required': ['prompt']}}}, ['title', 'continuity', 'scenes']),
+             'mode': {'type': 'string', 'enum': ['still', 'video'], 'default': 'video'}, 'link': {'type': 'string', 'enum': ['cut', 'continue']}}, 'required': ['prompt']}}}, ['title', 'continuity', 'scenes']),
     media._tool('director_status', 'Read saved storyboard, assets, receipts and next operation after restart. No generation or spending.', {'project_id': _STRING}, ['project_id']),
     media._tool('director_step', 'Perform exactly the next storyboard operation: image references -> video job/poll -> Thai narration -> scene render -> final movie. May spend credits. Call sequentially until done; wait 30 seconds between pending polls. Blocked means inspect receipts/Activity, never recreate the project to retry. Continuity is guided, not guaranteed; inspect outputs before claiming visual quality.', {'project_id': _STRING}, ['project_id']),
 ]
