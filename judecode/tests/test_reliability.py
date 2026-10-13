@@ -174,6 +174,49 @@ def test_partial_json_is_never_executed(agent, monkeypatch):
     assert agent.messages[-1]["role"] == "tool"
 
 
+@pytest.mark.parametrize("raw", ['{"path":', '', '[]', '{"value":NaN}'])
+def test_invalid_arguments_do_not_poison_next_request(agent, monkeypatch, raw):
+    monkeypatch.setattr(engine_mod, "execute_tool",
+                        lambda *a: pytest.fail("Invalid arguments executed"))
+    agent.api = ScriptedAPI(calls(("write", raw), finish="length"))
+    asyncio.run(agent._process_turn())
+    asyncio.run(agent._process_turn())
+    request = agent.api.requests[-1]
+    message = next(m for m in request if m.get("tool_calls"))
+    assert message["tool_calls"][0]["function"]["arguments"] == '{}'
+    assert 'do not execute this placeholder' in message['content']
+    assert any(m.get('role') == 'tool' and 'invalid or truncated' in m['content'] for m in request)
+    archives = list((Path.home() / '.judecode/tool-argument-recovery').glob('*.json'))
+    assert len(archives) == 1
+    archived = json.loads(archives[0].read_text())
+    assert archived[-1]['tool_calls'][0]['function']['arguments'] == raw
+    assert archives[0].stat().st_mode & 0o077 == 0
+
+
+def test_argument_repair_archive_failure_blocks_request(agent, monkeypatch):
+    agent.messages.append({'role': 'assistant', 'content': None,
+        'tool_calls': [{'id': 'bad', 'function': {'name': 'write', 'arguments': '{'}}]})
+    original = json.dumps(agent.messages)
+    def denied(*a, **kw):
+        raise OSError('disk full')
+    monkeypatch.setattr('tempfile.NamedTemporaryFile', denied)
+    with pytest.raises(OSError, match='disk full'):
+        asyncio.run(agent._process_turn())
+    assert not agent.api.requests
+    assert json.dumps(agent.messages) == original
+
+
+def test_mixed_batch_preserves_valid_calls(agent, tmp_path):
+    path = tmp_path / 'valid.txt'
+    agent.api = ScriptedAPI(calls(('write', '{'),
+        ('write', {'path': str(path), 'content': 'written once'})))
+    asyncio.run(agent._process_turn())
+    assert path.read_text() == 'written once'
+    batch = next(m for m in agent.messages if m.get('tool_calls'))
+    assert json.loads(batch['tool_calls'][1]['function']['arguments'])['content'] == 'written once'
+    assert len([m for m in agent.messages if m.get('role') == 'tool']) == 2
+
+
 def test_sandbox_overlay_apply_and_backup(agent, tmp_path):
     path = tmp_path / "file.txt"
     path.write_text("original")

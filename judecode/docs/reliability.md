@@ -109,3 +109,13 @@ skipped in listings and rejected on restore without replacing the current contex
 Pending sandbox changes are not restored: apply or resolve them in their original
 session. Restoring does not restore live subprocesses, queued UI prompts, provider
 connections, or the original terminal scrollback; it uses the current API client.
+
+Invalid or truncated tool argument JSON is never executed. Before saving new tool
+calls, sending history, or restoring an old session, JudeCode archives affected
+history privately under `~/.judecode/tool-argument-recovery/`. It substitutes `{}`
+only in the history sent to the provider, with an explicit recovery annotation;
+execution still validates the original arguments. Valid calls, call IDs, and tool
+results are preserved. An archive failure stops recovery without changing history.
+This prevents strict providers from repeatedly rejecting a conversation containing
+a malformed historical call. Recovery does not reconstruct or replay the failed
+action: the model must generate a fresh complete call, preferably in smaller steps.

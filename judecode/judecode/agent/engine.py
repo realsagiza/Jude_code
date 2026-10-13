@@ -30,6 +30,7 @@ from judecode.config import (
     CONTEXT_RECENT_RESULTS,
 )
 from judecode.agent.context import ContextManager, estimate_tokens
+from judecode.agent.tool_history import parse_tool_arguments, repair_tool_history
 from judecode.agent.autonomous import AutonomousController
 from judecode.agent.checkpoint import CheckpointManager
 from judecode.agent.safety import PermissionManager, BackupManager, SandboxManager
@@ -166,7 +167,7 @@ class AgentEngine:
         for key in ('total_input_tokens', 'total_output_tokens', 'total_cost', 'tokens'):
             setattr(restored.autonomous.budget, key, data['budget'][key])
         restored._restored_session = True
-        restored.messages = data['messages']
+        restored.messages = repair_tool_history(data['messages'])
         restored._tool_failures = {tuple(key): value for key, value in data.get('failures', [])}
         restored._needs_verification = bool(data.get('needs_verification')) or bool(pending)
         restored._resume_uncertain = bool(pending) or bool(data.get('uncertain'))
@@ -640,6 +641,7 @@ class AgentEngine:
                 " Do not claim verified success unless checks passed; report limitations.]"})
 
         # Include fresh verification context before estimating/pruning the request.
+        self.messages = repair_tool_history(self.messages)
         self._prune_context()
         # Estimates include resends; provider billing/cache discounts may differ.
         self.save_transcript()
@@ -912,6 +914,7 @@ class AgentEngine:
         if full_reasoning:
             msg["reasoning_content"] = full_reasoning
         self.messages.append(msg)
+        self.messages = repair_tool_history(self.messages)
         self.save_transcript()
 
         if not has_started_output:
@@ -924,8 +927,8 @@ class AgentEngine:
                 continue
             args_str = tc.get("arguments", "{}")
             try:
-                args = json.loads(args_str) if args_str else {}
-            except json.JSONDecodeError:
+                args = parse_tool_arguments(args_str)
+            except (ValueError, TypeError):
                 args = None
             if not isinstance(args, dict):
                 self.messages.append({"role": "tool", "tool_call_id": tc.get("id", ""),

@@ -38,6 +38,23 @@ def test_restart_restores_conversation_budget_and_forks(engine):
     assert TranscriptStore().path(source_id).read_bytes() == original
 
 
+def test_resume_repairs_legacy_invalid_arguments_without_replay(engine, monkeypatch):
+    engine.messages += [{'role': 'assistant', 'content': None, 'tool_calls': [
+        {'id': 'bad', 'type': 'function', 'function': {'name': 'write', 'arguments': '{'}}]},
+        {'role': 'tool', 'tool_call_id': 'bad', 'content': 'Error executing tool: invalid or truncated JSON'}]
+    engine.save_transcript()
+    source_id = engine.autonomous.session.session_id
+    original = TranscriptStore().path(source_id).read_bytes()
+    engine = AgentEngine('system', ScriptedAPI())
+    engine.autonomous.enabled = False
+    engine.resume_session(source_id)
+    monkeypatch.setattr(engine, '_execute_tool_safe', lambda *a: pytest.fail('Replayed tool'))
+    asyncio.run(engine.continue_task())
+    assert engine.api.requests
+    assert engine.api.requests[0][1]['tool_calls'][0]['function']['arguments'] == '{}'
+    assert TranscriptStore().path(source_id).read_bytes() == original
+
+
 def test_completed_tools_not_replayed(engine, monkeypatch):
     engine.api = ScriptedAPI(calls(('read', {'path': 'sample.txt'})))
     Path('sample.txt').write_text('evidence')
