@@ -45,6 +45,7 @@ from textual.selection import Selection
 from textual.widgets import Footer, Header, Input, RichLog, Static
 
 from judecode.ui.command_help import is_help_command, render_help
+from judecode.ui.schedule_commands import is_schedule_command, render_schedule_command
 from judecode.config import (
     SYSTEM_PROMPT, MODEL, BASE_URL, MAX_CONTINUATIONS, PROVIDER,
 )
@@ -731,6 +732,10 @@ class JudeCodeTUI(App):
 
         if c in ("/quit", "/exit", ":q", "quit", "exit"):
             self.exit()
+            return
+
+        if is_schedule_command(cmd):
+            self._console_sink(render_schedule_command(cmd))
             return
 
         if is_help_command(cmd):

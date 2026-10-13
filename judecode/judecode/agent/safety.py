@@ -94,6 +94,11 @@ DANGEROUS_SHELL_PATTERNS = [
 
 # Tool name → permission category mapping
 TOOL_CATEGORY_MAP: dict[str, str] = {
+    "schedule_create": "write",
+    "schedule_manage": "write",
+    "schedule_checkpoint": "write",
+    "schedule_list": "read",
+    "schedule_history": "read",
     "read": "read",
     "write": "write",
     "edit": "write",

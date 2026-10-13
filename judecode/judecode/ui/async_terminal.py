@@ -21,6 +21,7 @@ from rich.panel import Panel
 from rich.box import HEAVY_EDGE, DOUBLE_EDGE
 
 from judecode.ui.command_help import is_help_command, render_help
+from judecode.ui.schedule_commands import is_schedule_command, render_schedule_command
 from judecode.config import (
     SYSTEM_PROMPT, MODEL, BASE_URL, MAX_CONTINUATIONS, PROVIDER,
 )
@@ -301,6 +302,10 @@ class AsyncAgentRunner:
             self.running = False
             if self.agent_busy:
                 self.agent.request_stop()
+            return
+
+        if is_schedule_command(cmd):
+            console.print(render_schedule_command(cmd))
             return
 
         if is_help_command(cmd):

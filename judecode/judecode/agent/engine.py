@@ -309,7 +309,9 @@ class AgentEngine:
     # Conservatively treat other tools as requiring outcome verification.
     READ_ONLY_TOOLS = {"read", "glob", "grep", "ls", "web_fetch", "web_search",
                        "codebase_search", "codebase_summary", "vault_read_note",
-                       "vault_search", "task_list", "task_get", "task_summary"}
+                       "vault_search", "task_list", "task_get", "task_summary",
+                       "schedule_create", "schedule_list", "schedule_manage",
+                       "schedule_history", "schedule_checkpoint"}
 
     def _snapshot_file(self, path: str, reason: str = "apply") -> None:
         if os.path.exists(path) and not self.backups.backup_file(path, reason=reason):

@@ -24,6 +24,7 @@ from rich.rule import Rule
 from rich.box import DOUBLE_EDGE, HEAVY_EDGE
 
 from judecode.ui.command_help import is_help_command, render_help
+from judecode.ui.schedule_commands import is_schedule_command, render_schedule_command
 from judecode.config import (
     SYSTEM_PROMPT, MODEL, BASE_URL, MAX_CONTINUATIONS, PROVIDER,
 )
@@ -249,6 +250,10 @@ async def run_agent_interactive() -> None:
             if user_input.lower() in ("/quit", "/exit", ":q"):
                 print_goodbye()
                 break
+
+            if is_schedule_command(user_input):
+                console.print(render_schedule_command(user_input))
+                continue
 
             if is_help_command(user_input):
                 console.print(render_help("legacy", user_input))
@@ -598,6 +603,10 @@ def main_cli() -> None:
 
     if len(sys.argv) > 1:
         arg = sys.argv[1]
+        if arg == "schedule":
+            from judecode.agent.schedule_service import main as schedule_main
+            schedule_main(sys.argv[2:])
+            return
         if arg in ("--version", "-v"):
             from judecode import __version__
             print(f"judecode v{__version__}")
@@ -612,6 +621,7 @@ def main_cli() -> None:
             print("  --help, -h      Show this help message and exit")
             print("  --classic       Use the classic scrolling async UI")
             print("  --legacy        Use the legacy single-thread UI")
+            print("  schedule        Manage self-planning wake-ups (schedule --help)")
             print("  --voice         Start hands-free Thai voice conversation")
             print()
             print("Default: Beautiful full-screen TUI (Textual).")

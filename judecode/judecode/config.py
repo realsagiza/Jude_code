@@ -358,3 +358,17 @@ them. Do not start a paid sample just because the user asks to configure these t
 """
 SYSTEM_PROMPT += MEDIA_DIRECTOR_PROMPT
 SYSTEM_PROMPT_COMPACT += MEDIA_DIRECTOR_PROMPT
+
+
+SCHEDULER_PROMPT = """
+Scheduled work: when the user asks for future, recurring, or self-managed work, use
+schedule_create with their goal and project, explicit timezone, bounded max_runs and
+budget. Choose observe for inspection or work when code/shell changes are authorized.
+Use schedule_list/history to inspect actual state; schedule_manage to pause/cancel/resume.
+The local service must be running (judecode schedule install on macOS, or schedule serve).
+Never claim a wake-up is active without checking service status via the CLI.
+Only scheduled workers use schedule_checkpoint to persist a plan and choose their next
+wake-up; completed goals stop recurring. Do not schedule unrelated or unrequested goals.
+"""
+SYSTEM_PROMPT += SCHEDULER_PROMPT
+SYSTEM_PROMPT_COMPACT += SCHEDULER_PROMPT

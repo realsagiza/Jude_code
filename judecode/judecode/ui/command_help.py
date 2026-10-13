@@ -5,6 +5,7 @@ MODES = {'tui': 'หน้าจอหลัก (TUI)', 'classic': 'Classic (--c
 ALL = ('tui', 'classic', 'legacy')
 # category, usage, description, example, modes, aliases
 COMMANDS = [
+    ("ตารางงานอัตโนมัติ", "/schedule [status|list|history|pause id|resume id|cancel id]", "ดูตาราง/ผลลัพธ์และควบคุมงานปลุกตัวเอง; สร้างงานโดยบอก AI ด้วยภาษาปกติ", "/schedule", ALL, ()),
     ('เสียงภาษาไทย', '/listen [วินาที]', 'อัดเสียง 1–60 วินาที (ค่าเริ่มต้น 8) แล้วถอดเสียงผ่าน OpenRouter ใส่ช่องพิมพ์ให้ตรวจและกด Enter; Esc ยกเลิก', '/listen 8', ('tui',), ()),
     ('เสียงภาษาไทย', '/voice on|off|read|stop|status', 'on เปิดสนทนาต่อเนื่อง พูดจบส่งอัตโนมัติและพูดตอบ; read อ่านคำตอบอย่างเดียว; พูด หยุดงาน หรือ ปิดโหมดเสียง ได้; ค่าเสียงนอก /budget', '/voice on', ('tui',), ()),
     ('เริ่มต้น', '/help', 'ดูคำสั่งในโหมดปัจจุบัน; /help all ดูทุกโหมด; /help คำค้น ค้นชื่อหรือคำอธิบาย', '/help resume', ALL, ()),

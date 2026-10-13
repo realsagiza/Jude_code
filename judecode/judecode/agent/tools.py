@@ -1326,6 +1326,9 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
 ]
 
 
+from judecode.agent.schedule_tools import SCHEDULE_DEFINITIONS, SCHEDULE_NAMES, execute_schedule_tool
+
+TOOL_DEFINITIONS.extend(SCHEDULE_DEFINITIONS)
 TOOL_DEFINITIONS.extend(MEDIA_TOOL_DEFINITIONS)
 TOOL_DEFINITIONS.extend(DIRECTOR_DEFINITIONS)
 
@@ -1334,6 +1337,8 @@ def execute_tool(
     tool_params: dict[str, Any],
 ) -> str:
     try:
+        if tool_name in SCHEDULE_NAMES:
+            return execute_schedule_tool(tool_name, tool_params)
         if tool_name in DIRECTOR_FUNCTIONS:
             return execute_director_tool(tool_name, tool_params)
         if tool_name in MEDIA_FUNCTIONS:
