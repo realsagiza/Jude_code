@@ -196,6 +196,9 @@ async def record_wav(seconds: int) -> bytes:
         wav.setsampwidth(2)
         wav.setframerate(16000)
         wav.writeframes(b''.join(chunks))
+    if config.VOICE_NOISE_SUPPRESSION:
+        from judecode.api.speech_filter import clean_recording
+        return await asyncio.to_thread(clean_recording, output.getvalue())
     return output.getvalue()
 
 

@@ -1,3 +1,4 @@
 # Optional microphone support; install in the same Python environment as JudeCode.
 sounddevice>=0.5.0
 webrtcvad-wheels>=2.0.14
+pyrnnoise>=0.4.3,<0.5

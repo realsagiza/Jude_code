@@ -13,8 +13,10 @@ from judecode.api.voice import VoiceError, play_audio, play_pcm_stream, spoken_t
 
 class UtteranceDetector:
     """30 ms frames; tolerate thinking pauses, never submit a capped fragment."""
-    def __init__(self, classify, *, silence_ms=None, max_seconds=None):
+    def __init__(self, classify, *, silence_ms=None, max_seconds=None, sample_rate=16000):
         self.classify = classify
+        self.sample_rate = sample_rate
+        self.voiced_frames = 0
         self.end_frames = math.ceil(max(600, min(5000, silence_ms if silence_ms is not None else config.VOICE_END_SILENCE_MS)) / 30)
         self.max_frames = math.ceil(max(10, min(120, max_seconds if max_seconds is not None else config.VOICE_MAX_UTTERANCE_SECONDS)) * 1000 / 30)
         self.pre = deque(maxlen=10)
@@ -22,25 +24,36 @@ class UtteranceDetector:
         self.silent = 0
         self.started = False
 
-    def feed(self, frame):
-        voiced = self.classify(frame, 16000)
+    def feed(self, frame, speech_probability=None):
+        voiced = self.classify(frame, self.sample_rate)
+        if speech_probability is not None:
+            # More permissive once speech starts, so quiet endings are preserved.
+            voiced = voiced and speech_probability >= (0.15 if self.started else 0.35)
         if not self.started:
             self.pre.append((frame, voiced))
             if sum(v for _, v in self.pre) < 6:
                 return None
             self.started = True
             self.frames = [f for f, _ in self.pre]
+            self.voiced_frames = sum(v for _, v in self.pre)
         else:
             self.frames.append(frame)
+            self.voiced_frames += int(voiced)
         self.silent = 0 if voiced else self.silent + 1
         if len(self.frames) >= self.max_frames:
             raise VoiceError('พูดยาวเกินช่วงรับเสียง ยังไม่ได้ส่งคำสั่งครับ กรุณาแบ่งคำสั่งแล้วพูดใหม่')
         if self.silent >= self.end_frames:
+            if self.voiced_frames < 8:
+                self.pre.clear()
+                self.frames.clear()
+                self.started = False
+                self.voiced_frames = self.silent = 0
+                return None
             output = io.BytesIO()
             with wave.open(output, 'wb') as wav:
                 wav.setnchannels(1)
                 wav.setsampwidth(2)
-                wav.setframerate(16000)
+                wav.setframerate(self.sample_rate)
                 wav.writeframes(b''.join(self.frames))
             return output.getvalue()
         return None
@@ -50,6 +63,10 @@ def check_microphone_support():
     try:
         import sounddevice
         import webrtcvad
+        if config.VOICE_NOISE_SUPPRESSION:
+            from judecode.api.speech_filter import SpeechFilter
+            probe = SpeechFilter()
+            probe.close()
     except (ImportError, OSError):
         raise VoiceError('ติดตั้งโหมดสนทนา: python -m pip install sounddevice webrtcvad-wheels') from None
 
@@ -59,11 +76,17 @@ async def record_utterance(on_start=lambda: None):
     check_microphone_support()
     import sounddevice as sd
     import webrtcvad
-    detector = UtteranceDetector(webrtcvad.Vad(max(0, min(3, config.VOICE_VAD_MODE))).is_speech)
+    processor = None
+    if config.VOICE_NOISE_SUPPRESSION:
+        from judecode.api.speech_filter import SpeechFilter
+        processor = SpeechFilter()
+    rate = 48000 if processor else 16000
+    detector = UtteranceDetector(webrtcvad.Vad(max(0, min(3, config.VOICE_VAD_MODE))).is_speech, sample_rate=rate)
     loop = asyncio.get_running_loop()
     queue = asyncio.Queue(maxsize=100)
     active = True
     overflow = False
+    speech_reported = False
 
     def deliver(data, bad):
         nonlocal overflow
@@ -78,17 +101,23 @@ async def record_utterance(on_start=lambda: None):
         loop.call_soon_threadsafe(deliver, bytes(data), bool(status))
 
     try:
-        with sd.RawInputStream(samplerate=16000, channels=1, dtype='int16',
-                               blocksize=480, callback=callback):
+        with sd.RawInputStream(samplerate=rate, channels=1, dtype='int16',
+                               blocksize=rate * 30 // 1000, callback=callback):
             while True:
                 frame = await asyncio.wait_for(queue.get(), timeout=3)
                 if overflow:
                     raise VoiceError('เสียงไมค์ขาดช่วง กรุณาตรวจอุปกรณ์เสียง')
-                was_started = detector.started
-                result = detector.feed(frame)
-                if detector.started and not was_started:
+                probability = None
+                if processor:
+                    frame, probability = processor.process(frame)
+                result = detector.feed(frame, probability)
+                if detector.started and detector.voiced_frames >= 8 and not speech_reported:
                     on_start()
+                    speech_reported = True
                 if result:
+                    if processor:
+                        from judecode.api.speech_filter import stt_wav
+                        return stt_wav(result)
                     return result
     except VoiceError:
         raise
@@ -96,6 +125,8 @@ async def record_utterance(on_start=lambda: None):
         raise VoiceError('เปิดหรือรับเสียงไมค์ไม่ได้ ตรวจสิทธิ์ Microphone และอุปกรณ์เสียง') from None
     finally:
         active = False
+        if processor:
+            processor.close()
 
 
 def voice_command(text):
@@ -166,16 +197,20 @@ class VoiceConversation:
                 extra = await followup
                 # Re-transcribe the complete audio, preserving negations/context.
                 frames = []
+                rate = None
                 for part in (audio, extra):
                     with wave.open(io.BytesIO(part)) as wav:
+                        if rate is not None and rate != wav.getframerate():
+                            raise VoiceError('อัตราเสียงเปลี่ยนระหว่างคำสั่ง กรุณาพูดใหม่ครับ')
+                        rate = wav.getframerate()
                         frames.append(wav.readframes(wav.getnframes()))
-                if sum(map(len, frames)) > 16000 * 2 * 120:
+                if sum(map(len, frames)) > rate * 2 * 120:
                     raise VoiceError('คำสั่งยาวเกินสองนาที ยังไม่ได้ส่ง กรุณาแบ่งคำสั่งใหม่ครับ')
                 merged = io.BytesIO()
                 with wave.open(merged, 'wb') as wav:
                     wav.setnchannels(1)
                     wav.setsampwidth(2)
-                    wav.setframerate(16000)
+                    wav.setframerate(rate)
                     wav.writeframes(b''.join(frames))
                 audio = merged.getvalue()
                 self.status('🎙 ได้ยินว่าพูดต่อ กำลังรวมคำสั่งให้ครบ')

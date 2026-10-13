@@ -119,6 +119,7 @@ VOICE_SAMPLE_RATE = _env_int("VOICE_SAMPLE_RATE", 24000)
 VOICE_END_SILENCE_MS = _env_int("VOICE_END_SILENCE_MS", 2100)
 VOICE_MAX_UTTERANCE_SECONDS = _env_int("VOICE_MAX_UTTERANCE_SECONDS", 90)
 VOICE_VAD_MODE = _env_int("VOICE_VAD_MODE", 1)
+VOICE_NOISE_SUPPRESSION = _env_bool("VOICE_NOISE_SUPPRESSION", True)
 VOICE_STT_PROMPT = _env("VOICE_STT_PROMPT", "บทสนทนาภาษาไทยเกี่ยวกับการเขียนโปรแกรม คำศัพท์: JudeCode, จูดโค้ด, OpenRouter, API, Git, commit, push, Python")
 
 # ── Custom provider (any OpenAI-compatible endpoint) ──

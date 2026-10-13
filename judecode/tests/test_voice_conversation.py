@@ -133,7 +133,7 @@ def test_record_cancellation_releases_hardware(monkeypatch):
     events = []
     class Stream:
         def __init__(self, **kwargs):
-            assert kwargs['blocksize'] == 480
+            assert kwargs['blocksize'] == (1440 if cv.config.VOICE_NOISE_SUPPRESSION else 480)
         def __enter__(self):
             events.append('open')
         def __exit__(self, *args):
