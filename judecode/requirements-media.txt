@@ -1,0 +1,2 @@
+# Optional bundled FFmpeg for media_movie when no system ffmpeg is available.
+imageio-ffmpeg>=0.6,<0.7

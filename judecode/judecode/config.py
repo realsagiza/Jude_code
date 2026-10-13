@@ -337,3 +337,10 @@ if COMPACT_PROMPT:
 CONTEXT_TARGET_TOKENS = _env_int("CONTEXT_TARGET_TOKENS", 24000)
 CONTEXT_RESULT_CHARS = _env_int("CONTEXT_RESULT_CHARS", 1200)
 CONTEXT_RECENT_RESULTS = _env_int("CONTEXT_RECENT_RESULTS", 3)
+
+
+# Media models are explicit/discovered rather than pinned to a stale catalogue.
+MEDIA_IMAGE_MODEL = _env("MEDIA_IMAGE_MODEL", "")
+MEDIA_VIDEO_MODEL = _env("MEDIA_VIDEO_MODEL", "")
+MEDIA_AUDIO_MODEL = _env("MEDIA_AUDIO_MODEL", "")
+MEDIA_OUTPUT_DIR = _env("MEDIA_OUTPUT_DIR", str(Path.home() / ".judecode" / "media"))
