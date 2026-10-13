@@ -4,6 +4,7 @@ Multi-Provider Support:
     Jude Code supports multiple LLM providers. Set JUDECODE_PROVIDER to choose:
       - "deepseek"  : DeepSeek API (default, OpenAI-compatible)
       - "anthropic" : Anthropic Claude API (native Messages API)
+      - "openrouter": OpenRouter API (OpenAI-compatible)
       - "zai"       : Z.AI / Zhipu GLM API (OpenAI-compatible)
 
     Provider-specific env vars:
@@ -78,7 +79,7 @@ def _env_float(key: str, default: float) -> float:
 
 
 # ── Provider Selection ──
-# "deepseek" (default), "anthropic", or "zai"
+# "deepseek" (default), "anthropic", "zai", "openrouter", or "custom"
 PROVIDER = _env("PROVIDER", "deepseek").lower().strip()
 
 # ── DeepSeek API (OpenAI-compatible) ──
@@ -105,6 +106,11 @@ ZAI_BASE_URL = _env("ZAI_BASE_URL", "https://api.z.ai/api/paas/v4")
 ZAI_API_KEY = _env("ZAI_API_KEY", "")
 ZAI_MODEL = _env("ZAI_MODEL", "glm-4.6")
 
+# ── OpenRouter (OpenAI-compatible) ──
+OPENROUTER_BASE_URL = _env("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+OPENROUTER_API_KEY = _env("OPENROUTER_API_KEY", os.environ.get("OPENROUTER_API_KEY", ""))
+OPENROUTER_MODEL = _env("OPENROUTER_MODEL", "deepseek/deepseek-v3.2")
+
 # ── Custom provider (any OpenAI-compatible endpoint) ──
 # สำหรับ model ใหม่ๆ ในอนาคต (เช่น fable หรืออื่นๆ) โดยไม่ต้องแก้โค้ด:
 #   JUDECODE_PROVIDER=custom
@@ -122,6 +128,9 @@ if PROVIDER == "anthropic":
 elif PROVIDER == "zai":
     _ACTIVE_KEY = ZAI_API_KEY
     _ACTIVE_MODEL = ZAI_MODEL
+elif PROVIDER == "openrouter":
+    _ACTIVE_KEY = OPENROUTER_API_KEY
+    _ACTIVE_MODEL = OPENROUTER_MODEL
 elif PROVIDER == "custom":
     _ACTIVE_KEY = CUSTOM_API_KEY
     _ACTIVE_MODEL = CUSTOM_MODEL
@@ -170,6 +179,10 @@ elif PROVIDER == "zai":
     BASE_URL = ZAI_BASE_URL
     API_KEY = ZAI_API_KEY
     MODEL = ZAI_MODEL
+elif PROVIDER == "openrouter":
+    BASE_URL = OPENROUTER_BASE_URL
+    API_KEY = OPENROUTER_API_KEY
+    MODEL = OPENROUTER_MODEL
 elif PROVIDER == "custom":
     BASE_URL = CUSTOM_BASE_URL
     API_KEY = CUSTOM_API_KEY

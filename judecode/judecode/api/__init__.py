@@ -25,7 +25,8 @@ def create_api_client():
             fallback_model=ZAI_MODEL,  # GLM has no separate non-thinking fallback
         )
     else:
-        # Default: DeepSeek / OpenAI-compatible
+        # DeepSeek, OpenRouter and custom OpenAI-compatible providers use
+        # the active BASE_URL/API_KEY/MODEL/FALLBACK_MODEL from config.
         from judecode.api.client import ApiClient
         return ApiClient()
 

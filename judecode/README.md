@@ -4,7 +4,7 @@ Your AI coding assistant that runs in the terminal — inspired by Claude Code b
 
 ## Overview
 
-Jude Code is a terminal-based CLI application that provides an agentic coding experience. It connects to a Cloud AI API (DeepSeek, Anthropic, or Z.AI/GLM) and provides tools like shell execution, file operations, web search, and more.
+Jude Code is a terminal-based CLI application that provides an agentic coding experience. It connects to a Cloud AI API (DeepSeek, Anthropic, Z.AI/GLM, or OpenRouter) and provides tools like shell execution, file operations, web search, and more.
 
 ## Installation
 
@@ -46,6 +46,25 @@ pip install -e .
 ```
 
 After installation, the `judecode` command will be available system-wide.
+
+## OpenRouter setup
+
+Edit `judecode/.env` (the file beside `pyproject.toml`, not the inner package):
+
+```dotenv
+JUDECODE_PROVIDER=openrouter
+JUDECODE_OPENROUTER_API_KEY=your_openrouter_api_key_here
+JUDECODE_OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+JUDECODE_OPENROUTER_MODEL=deepseek/deepseek-v3.2
+```
+
+Restart Jude and use `/model` to confirm the provider and model. Change
+`JUDECODE_OPENROUTER_MODEL` to another OpenRouter model ID (`author/model`)
+that supports [tool calling](https://openrouter.ai/docs/guides/features/tool-calling).
+`OPENROUTER_API_KEY` is also accepted if the prefixed key is unset.
+Keep real keys in the ignored `.env`, never in source files. Fallback retries use
+the same model unless `JUDECODE_FALLBACK_MODEL` is set; that override must also
+be a valid OpenRouter model ID. Vision settings remain separately configured.
 
 ## Usage
 
@@ -101,7 +120,7 @@ restorable transcript. See [recovery details](docs/reliability.md#conversation-r
 
 ## Configuration
 
-Jude Code connects to a Cloud AI API (DeepSeek, Anthropic, or Z.AI/GLM):
+Jude Code connects to a Cloud AI API (DeepSeek, Anthropic, Z.AI/GLM, or OpenRouter):
 
 ```python
 BASE_URL = "https://api.deepseek.com"
