@@ -123,3 +123,29 @@ def test_owner_bridge_routes_plain_text_to_chat_not_scheduler(tmp_path):
     event['update_id']=2;event['message']['from']['id']=999
     bridge.process(event)
     assert bridge.chat.claim() is None
+
+
+def test_sqlite_group_write_even_with_restrictive_umask(tmp_path):
+    import os, stat
+    old = os.umask(0o077)
+    try:
+        store = ChatStore(tmp_path)
+    finally:
+        os.umask(old)
+    assert stat.S_IMODE(store.path.stat().st_mode) == 0o660
+
+
+def test_failed_handoff_does_not_consume_update(tmp_path, monkeypatch):
+    import sqlite3
+    class API:
+        def send(self,*args): pass
+    b=ConversationalBridge(123,API(),ScheduleStore(tmp_path/'shared'),tmp_path/'bridge',tmp_path,456,clock=lambda:2000000000)
+    event={'update_id':1,'message':{'from':{'id':123},'chat':{'id':123,'type':'private'},'date':2000000000,'text':'hello'}}
+    original=b.chat.enqueue
+    def fail(*args): raise sqlite3.OperationalError('readonly')
+    monkeypatch.setattr(b.chat,'enqueue',fail)
+    with pytest.raises(sqlite3.OperationalError): b.process(event)
+    assert b.db.execute('SELECT 1 FROM updates WHERE id=1').fetchone() is None
+    monkeypatch.setattr(b.chat,'enqueue',original)
+    b.process(event)
+    assert b.chat.claim()['text']=='hello'

@@ -132,6 +132,12 @@ class Bridge:
                             (uid, self.clock(), msg.split()[0] if msg.startswith('/') else 'task'))
         try:
             result = self.dispatch(uid, msg)
+        except sqlite3.Error:
+            # No durable handoff: permit the same update to be retried. The
+            # chat mailbox itself deduplicates by update ID.
+            with self.db:
+                self.db.execute('DELETE FROM updates WHERE id=? AND job_id IS NULL', (uid,))
+            raise
         except ValueError as exc:
             result = 'ไม่สามารถรับคำสั่งได้: ' + str(exc)
         if result:
@@ -276,6 +282,7 @@ class ConversationalBridge(Bridge):
             # No automatic resend after ambiguous delivery, same policy as before.
             self.chat.mark_delivered(turn['id'])
             self.api.send(self.owner, turn['response'])
+            self.chat.mark_delivered(turn['id'], state=2)
         super().deliver()
 
 
@@ -315,12 +322,10 @@ def main():
                     updates = api.call('getUpdates', offset=int(bridge.meta('offset')), timeout=5,
                                        limit=30, allowed_updates=['message'])
                     for update in updates:
-                        try:
-                            bridge.process(update)
-                        finally:
-                            with bridge.db:
-                                bridge.db.execute('UPDATE meta SET value=? WHERE key=?',
-                                                  (str(update['update_id'] + 1), 'offset'))
+                        bridge.process(update)
+                        with bridge.db:
+                            bridge.db.execute('UPDATE meta SET value=? WHERE key=?',
+                                              (str(update['update_id'] + 1), 'offset'))
                 except TelegramError:
                     print('Telegram connection unavailable; no command replay', flush=True)
                     time.sleep(5)

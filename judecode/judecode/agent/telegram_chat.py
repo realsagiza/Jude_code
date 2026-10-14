@@ -20,6 +20,10 @@ class ChatStore:
         self.root.mkdir(parents=True, exist_ok=True)
         self.path = self.root / 'chat.sqlite3'
         with self.connect() as db:
+            # SQLite creates 0644 files independently of the process umask.
+            # The owner must explicitly grant the transport group write access.
+            if self.path.stat().st_uid == os.geteuid():
+                self.path.chmod(0o660)
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS turns (
                   id INTEGER PRIMARY KEY, text TEXT NOT NULL, state TEXT NOT NULL,
@@ -58,9 +62,9 @@ class ChatStore:
         with self.connect() as db:
             return [dict(r) for r in db.execute("SELECT * FROM turns WHERE response IS NOT NULL AND delivered=0 ORDER BY id")]
 
-    def mark_delivered(self, uid):
+    def mark_delivered(self, uid, state=1):
         with self.connect() as db:
-            db.execute('UPDATE turns SET delivered=1 WHERE id=?', (uid,))
+            db.execute('UPDATE turns SET delivered=? WHERE id=?', (state, uid))
 
     def stop(self):
         with self.connect() as db:

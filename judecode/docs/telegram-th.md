@@ -59,3 +59,7 @@ Tests71ข้อรวม native AgentEngine: greetingไม่มีtools/ไ�
 Live model3turns: ทักทาย+จำคำ(0tools), ถามคำเดิม(0tools), ขออ่านไฟล์(1readtool) และ schedulerไม่มีjobเพิ่ม เก็บผลที่ /var/lib/judecode/native-chat-live-check.log
 
 อ้างอิง transport: [Telegram Bot API](https://core.telegram.org/bots/api#getupdates)
+
+### Fix: cross-UID SQLite permissions
+
+SQLite creates a new database as 0644 rather than relying on umask to grant group write. ChatStore now explicitly chmods an owner-created database to0660 for the shared judecode group. Tested under restrictive umask and with actual root-created DB plus judecode-bot writer on Ubuntu. Incoming update receipts are removed if database handoff fails, and Telegram offset advances only after successful processing. A failed handoff must remain retryable. Outgoing delivered=1 means attempt/uncertain; delivered=2 records successful sendMessage completion, without automatically resending ambiguous attempts.
