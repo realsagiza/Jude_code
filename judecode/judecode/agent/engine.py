@@ -430,6 +430,8 @@ class AgentEngine:
             feature["evidence"] = []
             result = self.project.summary()
         elif name == "project_resolve_failure":
+            if self.project.complete and not self._tool_failures:
+                return "All checks pass; no unresolved implementation failures remain. Provide the final summary."
             if not self.project.complete or not str(args.get("reason", "")).strip():
                 raise ValueError("All project checks must pass first; provide the evidence explaining resolution")
             failed_args = json.loads(args["failed_arguments"])

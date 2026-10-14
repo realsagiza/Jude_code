@@ -192,7 +192,7 @@ def test_invalid_control_arguments_do_not_create_unresolvable_failure(agent, tmp
     agent._project_tool('project_verify', {})
     result = agent._execute_tool_safe('project_resolve_failure', {
         'failed_tool': 'shell', 'failed_arguments': '', 'reason': 'bad invocation'})
-    assert result.startswith('Error executing tool')
+    assert 'no unresolved implementation failures' in result
     assert not agent._tool_failures
     agent._finish_session()
     assert agent.autonomous.session.status == 'completed'
