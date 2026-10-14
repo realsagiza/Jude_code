@@ -1,13 +1,16 @@
 # Telegram สำหรับ Ubuntu Agent
 
+สถานะ deployment ล่าสุด 2026-10-14: ผู้ใช้ขอสิทธิ์ดูแล host เต็มรูปแบบ ตัว scheduler รัน root และตั้ง `JUDECODE_TELEGRAM_DEFAULT_MODE=work`; `/observe` ใช้จำกัดงานเป็น read-only แยกครั้ง ดูส่วน Administrator profile ใน `ubuntu-agent-th.md` ข้อจำกัด sandbox ของ Agent ที่กล่าวด้านล่างเป็น baseline เดิม ส่วน bridge ยังใช้ sandbox/UID แยกอยู่
+
 Bridge ใช้ Telegram long polling ไม่เปิดพอร์ต รองรับข้อความส่วนตัวของ numeric owner ID คนเดียว ไม่รับกลุ่ม ข้อความส่งต่อ ผู้ส่งที่เป็น bot หรือ edited messages และไม่มี first-user pairing
 
 ## วิธีใช้
 
 เปิดบอตแล้วกด Start จากบัญชีที่กำหนดไว้:
 
-- ข้อความปกติ → งาน observe; ตอบคำถาม/อ่านข้อมูลใน workspace
-- `/work แก้ไฟล์...` → งาน work; ยังต้องผ่าน permissions เดิม (deployment นี้ shell/network ask และ deploy/system/delete deny)
+- ข้อความปกติ → โหมดจาก JUDECODE_TELEGRAM_DEFAULT_MODE (ค่ามาตรฐาน observe; deployment นี้ work)
+- `/observe ข้อความ` → อ่านข้อมูลเท่านั้น
+- `/work แก้ไฟล์...` → งาน work; ผ่าน permission profile ของ service (deployment นี้อนุญาต auto)
 - `/after 10 ตรวจ TODO` → อีก 10 นาที
 - `/daily 09:00 ตรวจ TODO` → ทุกวันเวลาไทย
 - `/status` หรือ `/jobs` → สถานะ/ID/เวลารอบถัดไป
@@ -22,7 +25,7 @@ Bridge ใช้ Telegram long polling ไม่เปิดพอร์ต ร�
 
 ## ความปลอดภัยและการส่งซ้ำ
 
-- Token แยกจาก OpenRouter key: bridge ใช้ UID `judecode-bot`; Agent ใช้ UID `judecode`; ไม่มี key ของโมเดลใน bridge และไม่มี bot token ใน Agent
+- Token แยกจาก OpenRouter key: bridge ใช้ UID `judecode-bot`; Agent ใช้ UID `judecode`; ไม่มี key ของโมเดลใน environment ของ bridge และไม่มี bot token ใน environment ของ Agent; เมื่อ Agent เป็น root มันสามารถอ่านไฟล์/process ของบัญชีอื่นได้ จึงไม่ถือว่า token ถูกแยกจาก root Agent
 - `/etc/judecode/telegram.env` root0600 ถูกซ่อนจาก service หลัง systemd อ่าน environment
 - Bridge HOME `/var/lib/judecode-telegram` 0700 เก็บ offset, ownership และ receipt; ไม่มี raw Telegram payload ใน application log
 - ห้าม log HTTP URL/exception body เพราะ URL ของ Telegram มี token; ใช้ plain text และปิด link preview

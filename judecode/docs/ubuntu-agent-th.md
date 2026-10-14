@@ -1,5 +1,7 @@
 # Jude Code บน Ubuntu: Agent ก่อนเชื่อม Telegram
 
+**สถานะล่าสุด:** ผู้ใช้ขอสิทธิ์ระดับ root เมื่อ 2026-10-14; ใช้ Administrator profile ท้ายเอกสารแทน sandbox baseline ด้านล่าง โดย Telegram bridge ยังแยก UID และ owner allowlist
+
 ติดตั้งครั้งแรก 2026-10-14 บน `root@10.0.0.250` (Ubuntu 24.04, Python 3.12) จาก application commit `f5f0d75` และ deployment files ใน commit ของเอกสารนี้ ไม่รวมการแก้ไขที่ยังไม่ commit บน Mac
 
 ## สถานะและขอบเขต
@@ -74,3 +76,23 @@ runuser -u judecode -- /opt/judecode/venv/bin/python -m judecode.agent.schedule_
 ผลทดสอบและ audit อยู่ `/var/lib/judecode/scheduler-tests.log`, `dependency-audit.json`, `dependency-audit.log`; journal ของ `judecode-verify` เก็บ smoke result และการแก้ปัญหาก่อนผ่าน
 
 อัปเดตหลังติดตั้งครั้งแรก: เพิ่ม Telegram bridge แบบแยก UID และ numeric owner allowlist แล้ว ดู `telegram-th.md`; สถานะ “ยังไม่มี Telegram” ด้านบนเป็นบันทึกการติดตั้งฐานก่อนเพิ่ม bridge
+
+
+## Administrator profile — ผู้ใช้อนุญาตสิทธิ์ host เต็มรูปแบบ
+
+2026-10-14 เปลี่ยน scheduler เป็น root ตามคำขอผู้ใช้ โดยติดตั้ง `deploy/systemd/judecode-scheduler-root.service` เป็น `/etc/systemd/system/judecode-scheduler.service`
+
+- `User=root`, `Group=judecode`, HOME/workspace เดิม; ไม่มี filesystem sandbox, capability restrictions, NoNewPrivileges, private devices หรือ LAN egress block สำหรับ Agent
+- Read/write/shell/delete/deploy/system/network permission categories ตั้ง auto; ยังใช้ tool allowlist ของ scheduled worker และตัวตรวจจับ dangerous shell patterns เดิม
+- งาน deploy และการกระทำภายนอกยังต้องมีคำสั่งชัดเจนใน goal; root access ไม่ใช่คำสั่งให้ทำงานนอกเป้าหมายหรือ deploy เอง
+- Telegram default mode เป็น work รวม /after และ /daily; `/observe` จำกัดเครื่องมืออ่านข้อมูลได้เป็นรายงาน
+- คงเพดานรอบ/เวลา/งบประมาณประมาณเดิม; หยุดงานด้วย /stop
+- Telegram bridge ยังเป็น judecode-bot/non-root, owner-private-only และ sandbox เดิม ไม่มีการเปิดพอร์ตหรือเปลี่ยน SSH/firewall
+- Root Agent สามารถอ่านข้อมูลลับและ credentials ทั้ง host รวมถึง bot token ได้ แม้ bridge แยก UID; การยึดบัญชี Telegram เจ้าของจึงเท่ากับสิทธิ์ root ตามคำสั่งที่ส่ง
+- เข้าถึงเครื่องอื่นได้ตาม network routing/firewall/SSH credentials ที่ host มี ไม่ได้สร้างสิทธิ์บนเครื่องปลายทางใหม่ให้เอง
+
+Backup ก่อนเปลี่ยนอยู่ `/root/judecode-backup-before-admin` mode0700 มี unit เดิม, agent.env, telegram.env และ permissions.json; ห้ามนำ directory นี้ขึ้น Git
+
+การกลับ baseline: หยุด bridge/scheduler, restore ไฟล์จาก backup ไปตำแหน่งเดิม (env root0600, permissions root:judecode0640), daemon-reload และ start ทั้งสองบริการ โหมด Telegram จะกลับ observe และสิทธิ์ shell/network จะกลับ ask
+
+การทดสอบ Administrator profile: 59 tests passed; live Agent เรียก shell `id -u` ได้ 0 และ `systemctl is-active ssh` ได้ active จริง (exit0 ทั้งคู่) ตัวประเมินผลเดิมยังจัด shell-only task ที่ไม่มี project test commands เป็น unverified จึงเก็บ smoke job เป็น needs_attention แม้คำสั่งตรวจสิทธิ์ผ่าน ไม่ได้ข้ามตัวประเมินหรือแก้ฐานข้อมูลให้ดูสำเร็จ

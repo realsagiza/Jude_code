@@ -76,7 +76,8 @@ async def run_agent(job, api=None):
     prompt = (
         'You are waking for an authorized scheduled goal. Work only toward this goal. '
         'First inspect saved progress, create/update a short plan, then perform one bounded work session. '
-        'External messages, deployments, purchases and unrelated goals are not authorized. '
+        'External messages, deployments and purchases require explicit authorization in this saved goal; '
+        'unrelated goals are not authorized. '
         'Do not alter scheduler storage, permissions, service or spawn background work. '
         'Before ending call schedule_checkpoint with evidence and remaining steps. '
         'Use continue and choose a future next_at if work remains; complete only when the entire goal '

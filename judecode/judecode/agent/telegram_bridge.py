@@ -17,8 +17,9 @@ import httpx
 from judecode.agent.scheduler import ScheduleStore
 
 HELP = '''Jud พร้อมรับงานครับ (เวลาไทย)
-พิมพ์ข้อความ: ส่งงานตรวจ/อ่านข้อมูลให้ Agent
-/work ข้อความ: อนุญาตแก้ไฟล์ใน workspace (shell ยังถูกจำกัด)
+พิมพ์ข้อความ: ส่งงานให้ Agent ตามโหมดเริ่มต้นของเซิร์ฟเวอร์
+/work ข้อความ: แก้ไฟล์/รันคำสั่งตามสิทธิ์ที่กำหนด
+/observe ข้อความ: อ่านข้อมูลเท่านั้น
 /after นาที ข้อความ: นัดทำงานภายหลัง
 /daily HH:MM ข้อความ: ตรวจทุกวัน ไม่เกิน 10 รอบ
 /status หรือ /jobs: ดูงานและเวลารอบถัดไป
@@ -27,7 +28,7 @@ HELP = '''Jud พร้อมรับงานครับ (เวลาไท�
 /pause ID, /resume ID, /cancel ID: จัดการงาน
 /new: ล้างบริบทแชตสำหรับคำสั่งถัดไป (ไม่ยกเลิกงานเดิม)
 แต่ละงานมี checkpoint ต่อเนื่องได้ไม่เกิน 10 รอบ รอบละ 10 นาที งบประมาณ $0.25/รอบเป็นค่าประมาณ ไม่ใช่ hard cap
-ยังไม่มีสิทธิ์ตรวจเครื่องอื่นใน LAN หรือ deploy ครับ'''
+การเข้าถึงเครื่องอื่นและ deploy ขึ้นอยู่กับสิทธิ์ของบริการและคำสั่งที่คุณมอบหมาย'''
 
 
 class TelegramError(Exception):
@@ -64,9 +65,12 @@ class TelegramAPI:
 
 
 class Bridge:
-    def __init__(self, owner, api, store, root, project, bot_id, clock=time.time):
+    def __init__(self, owner, api, store, root, project, bot_id, clock=time.time, default_mode="observe"):
         if type(owner) is not int or owner <= 0:
             raise ValueError('A positive numeric owner ID is mandatory')
+        if default_mode not in ("observe", "work"):
+            raise ValueError("default_mode must be observe or work")
+        self.default_mode = default_mode
         self.owner, self.api, self.store, self.clock = owner, api, store, clock
         self.project = str(Path(project).resolve(strict=True))
         self.bot_id = bot_id
@@ -164,7 +168,7 @@ class Bridge:
                 raise ValueError('ใช้ ID ของงาน Telegram ของคุณจาก /status')
             job = self.store.manage(args, command[1:])
             return f"{job['id']}: {job['state']}"
-        if command.startswith('/') and command not in ('/work', '/after', '/daily'):
+        if command.startswith('/') and command not in ('/work', '/observe', '/after', '/daily'):
             return HELP
         if sum(j['state'] in ('scheduled', 'running') for j in jobs) >= 5:
             raise ValueError('มีงานค้างครบ 5 งานแล้ว โปรดรอหรือ /stop')
@@ -172,10 +176,10 @@ class Bridge:
                                  (self.clock() - 86400,)).fetchone()[0]
         if recent >= 20:
             raise ValueError('ครบ 20 งานใน 24 ชั่วโมงแล้ว')
-        goal, mode, daily = text, 'observe', None
+        goal, mode, daily = text, self.default_mode, None
         when = self.clock() + 2
-        if command == '/work':
-            goal, mode = args, 'work'
+        if command in ('/work', '/observe'):
+            goal, mode = args, command[1:]
         elif command in ('/after', '/daily'):
             value, sep, goal = args.partition(' ')
             if not sep:
@@ -248,7 +252,8 @@ def main():
         if api.call('getWebhookInfo').get('url'):
             raise SystemExit('Existing webhook configured; refusing to replace it')
         bridge = Bridge(owner, api, ScheduleStore(os.environ['JUDECODE_TELEGRAM_SCHEDULER_ROOT']),
-                        root, os.environ['JUDECODE_TELEGRAM_PROJECT'], me['id'])
+                        root, os.environ['JUDECODE_TELEGRAM_PROJECT'], me['id'],
+                        default_mode=os.environ.get('JUDECODE_TELEGRAM_DEFAULT_MODE', 'observe'))
         stopping = False
 
         def stop(*_):

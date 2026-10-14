@@ -160,3 +160,14 @@ def test_token_url_exception_is_sanitized():
         api.call('getMe')
     assert 'secret' not in str(error.value)
     api.client.close()
+
+
+def test_admin_default_work_and_explicit_observe(bridge):
+    bridge.default_mode = 'work'
+    bridge.process(update('ตรวจสถานะ ssh', uid=10))
+    bridge.process(update('/observe อ่าน TODO', uid=11))
+    bridge.process(update('/daily 09:00 ตรวจ service', uid=12))
+    jobs = {job['name']: job for job in bridge.store.list()}
+    assert jobs['ตรวจสถานะ ssh']['mode'] == 'work'
+    assert jobs['อ่าน TODO']['mode'] == 'observe'
+    assert jobs['ตรวจ service']['mode'] == 'work'
