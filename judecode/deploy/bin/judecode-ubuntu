@@ -1,0 +1,26 @@
+#!/opt/judecode/venv/bin/python
+"""Launch the installed Ubuntu terminal client with its server provider settings."""
+import os
+from pathlib import Path
+import sys
+
+from dotenv import dotenv_values
+
+config = Path('/etc/judecode/agent.env')
+try:
+    with config.open(encoding='utf-8') as stream:
+        values = dotenv_values(stream=stream)
+except PermissionError:
+    print('Server configuration is root-only. Run: sudo judecode', file=sys.stderr)
+    sys.exit(1)
+except FileNotFoundError:
+    print('Missing /etc/judecode/agent.env; configure the Ubuntu agent first.', file=sys.stderr)
+    sys.exit(1)
+
+for key, value in values.items():
+    if value is not None and (key.startswith('JUDECODE_') or key == 'OPENROUTER_API_KEY'):
+        os.environ.setdefault(key, value)
+os.environ['PATH'] = '/opt/judecode/venv/bin:' + os.environ.get('PATH', '')
+os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
+# Preserve cwd and HOME: terminal sessions belong to the SSH user, not the bot.
+os.execv(sys.executable, [sys.executable, '-m', 'judecode', *sys.argv[1:]])
