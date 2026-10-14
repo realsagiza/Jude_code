@@ -73,4 +73,4 @@ runuser -u judecode -- /opt/judecode/venv/bin/python -m judecode.agent.schedule_
 
 ผลทดสอบและ audit อยู่ `/var/lib/judecode/scheduler-tests.log`, `dependency-audit.json`, `dependency-audit.log`; journal ของ `judecode-verify` เก็บ smoke result และการแก้ปัญหาก่อนผ่าน
 
-ขั้นต่อไป: สร้าง Telegram bot/ระบุ User ID, เพิ่มตัวรับคำสั่งแบบ long polling และรายงานกลับ, ทดสอบสิทธิ์และ replay protection แล้วค่อยเปิดใช้งาน ยังสั่งงานผ่าน Telegram ไม่ได้จากการติดตั้งรอบนี้
+อัปเดตหลังติดตั้งครั้งแรก: เพิ่ม Telegram bridge แบบแยก UID และ numeric owner allowlist แล้ว ดู `telegram-th.md`; สถานะ “ยังไม่มี Telegram” ด้านบนเป็นบันทึกการติดตั้งฐานก่อนเพิ่ม bridge
