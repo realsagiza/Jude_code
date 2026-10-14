@@ -184,3 +184,15 @@ def test_provider_double_encoded_features_supported_without_losing_checks(tmp_pa
     assert len(contract.state['features']) == 2
     args['features'] = '[{"id":"sale","criteria":"x","checks":["true"],"checks":["false"]}]'
     with pytest.raises(ValueError): ProjectContract().plan(**args)
+
+
+def test_invalid_control_arguments_do_not_create_unresolvable_failure(agent, tmp_path):
+    agent._project_tool('project_plan', plan(tmp_path))
+    (tmp_path/'sale.ok').touch(); (tmp_path/'refund.ok').touch()
+    agent._project_tool('project_verify', {})
+    result = agent._execute_tool_safe('project_resolve_failure', {
+        'failed_tool': 'shell', 'failed_arguments': '', 'reason': 'bad invocation'})
+    assert result.startswith('Error executing tool')
+    assert not agent._tool_failures
+    agent._finish_session()
+    assert agent.autonomous.session.status == 'completed'

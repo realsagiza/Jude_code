@@ -192,7 +192,8 @@ class AgentEngine:
         restored.messages = repair_tool_history(data['messages'])
         if PROJECT_PROMPT not in restored.messages[0]["content"]:
             restored.messages[0]["content"] += PROJECT_PROMPT
-        restored._tool_failures = {tuple(key): value for key, value in data.get('failures', [])}
+        restored._tool_failures = {tuple(key): value for key, value in data.get('failures', [])
+                                   if key[0] not in PROJECT_NAMES}
         restored._needs_verification = bool(data.get('needs_verification')) or bool(pending)
         restored._resume_uncertain = bool(pending) or bool(data.get('uncertain'))
         for identifier in sorted(pending):
@@ -393,7 +394,11 @@ class AgentEngine:
             self._post_tool_hook(tool_name, args, result)
         except Exception as exc:
             result = f"Error executing tool '{tool_name}': {type(exc).__name__}: {exc}"
-        if result.lstrip().lower().startswith("error executing tool") or result.startswith("❌"):
+        if tool_name in PROJECT_NAMES:
+            # Contract validation errors do not leave failed implementation side effects.
+            # Actual verification failures remain pending in the contract itself.
+            self._tool_failures.pop(key, None)
+        elif result.lstrip().lower().startswith("error executing tool") or result.startswith("❌"):
             self._tool_failures[key] = result
         else:
             self._tool_failures.pop(key, None)
