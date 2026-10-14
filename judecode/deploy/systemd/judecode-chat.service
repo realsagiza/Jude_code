@@ -1,0 +1,29 @@
+# Explicit opt-in host administrator profile. Install AS judecode-scheduler.service.
+# Never run the Telegram bridge as root. This unit intentionally has no OS sandbox.
+[Unit]
+Description=Jude Code native interactive agent over Telegram (root)
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=root
+Group=judecode
+WorkingDirectory=/var/lib/judecode/workspaces
+Environment=HOME=/var/lib/judecode
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/judecode/agent.env
+Environment=JUDECODE_TELEGRAM_SCHEDULER_ROOT=/var/lib/judecode/.judecode/scheduler
+ExecStart=/opt/judecode/venv/bin/python -m judecode.agent.telegram_chat
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+KillMode=control-group
+UMask=0007
+LimitCORE=0
+
+[Install]
+WantedBy=multi-user.target

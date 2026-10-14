@@ -238,6 +238,47 @@ class Bridge:
                     self.db.execute('UPDATE deliveries SET state=? WHERE run_id=?', (state, run['id']))
 
 
+class ConversationalBridge(Bridge):
+    """Telegram is a UI for the native engine, not a goal-creation service."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from judecode.agent.telegram_chat import ChatStore
+        self.chat = ChatStore(self.store.root)
+
+    def owned(self):
+        return super().owned() | self.chat.schedule_ids()
+
+    def dispatch(self, uid, text):
+        if text in ('/start', '/help'):
+            return ('สวัสดีครับ คุยหรือบอกสิ่งที่อยากให้ผมช่วยได้เลยครับ\n'
+                    '/stop หยุดหลังการกระทำปัจจุบัน · /new เริ่มบทสนทนาใหม่ · /continue ทำต่อ\n'
+                    'นัดหมายด้วยภาษาปกติได้ เช่น พรุ่งนี้ 9 โมงช่วยตรวจระบบให้หน่อย')
+        if text == '/stop':
+            self.chat.stop()
+            return 'ได้ครับ ผมจะหยุดหลังการกระทำที่กำลังทำอยู่ และไม่เริ่มข้อความที่รออยู่'
+        if text == '/status':
+            return 'ผมกำลังทำตามข้อความก่อนหน้าอยู่ครับ' if self.chat.busy() else 'ผมพร้อมคุยครับ'
+        if text.startswith(('/result ', '/pause ', '/resume ', '/cancel ')) or text == '/jobs':
+            return super().dispatch(uid, text)
+        if text.startswith('/work '):
+            text = text[6:]
+        elif text.startswith('/observe '):
+            text = 'อ่านและวิเคราะห์อย่างเดียว ห้ามแก้ไขหรือทำให้ระบบเปลี่ยนแปลง: ' + text[9:]
+        elif text.startswith('/after '):
+            text = 'ช่วยตั้งเวลาทำงานนี้ในอีก (นาที): ' + text[7:]
+        elif text.startswith('/daily '):
+            text = 'ช่วยตั้งเวลาทำงานทุกวันตามเวลาไทย: ' + text[7:]
+        self.chat.enqueue(uid, text)
+        return None
+
+    def deliver(self):
+        for turn in self.chat.pending_replies():
+            # No automatic resend after ambiguous delivery, same policy as before.
+            self.chat.mark_delivered(turn['id'])
+            self.api.send(self.owner, turn['response'])
+        super().deliver()
+
+
 def main():
     import fcntl
     os.umask(0o007)  # shared scheduler DB; private HOME prevents access to bridge state
@@ -254,7 +295,7 @@ def main():
             raise SystemExit('Bot identity mismatch')
         if api.call('getWebhookInfo').get('url'):
             raise SystemExit('Existing webhook configured; refusing to replace it')
-        bridge = Bridge(owner, api, ScheduleStore(os.environ['JUDECODE_TELEGRAM_SCHEDULER_ROOT']),
+        bridge = ConversationalBridge(owner, api, ScheduleStore(os.environ['JUDECODE_TELEGRAM_SCHEDULER_ROOT']),
                         root, os.environ['JUDECODE_TELEGRAM_PROJECT'], me['id'],
                         default_mode=os.environ.get('JUDECODE_TELEGRAM_DEFAULT_MODE', 'observe'))
         stopping = False
@@ -269,7 +310,7 @@ def main():
             while not stopping:
                 try:
                     bridge.deliver()
-                    if any(j['state'] == 'running' and j['id'] in bridge.owned() for j in bridge.store.list()):
+                    if bridge.chat.busy() or any(j['state'] == 'running' and j['id'] in bridge.owned() for j in bridge.store.list()):
                         api.call('sendChatAction', chat_id=owner, action='typing')
                     updates = api.call('getUpdates', offset=int(bridge.meta('offset')), timeout=5,
                                        limit=30, allowed_updates=['message'])

@@ -1,71 +1,61 @@
-# Telegram สำหรับ Ubuntu Agent
+# Telegram เป็นหน้าสนทนาของ Jude Code บน Ubuntu
 
-สถานะ deployment ล่าสุด 2026-10-14: ผู้ใช้ขอสิทธิ์ดูแล host เต็มรูปแบบ ตัว scheduler รัน root และตั้ง `JUDECODE_TELEGRAM_DEFAULT_MODE=work`; `/observe` ใช้จำกัดงานเป็น read-only แยกครั้ง ดูส่วน Administrator profile ใน `ubuntu-agent-th.md` ข้อจำกัด sandbox ของ Agent ที่กล่าวด้านล่างเป็น baseline เดิม ส่วน bridge ยังใช้ sandbox/UID แยกอยู่
+## สถาปัตยกรรมปัจจุบัน
 
-Bridge ใช้ Telegram long polling ไม่เปิดพอร์ต รองรับข้อความส่วนตัวของ numeric owner ID คนเดียว ไม่รับกลุ่ม ข้อความส่งต่อ ผู้ส่งที่เป็น bot หรือ edited messages และไม่มี first-user pairing
+Telegram → owner-only transport → `AgentEngine(SYSTEM_PROMPT, api)` → `agent.chat(user_message)` → คำตอบกลับ Telegram
 
-## วิธีใช้
+ใช้ AgentEngine, system prompt, tools registry, context compaction, native transcripts, expert routing และ permission checks เดียวกับ terminal บน Mac ไม่มี ScheduledEngine/ข้อความ wake-up/checkpoint/การสร้าง goal ครอบข้อความทั่วไป โมเดลเลือกตอบเองหรือเรียก tool ตามข้อความผู้ใช้
 
-เปิดบอตแล้วกด Start จากบัญชีที่กำหนดไว้:
+- `judecode-telegram.service`: รับ/ส่ง Telegram ด้วย UID judecode-bot และ bot token แยก
+- `judecode-chat.service`: Agent สนทนาแบบต่อเนื่อง ใช้ root ตามสิทธิ์ที่ผู้ใช้อนุญาต และ OpenRouter key แยกของ Ubuntu
+- `judecode-scheduler.service`: ใช้เฉพาะ goals ที่ตั้งเวลาไว้ เมื่อ Agent เลือกเรียก schedule_create ตามคำสั่งผู้ใช้
 
-- ข้อความปกติ → โหมดจาก JUDECODE_TELEGRAM_DEFAULT_MODE (ค่ามาตรฐาน observe; deployment นี้ work)
-- `/observe ข้อความ` → อ่านข้อมูลเท่านั้น
-- `/work แก้ไฟล์...` → งาน work; ผ่าน permission profile ของ service (deployment นี้อนุญาต auto)
-- `/after 10 ตรวจ TODO` → อีก 10 นาที
-- `/daily 09:00 ตรวจ TODO` → ทุกวันเวลาไทย
-- `/status` หรือ `/jobs` → สถานะ/ID/เวลารอบถัดไป
-- `/result ID` → อ่านผลล่าสุดอีกครั้ง
-- `/pause ID`, `/resume ID`, `/cancel ID` → จัดการเฉพาะงานที่บอตนี้รับจากเจ้าของ
-- `/stop` → ยกเลิกงาน Telegram ที่ยังไม่จบทั้งหมด; ไม่ rollback สิ่งที่ทำไปแล้ว
-- `/new` → ล้างบริบทสำหรับคำสั่งใหม่ แต่ไม่ยกเลิกตารางเดิม
+ฐานข้อมูล `chat.sqlite3` ใน scheduler directory เป็นเพียงกล่องรับส่งข้อความระหว่าง process ไม่ใช่ฐานข้อมูลงานตามเวลา ไม่มี budget/checkpoint/job ID ต่อข้อความ ผู้ใช้ไม่ต้องเลือกว่าจะเป็นทักทายหรือสั่งงานก่อนส่ง
 
-การคุยปกติไม่ส่งข้อความรับงาน เลขงาน หรือป้ายสถานะก่อนคำตอบ ระหว่าง Agent ทำงานจะแสดง typing indicator และส่งคำตอบของ Agent โดยตรง เบื้องหลังข้อความแต่ละครั้งยังเป็น goal แยก แต่โหลดข้อความผู้ใช้และคำตอบล่าสุดไม่เกิน 6 คู่ตอนเริ่มประมวลผลจริง จึงเห็นคำตอบก่อนหน้าที่เพิ่งจบแม้ส่งข้อความต่อกันเร็ว ไม่ใช่การส่ง transcript ทั้งหมด งานหนึ่งนัดตัวเองทำต่อได้สูงสุด 10 รอบตามคำสั่งผู้ใช้; รอบละ 10 นาทีและงบประมาณประมาณ $0.25 (ไม่ใช่ provider hard cap) มีคิว active สูงสุด 5 งานและรับสูงสุด 20 งานใน 24 ชั่วโมง
+## การคุย
 
-ข้อความทั่วไปจะรอคำตอบจริง; /after และ /daily ตอบยืนยันเวลาเป็นภาษาปกติ รายละเอียดและ ID ยังดูได้ด้วย /status ผลจาก worker จะถูกส่งเมื่อจบรอบ ไม่มีการรายงาน token-by-token และไม่มีการส่งผลของงาน local อื่นที่ไม่ได้มาจากบอตนี้
+พิมพ์ภาษาปกติ เช่น “สวัสดี”, “เครื่องนี้มีพื้นที่เหลือเท่าไร”, “อ่านไฟล์นี้ให้หน่อย”, “พรุ่งนี้9โมงตรวจระบบแล้วบอกฉัน”
 
-## ความปลอดภัยและการส่งซ้ำ
+Agent instance เดียวเก็บ user/assistant/tool messages ต่อเนื่องเหมือน terminal; เมื่อ service restart ใช้ save_transcript/resume_session ของ engine เดิม ไม่ได้เก็บแค่สรุป6คู่และไม่ replay คำสั่งที่ผลไม่แน่นอน Context compaction ยังคงเป็นกลไกของ engine ตามปกติ
 
-- Token แยกจาก OpenRouter key: bridge ใช้ UID `judecode-bot`; Agent ใช้ UID `judecode`; ไม่มี key ของโมเดลใน environment ของ bridge และไม่มี bot token ใน environment ของ Agent; เมื่อ Agent เป็น root มันสามารถอ่านไฟล์/process ของบัญชีอื่นได้ จึงไม่ถือว่า token ถูกแยกจาก root Agent
-- `/etc/judecode/telegram.env` root0600 ถูกซ่อนจาก service หลัง systemd อ่าน environment
-- Bridge HOME `/var/lib/judecode-telegram` 0700 เก็บ offset, ownership และ receipt; ไม่มี raw Telegram payload ใน application log
-- ห้าม log HTTP URL/exception body เพราะ URL ของ Telegram มี token; ใช้ plain text และปิด link preview
-- แชร์เฉพาะ scheduler directory ผ่าน group `judecode`: parent directories/workspace ต้องมี group traversal (`0710`), scheduler directory `2770`, files `0660`; scheduler ใช้ drop-in UMask0007
-- Bridge systemd unit เขียนได้เฉพาะ HOME ตัวเองและ scheduler directory มี sandbox/egress restrictions เช่นเดียวกับ Agent
-- Unknown owner ID, bot identity mismatch หรือ webhook เดิมทำให้ start ล้ม ไม่แก้ webhook ของผู้อื่นเอง
-- ข้ามข้อความก่อนเริ่ม bridge ครั้งแรกหรือเก่ากว่า 1 ชั่วโมง; หลังหยุดบริการนานให้ส่งคำสั่งใหม่
-- บันทึก update ก่อนทำงานเพื่อไม่ execute ซ้ำหลัง restart; crash ระหว่างรับคำสั่งอาจทำให้คำสั่งไม่ถูกทำ ให้ตรวจ /status ก่อนส่งใหม่
-- บันทึก ownership ก่อน enqueue เพื่อไม่ให้ job ที่สร้างแล้วหลุดจาก /status; enqueue มี deterministic request key ป้องกันซ้ำ
-- การส่งผลอัตโนมัติเป็น at-most-once attempt: timeout/crash ไม่ retry แบบสุ่มเสี่ยงส่งซ้ำ; ใช้ /result ID เพื่อเรียกผลเอง
-- บัญชี Telegram และเครื่อง host ยังเป็นขอบเขตความเชื่อถือ; การยึดบัญชีเจ้าของเท่ากับสิทธิ์สั่งงานตาม policy ที่กำหนด
+- `/new`: สร้างบทสนทนาใหม่ผ่าน native new_conversation
+- `/continue`: native continue_task
+- `/stop`: ส่ง stop flag ให้ engine หยุดหลังการกระทำปัจจุบัน และยกเลิกข้อความที่ยังรอ; shell ที่กำลังรันอาจยังไม่หยุดทันที เช่นเดียวกับข้อจำกัด engine เดิม
+- `/status`: ดูว่ากำลังตอบหรือพร้อมคุย
+- `/jobs`, `/result ID`, `/pause ID`, `/resume ID`, `/cancel ID`: ดูแล scheduled goals ที่เชื่อมกับ Telegram
+- `/after`, `/daily`: aliases แปลงเป็นข้อความขอนัดหมายส่งให้ Agent ตัดสินใจใช้ scheduling tools
 
-## ติดตั้งบน Ubuntu
+ไม่ต้องใช้ /work สำหรับงานปกติแล้ว; /observe เป็นข้อความกำกับให้ Agent อ่านอย่างเดียว ไม่ใช่ OS sandbox แยก คำสั่งนัดหมายก็พิมพ์เป็นภาษาปกติได้
 
-ต้องมี deployment ใน `ubuntu-agent-th.md` ก่อน แล้วติดตั้งโมดูล `telegram_bridge.py` และ scheduler รุ่นที่รองรับ request_key จาก commit เดียวกัน
+ผลของ schedule_create ที่เกิดจาก native tool loop จะถูกเชื่อมกับช่องสนทนาเพื่อส่งรายงานเมื่อ scheduler ทำงานเสร็จ คำถามและการทักทายไม่สร้าง scheduled goals โดยอัตโนมัติ
 
-1. สร้าง system user `judecode-bot`, primary group `judecode`, HOME `/var/lib/judecode-telegram` 0700, shell nologin; ไม่มี sudo
-2. หยุด scheduler ชั่วคราว ตั้ง group traversal และ scheduler directory/files ตามด้านบน โดยไม่เปิด HOME/ไฟล์อื่นให้ group อ่าน
-3. ติดตั้ง `deploy/systemd/judecode-scheduler.service.d/shared-scheduler.conf` ใน `/etc/systemd/system/judecode-scheduler.service.d/`
-4. สร้าง root-only `/etc/judecode/telegram.env` จาก example ใส่ token, numeric owner ID และ username โดยไม่ใส่ค่าเหล่านี้ใน Git
-5. ติดตั้ง `judecode-telegram.service` ใน `/etc/systemd/system/`; verify unit, daemon-reload, start scheduler และ enable --now bridge
-6. ทดสอบ /start จากเจ้าของ, งานตัวอย่าง, /status, /result และการส่งข้อความจากผู้ใช้คนอื่นต้องไม่สร้างงานหรือได้รับคำตอบ
+## สิทธิ์และการส่งข้อความ
+
+รับเฉพาะ numeric owner ID ใน private chat ปฏิเสธ groups/forwarded/edited/bot messages; deduplicate Telegram update ID และไม่ replay interrupted chat turns หลัง crash ข้อความที่มาถึงระหว่างตอบจะรอให้การตอบปัจจุบันจบ โดยไม่แทรกเป็นคำสั่งกลาง tool call
+
+Bot token อยู่ /etc/judecode/telegram.env root0600; model key อยู่ /etc/judecode/agent.env root0600 ตัว bridge ใช้ sandbox/non-root ไม่มี model key ใน environment ส่วน Agent เป็น root จึงสามารถอ่าน secrets ทั้ง host ได้ตามธรรมชาติของสิทธิ์ root
+
+ใช้ model/expert/session-budget/max-turn settings เดียวกับ Mac ที่ตรวจตอน deploy โดยรักษา dedicated Ubuntu API key ไม่คัดลอก key ของ Mac ไม่ใช้เพดาน 20 tasks/วันหรือ10wakeupsของ bridgeเก่ากับการคุย แต่ใช้ขอบเขตของ native engine ตาม config แทน Scheduled goals ยังคงเพดานของ scheduler
+
+Reply delivery เป็น at-most-once attempt; timeout/crashอาจทำให้ข้อความไม่ถึง ไม่มี auto resend ที่ทำให้ข้อความซ้ำ Native transcripts ยังอยู่บนเครื่อง ไม่รับ voice/files จาก Telegram ใน adapter รุ่นนี้ Tools ที่พึ่ง GUI/hardware/โปรแกรมภายนอกยังขึ้นกับ Ubuntu environment
+
+## ดูแล
 
 ```sh
-systemctl status judecode-telegram judecode-scheduler --no-pager
-journalctl -u judecode-telegram -n 30 --no-pager
-systemctl restart judecode-telegram
+systemctl status judecode-chat judecode-telegram judecode-scheduler --no-pager
+journalctl -u judecode-chat -n 30 --no-pager
 ```
 
-หยุดรับคำสั่งและหยุด worker ด้วย `systemctl stop judecode-telegram judecode-scheduler` การหยุดเฉพาะ bridge ไม่หยุดงานที่อยู่ใน scheduler แล้ว
+หยุดการรับข้อความก่อน maintenance ด้วย `systemctl stop judecode-telegram`; รอ chat/workerปัจจุบันจบก่อน restart Agent หาก kill ระหว่าง tool ทำงาน ผลอาจไม่แน่นอนและจะไม่ replay อัตโนมัติ
 
-ทดสอบอัตโนมัติใน `tests/test_telegram_bridge.py` และ `tests/test_scheduler.py`: authorization, replay, bounded queue, scheduling, ownership, result delivery, uncertain sends, API token redaction และ engine headless flow
+Unit: deploy/systemd/judecode-chat.service; ทำงานร่วมกับ shared-scheduler.conf และ group traversal ของ deployment เดิม สำรอง config ก่อนแก้และเก็บ env filesเป็นroot0600
 
-อ้างอิง API: [Telegram Bot API](https://core.telegram.org/bots/api#getupdates)
+การติดตั้งเก่าแบบทุกข้อความ→scheduler ถูกแทนด้วย ConversationalBridge แล้ว แต่เก็บฐานข้อมูลงานเก่า/ผลลัพธ์ไว้ ไม่แปลง transcriptเทียมจาก job goalsเก่าเข้าบทสนทนาใหม่
 
+## การตรวจสอบ
 
-## การคุยแบบต่อเนื่อง
+Tests71ข้อรวม native AgentEngine: greetingไม่มีtools/ไม่มีschedule, historyต่อเนื่อง, read toolจริงเมื่อโมเดลเรียก, schedule_createเฉพาะtoolcall, native transcriptrestoreไม่replay, ownerallowlist, duplicate/crash/stopและscheduler regressions
 
-Agent ได้คำแนะนำให้ตอบคำถาม/ทักทายโดยตรง ไม่พูดถึงคิวงาน checkpoint mode หรืองบภายในเอง ผลจากงานไม่ถูกครอบด้วยเลขงานและ state อีกต่อไป บริบทแยกด้วย conversation ID; /new เปลี่ยนบริบทสำหรับข้อความถัดไปโดยไม่ยกเลิกงานเดิม ข้อความก่อนติดตั้ง conversation ID ยังเก็บในประวัติงานเดิม แต่ไม่ถูกย้ายเข้าบริบทใหม่อัตโนมัติ
+Live model3turns: ทักทาย+จำคำ(0tools), ถามคำเดิม(0tools), ขออ่านไฟล์(1readtool) และ schedulerไม่มีjobเพิ่ม เก็บผลที่ /var/lib/judecode/native-chat-live-check.log
 
-กรณีมีข้อผิดพลาดหรือผลยังไม่ผ่านการตรวจ จะยังแจ้งว่ามีส่วนต้องตรวจสอบ ไม่ซ่อนความล้มเหลวเพื่อให้ดูเป็นธรรมชาติ การแก้ไขนี้ยังใช้คิว serial เดิม ไม่ใช่การแทรกข้อความไปเปลี่ยนงานที่กำลังรัน และไม่เปลี่ยนเพดานงาน/สิทธิ์ root/owner allowlist
-
-คำตอบสนทนาแบบครั้งเดียวที่ engine ยืนยันสถานะ answered จะจบได้โดยไม่ต้องให้โมเดลเรียก checkpoint; explicit continue/blocked และงาน recurring ยังใช้เงื่อนไขเดิม unverified/failed ไม่ถูกเปลี่ยนเป็นสำเร็จ
+อ้างอิง transport: [Telegram Bot API](https://core.telegram.org/bots/api#getupdates)

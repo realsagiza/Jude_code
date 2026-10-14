@@ -1,5 +1,7 @@
 # Jude Code บน Ubuntu: Agent ก่อนเชื่อม Telegram
 
+**สถาปัตยกรรมแชตล่าสุด:** Telegram ใช้ judecode-chat.service ที่เรียก native AgentEngine แบบเดียวกับ Mac แล้ว ข้อความทั่วไปไม่ผ่าน scheduler; schedulerใช้เฉพาะงานนัดหมาย ดู telegram-th.md ส่วนรายละเอียดเก่าด้านล่างเป็นประวัติ deployment
+
 **สถานะล่าสุด:** ผู้ใช้ขอสิทธิ์ระดับ root เมื่อ 2026-10-14; ใช้ Administrator profile ท้ายเอกสารแทน sandbox baseline ด้านล่าง โดย Telegram bridge ยังแยก UID และ owner allowlist
 
 ติดตั้งครั้งแรก 2026-10-14 บน `root@10.0.0.250` (Ubuntu 24.04, Python 3.12) จาก application commit `f5f0d75` และ deployment files ใน commit ของเอกสารนี้ ไม่รวมการแก้ไขที่ยังไม่ commit บน Mac
