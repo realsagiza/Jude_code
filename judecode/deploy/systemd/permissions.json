@@ -1,0 +1,9 @@
+{
+  "read": "auto",
+  "write": "auto",
+  "shell": "ask",
+  "delete": "deny",
+  "deploy": "deny",
+  "system": "deny",
+  "network": "ask"
+}

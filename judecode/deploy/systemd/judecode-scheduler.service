@@ -1,0 +1,61 @@
+[Unit]
+Description=Jude Code bounded background scheduler
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=judecode
+Group=judecode
+WorkingDirectory=/var/lib/judecode/workspaces
+Environment=HOME=/var/lib/judecode
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/judecode/agent.env
+ExecStart=/opt/judecode/venv/bin/python -m judecode.agent.schedule_service serve
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/judecode
+ReadOnlyPaths=/var/lib/judecode/.judecode/permissions.json
+InaccessiblePaths=/etc/judecode -/run/docker.sock -/run/containerd
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~bind listen
+SystemCallErrorNumber=EPERM
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SocketBindDeny=any
+# Public model APIs work; LAN/metadata/loopback access is blocked except DNS.
+IPAddressDeny=10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16 127.0.0.0/8 ::1/128 fc00::/7 fe80::/10
+IPAddressAllow=127.0.0.53/32 127.0.0.54/32
+MemoryMax=2G
+TasksMax=128
+CPUQuota=200%
+LimitCORE=0
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
