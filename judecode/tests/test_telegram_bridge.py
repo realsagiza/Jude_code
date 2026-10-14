@@ -50,7 +50,7 @@ def test_replay_is_deduplicated_after_restart(bridge, tmp_path):
     bridge = Bridge(123, bridge.api, bridge.store, tmp_path / 'bot', tmp_path, 456, clock=lambda: 2000000000)
     bridge.process(update())
     assert len(bridge.store.list()) == 1
-    assert len(bridge.api.sent) == 1
+    assert len(bridge.api.sent) == 0
     job = bridge.store.list()[0]
     assert job['mode'] == 'observe' and job['max_runs'] == 10 and job['budget'] == .25
     assert job['project'] == bridge.project
@@ -80,7 +80,7 @@ def test_result_delivery_is_owner_only_and_once(bridge):
     bridge.store.finish(run['run_id'], {'status': 'answered', 'summary': 'เสร็จแล้ว'}, now=2000000011)
     bridge.deliver()
     bridge.deliver()
-    assert len(bridge.api.sent) == 2
+    assert len(bridge.api.sent) == 1
     assert all(o == 123 for o, _ in bridge.api.sent)
     assert 'เสร็จแล้ว' in bridge.api.sent[-1][1]
     bridge.process(update('/result ' + run['id'], uid=2))
@@ -171,3 +171,55 @@ def test_admin_default_work_and_explicit_observe(bridge):
     assert jobs['ตรวจสถานะ ssh']['mode'] == 'work'
     assert jobs['อ่าน TODO']['mode'] == 'observe'
     assert jobs['ตรวจ service']['mode'] == 'work'
+
+
+def test_plain_chat_no_ticket_ack_or_wrapper(bridge):
+    bridge.process(update('สวัสดีครับ'))
+    assert bridge.api.sent == []
+    job = bridge.store.list()[0]
+    assert job['goal'] == 'สวัสดีครับ'
+    assert job['conversation_id']
+    run = bridge.store.claim(now=2000000010)
+    bridge.store.checkpoint(run['run_id'], 'complete', 'Replied', now=2000000010)
+    bridge.store.finish(run['run_id'], {'status': 'answered', 'summary': 'สวัสดีครับ วันนี้เป็นยังไงบ้าง'}, now=2000000011)
+    bridge.deliver()
+    assert bridge.api.sent == [(123, 'สวัสดีครับ วันนี้เป็นยังไงบ้าง')]
+
+
+def test_new_clears_conversation_identity(bridge):
+    bridge.process(update('hello', uid=1))
+    first = bridge.store.list()[0]['conversation_id']
+    bridge.process(update('/new', uid=2))
+    bridge.process(update('new chat', uid=3))
+    assert len({j['conversation_id'] for j in bridge.store.list()}) == 2
+
+
+def test_context_loaded_after_previous_job_finishes(bridge, monkeypatch):
+    from judecode.agent import schedule_service
+    monkeypatch.setattr(schedule_service, 'ScheduleStore', lambda: bridge.store)
+    bridge.process(update('ฉันชื่อจูด', uid=1))
+    bridge.process(update('ฉันชื่ออะไร', uid=2))
+    jobs = {j['goal']: j for j in bridge.store.list()}
+    run = bridge.store.claim(now=2000000010)
+    bridge.store.finish(run['run_id'], {'status': 'answered', 'summary': 'ยินดีที่ได้รู้จักครับจูด'}, now=2000000011)
+    history = schedule_service.conversation_context(jobs['ฉันชื่ออะไร'])
+    assert any(m['content'] == 'ฉันชื่อจูด' for m in history)
+    assert any(m['content'] == 'ยินดีที่ได้รู้จักครับจูด' for m in history)
+
+
+def test_conversation_answer_without_checkpoint_completes(bridge):
+    bridge.process(update('สวัสดี'))
+    run = bridge.store.claim(now=2000000010)
+    bridge.store.finish(run['run_id'], {'status': 'answered', 'summary': 'สวัสดีครับ'}, now=2000000011)
+    assert bridge.store.get(run['id'])['state'] == 'completed'
+    bridge.deliver()
+    assert bridge.api.sent == [(123, 'สวัสดีครับ')]
+
+
+def test_conversation_failure_is_not_hidden(bridge):
+    bridge.process(update('ตรวจระบบ'))
+    run = bridge.store.claim(now=2000000010)
+    bridge.store.finish(run['run_id'], {'status': 'unverified', 'summary': 'ตรวจแล้ว'}, now=2000000011)
+    assert bridge.store.get(run['id'])['state'] == 'needs_attention'
+    bridge.deliver()
+    assert 'ต้องตรวจสอบ' in bridge.api.sent[0][1]

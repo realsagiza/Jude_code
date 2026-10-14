@@ -79,7 +79,9 @@ class ScheduleStore:
 
     def create(self, name, goal, run_at=None, interval_minutes=None, daily=None,
                timezone='Asia/Bangkok', project=None, max_runs=20, budget=1.0,
-               timeout_minutes=15, mode='observe', now=None, request_key=None):
+               timeout_minutes=15, mode='observe', now=None, request_key=None, conversation_id=None):
+        if conversation_id is not None and (not isinstance(conversation_id, str) or not 1 <= len(conversation_id) <= 100):
+            raise ValueError('Invalid conversation_id')
         if request_key is not None and (not isinstance(request_key, str) or not 1 <= len(request_key) <= 200):
             raise ValueError('request_key must contain 1..200 characters')
         job_id = (hashlib.sha256(request_key.encode()).hexdigest()[:24] if request_key
@@ -119,7 +121,7 @@ class ScheduleStore:
             next_daily(daily, timezone, now)
         data = dict(name=name, goal=goal, project=project, timezone=timezone, daily=daily,
                     interval_minutes=interval_minutes, max_runs=max_runs, budget=budget,
-                    timeout_minutes=timeout_minutes, mode=mode, progress='', created_at=now)
+                    timeout_minutes=timeout_minutes, mode=mode, progress='', created_at=now, conversation_id=conversation_id)
         with self.connect() as db:
             db.execute('INSERT OR IGNORE INTO jobs(id,data,state,next_at) VALUES(?,?,?,?)',
                        (job_id, json.dumps(data, ensure_ascii=False), 'scheduled', next_at))
@@ -201,6 +203,11 @@ class ScheduleStore:
                     state = 'completed'
                 elif checkpoint and checkpoint['outcome'] == 'blocked':
                     state = 'needs_attention'
+                elif (not checkpoint and job.get('conversation_id') and not job['daily']
+                      and not job['interval_minutes'] and result.get('status') == 'answered'):
+                    # A delivered conversational answer needs no model-generated
+                    # checkpoint; explicit continuation/blocked checkpoints win.
+                    state = 'completed'
                 elif job['runs'] >= job['max_runs']:
                     state = 'limit_reached'
                 elif checkpoint and checkpoint['outcome'] == 'continue':

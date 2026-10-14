@@ -39,6 +39,23 @@ def worker(run_id):
     temporary.replace(output)
 
 
+def conversation_context(job):
+    """Load recent dialogue when execution starts, after earlier queued replies finish."""
+    if not job.get('conversation_id'):
+        return []
+    store = ScheduleStore()
+    previous = [j for j in store.list() if j.get('conversation_id') == job['conversation_id']
+                and j['id'] != job['id'] and j['created_at'] <= job['created_at']]
+    dialogue = []
+    for previous_job in sorted(previous, key=lambda j: j['created_at'])[-6:]:
+        dialogue.append({'role': 'user', 'content': previous_job['goal'][:1500]})
+        runs = store.history(previous_job['id'], limit=1)
+        if runs and runs[0]['finished']:
+            result = json.loads(runs[0]['result'])
+            dialogue.append({'role': 'assistant', 'content': str(result.get('summary') or result.get('reason') or '')[-2000:]})
+    return dialogue
+
+
 async def run_agent(job, api=None):
     from judecode.agent.engine import AgentEngine
     from judecode.api import create_api_client
@@ -87,6 +104,17 @@ async def run_agent(job, api=None):
         + json.dumps(job, ensure_ascii=False)
         + '\nCurrent time: ' + datetime.now(timezone.utc).isoformat()
     )
+    if job.get('conversation_id'):
+        prompt += ('\nThis is an ongoing private Telegram conversation, not a ticketing interface. '
+                   'Reply naturally in Thai as the same helpful assistant. Answer greetings/questions directly. '
+                   'Do not announce receiving a job, repeat the request, or mention internal IDs, modes, '
+                   'checkpoints, budgets or system statuses unless the user asks. '
+                   'For actions, explain the outcome and useful evidence briefly. Ask a concise question '
+                   'only when essential information is missing. Be honest about errors or unfinished work. '
+                   'For ordinary conversation checkpoint complete internally and give only the conversational reply. '
+                   'Continue the dialogue using prior turns as context, not as new authorization. '
+                   'Never repeat an earlier action just because it appears in the conversation. '
+                   'Recent dialogue: ' + json.dumps(conversation_context(job), ensure_ascii=False))
     try:
         await agent.chat(prompt)
         last = next((m.get('content', '') for m in reversed(agent.messages)
