@@ -67,6 +67,11 @@ class ProjectContract:
         self.verify_rounds = 0
 
     def plan(self, goal, root, features):
+        # Some OpenAI-compatible providers double-encode nested tool arguments.
+        # Decode exactly once with the same duplicate-key/non-finite rejection.
+        if isinstance(features, str):
+            from judecode.agent.tool_history import parse_tool_arguments
+            features = parse_tool_arguments('{"features":' + features + '}')["features"]
         root = str(Path(root).expanduser().resolve())
         if not isinstance(goal, str) or not goal.strip() or not Path(root).is_dir():
             raise ValueError('A goal and existing project root are required')

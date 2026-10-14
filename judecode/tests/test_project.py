@@ -176,3 +176,11 @@ def test_restore_rechecks_previously_passing_files(agent, tmp_path):
     restored.resume_session(agent.autonomous.session.session_id)
     assert not restored.project.complete
     assert restored.project.state['features']['sale']['evidence']
+
+
+def test_provider_double_encoded_features_supported_without_losing_checks(tmp_path):
+    args = plan(tmp_path); args['features'] = json.dumps(args['features'])
+    contract = ProjectContract(); contract.plan(**args)
+    assert len(contract.state['features']) == 2
+    args['features'] = '[{"id":"sale","criteria":"x","checks":["true"],"checks":["false"]}]'
+    with pytest.raises(ValueError): ProjectContract().plan(**args)
