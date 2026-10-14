@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 from judecode.api.client import ApiClient
 from judecode.agent.tools import TOOL_DEFINITIONS, execute_tool
+from judecode.agent.project import ProjectContract, PROMPT as PROJECT_PROMPT, DEFINITIONS as PROJECT_TOOLS, NAMES as PROJECT_NAMES
 from judecode.agent.expert import ExpertRouting, ROUTING_PROMPT, NAMES as EXPERT_TOOLS
 from judecode.agent.continuation import (
     ContinuationTracker,
@@ -57,6 +58,9 @@ class AgentEngine:
         continue_on_incomplete_work: bool = CONTINUE_ON_INCOMPLETE_WORK,
         continue_on_tool_error: bool = CONTINUE_ON_TOOL_ERROR,
     ):
+        self.project = ProjectContract()
+        if PROJECT_PROMPT not in system_prompt:
+            system_prompt += PROJECT_PROMPT
         self.expert = ExpertRouting()
         if self.expert.available and ROUTING_PROMPT not in system_prompt:
             system_prompt += ROUTING_PROMPT
@@ -112,6 +116,10 @@ class AgentEngine:
         self.sandbox.before_apply = self._snapshot_file
         self._resume_uncertain = False
         self._restored_session = False
+        self._verification_retries = 0
+        self._repeated_results = {}
+        self._implementation_paths = set()
+        self._project_required = False
 
 
     def save_transcript(self) -> None:
@@ -124,7 +132,8 @@ class AgentEngine:
         budget = self.autonomous.budget
         TranscriptStore().save(session.session_id, {
             "cwd": str(Path.cwd().resolve()), "messages": self.messages,
-            "expert": self.expert.snapshot(),
+            "expert": self.expert.snapshot(), "project": self.project.state,
+            "project_required": self._project_required,
             "state": state, "needs_verification": self._needs_verification,
             "failures": [[list(key), value] for key, value in self._tool_failures.items()],
             "uncertain": self._resume_uncertain,
@@ -174,8 +183,15 @@ class AgentEngine:
         for key in ('total_input_tokens', 'total_output_tokens', 'total_cost', 'tokens'):
             setattr(restored.autonomous.budget, key, data['budget'][key])
         restored.expert.restore(data.get("expert"))
+        restored.project = ProjectContract(data.get("project"))
+        restored.project.invalidate()  # Files/deployment may have changed while offline.
+        restored._project_required = bool(data.get("project_required"))
+        if restored.project.state:
+            restored.autonomous.evaluator.project_root = restored.project.state["root"]
         restored._restored_session = True
         restored.messages = repair_tool_history(data['messages'])
+        if PROJECT_PROMPT not in restored.messages[0]["content"]:
+            restored.messages[0]["content"] += PROJECT_PROMPT
         restored._tool_failures = {tuple(key): value for key, value in data.get('failures', [])}
         restored._needs_verification = bool(data.get('needs_verification')) or bool(pending)
         restored._resume_uncertain = bool(pending) or bool(data.get('uncertain'))
@@ -219,7 +235,7 @@ class AgentEngine:
 
     def _prune_context(self) -> None:
         """Reduce old output only after saving a retrievable full copy."""
-        self.messages = self.context.prune(self.messages, self.expert.tools(TOOL_DEFINITIONS))
+        self.messages = self.context.prune(self.messages, self.expert.tools(TOOL_DEFINITIONS + PROJECT_TOOLS))
         self.autonomous.budget.context_tokens_saved = self.context.saved_tokens
         self.autonomous.budget.context_input_tokens = self.context.last_input_tokens
 
@@ -350,10 +366,14 @@ class AgentEngine:
         """All execution paths share preflight, staging and outcome recording."""
         key = (tool_name, str(Path(args["path"]).resolve()) if "path" in args
                else json.dumps(args, sort_keys=True))
+        if tool_name in PROJECT_NAMES:
+            key = (tool_name, "project")
         try:
             blocked = self._pre_tool_hook(tool_name, args)
             if blocked:
                 result = f"Error executing tool '{tool_name}': {blocked}"
+            elif tool_name in PROJECT_NAMES:
+                result = self._project_tool(tool_name, args)
             elif tool_name in EXPERT_TOOLS:
                 result = self.expert.execute(tool_name, args)
             elif self.sandbox.is_active:
@@ -362,7 +382,14 @@ class AgentEngine:
                 if tool_name not in self.READ_ONLY_TOOLS and tool_name != "task_complete":
                     self._needs_verification = True
                     self._verification = None
+                    self.project.invalidate()
                 result = execute_tool(tool_name, args)
+            if tool_name in {"write", "edit"} and not result.startswith("Error executing tool"):
+                self._implementation_paths.add(str(Path(args["path"]).resolve()))
+                if len(self._implementation_paths) > 1:
+                    self._project_required = True
+            if tool_name == "task_add" and not result.startswith("Error executing tool"):
+                self._project_required = True
             self._post_tool_hook(tool_name, args, result)
         except Exception as exc:
             result = f"Error executing tool '{tool_name}': {type(exc).__name__}: {exc}"
@@ -370,7 +397,73 @@ class AgentEngine:
             self._tool_failures[key] = result
         else:
             self._tool_failures.pop(key, None)
+        if tool_name in {"write", "edit", "shell"}:
+            import hashlib
+            signature = hashlib.sha256((tool_name + json.dumps(args, sort_keys=True) + result).encode()).hexdigest()
+            self._repeated_results[signature] = self._repeated_results.get(signature, 0) + 1
+            if self._repeated_results[signature] >= 6:
+                self._stop_outcome = ("unverified", "Repeated identical action/result six times; inspect state and change approach.")
         return result
+
+    def _project_tool(self, name: str, args: dict) -> str:
+        if name == "project_plan":
+            result = self.project.plan(**args)
+            self.autonomous.evaluator.project_root = self.project.state["root"]
+            self.autonomous.session.original_goal = self.project.state["goal"]
+        elif name == "project_revise_checks":
+            checks = args.get("checks")
+            if (not self.project.state or args.get("id") not in self.project.state["features"] or
+                    not isinstance(checks, list) or not 1 <= len(checks) <= 20 or
+                    any(not isinstance(c, str) or not c.strip() for c in checks) or
+                    not isinstance(args.get("reason"), str) or not args["reason"].strip()):
+                raise ValueError("Existing feature ID, executable checks, and correction reason are required")
+            feature = self.project.state["features"][args["id"]]
+            feature.setdefault("revisions", []).append({"checks": feature["checks"],
+                "evidence": feature["evidence"], "reason": args["reason"]})
+            feature["checks"] = checks
+            feature["passed"] = False
+            feature["evidence"] = []
+            result = self.project.summary()
+        elif name == "project_resolve_failure":
+            if not self.project.complete or not str(args.get("reason", "")).strip():
+                raise ValueError("All project checks must pass first; provide the evidence explaining resolution")
+            failed_args = json.loads(args["failed_arguments"])
+            key = (args["failed_tool"], str(Path(failed_args["path"]).resolve()) if "path" in failed_args
+                   else json.dumps(failed_args, sort_keys=True))
+            if key not in self._tool_failures:
+                raise ValueError("No matching unresolved failure")
+            del self._tool_failures[key]
+            result = "Historical failure resolved against passing project checks: " + args["reason"]
+        elif name == "project_pause":
+            if not self.project.state or not str(args.get("reason", "")).strip():
+                raise ValueError("An active project and specific blocker are required")
+            self.project.state["paused"] = args["reason"]
+            result = self.project.summary()
+        else:
+            from judecode.utils.shell import execute_shell
+            def run(command, root):
+                params = {"command": command, "cwd": root, "timeout": 120}
+                blocked = self._pre_tool_hook("shell", params)
+                if blocked:
+                    return {"exit_code": -1, "stderr": blocked}
+                try:
+                    return execute_shell(**params)
+                except Exception as exc:
+                    return {"exit_code": -1, "stderr": str(exc)}
+            result = self.project.verify(run, lambda: self.cancel_requested)
+        self.save_transcript()
+        return result
+
+    def delivery_response(self, response: str) -> str:
+        """Do not relay an unverified model success claim as the final result."""
+        state = self.autonomous.session
+        if state.status in {"failed", "unverified", "paused", "crashed"}:
+            pending = ""
+            if self.project.state:
+                pending = "\nงานที่ยังไม่ผ่าน: " + ", ".join(
+                    f["id"] for f in self.project.state["features"].values() if not f["passed"])
+            return "งานยังไม่ยืนยันว่าเสร็จครับ\nสถานะ: " + state.status + "\n" + state.outcome_reason + pending
+        return response
 
     def _finish_session(self) -> None:
         if self._stop_outcome:
@@ -379,6 +472,12 @@ class AgentEngine:
             status, reason = "failed", "Unresolved tool failures remain."
         elif self.sandbox.get_pending_changes():
             status, reason = "unverified", "Changes are staged, not applied or verified."
+        elif self.project.state:
+            status = "completed" if self.project.complete else "unverified"
+            reason = ("All registered project acceptance checks passed." if self.project.complete
+                      else self.project.state["paused"] or "Project acceptance checks remain incomplete.")
+        elif self._project_required:
+            status, reason = "unverified", "Multi-file/task implementation requires a project contract and acceptance checks."
         elif self._needs_verification:
             verification = self._verify_work()
             status = {"passed": "completed", "failed": "failed"}.get(
@@ -387,6 +486,10 @@ class AgentEngine:
         else:
             status, reason = "answered", "Response delivered; no implementation success claimed."
         self.autonomous.on_session_end(status, reason)
+        if status in {"failed", "unverified", "paused", "crashed"}:
+            report = self.delivery_response("")
+            self.messages.append({"role": "assistant", "content": report})
+            console.print(Text(report, style="yellow"))
         self._save_session_memory()
         try:
             self.save_transcript()
@@ -411,7 +514,7 @@ class AgentEngine:
         """Count the whole outgoing request on every turn, including tool schemas."""
         budget = self.autonomous.budget
         budget.new_turn()
-        budget.record_tool_request(estimate_tokens(self.expert.tools(TOOL_DEFINITIONS)))
+        budget.record_tool_request(estimate_tokens(self.expert.tools(TOOL_DEFINITIONS + PROJECT_TOOLS)))
         for message in self.messages:
             count = estimate_tokens(message)
             role = message.get("role")
@@ -474,6 +577,11 @@ class AgentEngine:
 
         Returns an error string if execution should be blocked, or None.
         """
+        if tool_name in PROJECT_NAMES:
+            if self.sandbox.is_active:
+                return "Project verification requires applied changes outside staging sandbox."
+            return None  # Verification commands separately pass the shell permission hook.
+
         # ── Permission check ──
         allowed, level, reason = self.permissions.check_permission(tool_name, tool_params)
         if not allowed:
@@ -605,6 +713,13 @@ class AgentEngine:
             f"\n  [bold yellow]⟳ Manual continuation #{self.continuation.count}/{self.continuation.max_continuations}[/bold yellow]"
         )
         self._stop_outcome = None
+        self._turn_count = 0
+        self._verification_retries = 0
+        self._repeated_results = {}
+        self.project.idle_rounds = 0
+        self.project.verify_rounds = 0
+        if self.project.state:
+            self.project.state["paused"] = ""
         self.autonomous.session.status = "active"
         self.autonomous.session.save()
         while self._turn_count < MAX_TURNS:
@@ -668,7 +783,7 @@ class AgentEngine:
         # Stream the response
         try:
             async for chunk in self.expert.completion(
-                self.api, self.messages, self.expert.tools(TOOL_DEFINITIONS)
+                self.api, self.messages, self.expert.tools(TOOL_DEFINITIONS + PROJECT_TOOLS)
             ):
                 # ── Abort streaming IMMEDIATELY if user pressed Ctrl+C ──
                 # This is the key fix: previously cancel was only checked AFTER
@@ -938,8 +1053,35 @@ class AgentEngine:
                 self.save_transcript()
                 return True
 
-            # ── No tool calls + not truncated = normal conversation → NEVER auto-continue ──
-            return False  # Done
+            if self._project_required and not self.project.state:
+                if self._verification_retries < 3:
+                    self._verification_retries += 1
+                    self._append_nudge("Multi-file/task work cannot finish without an acceptance contract. "
+                        "Call project_plan now using the original agreed scope, actual project root and real checks "
+                        "for ALL features, then project_verify. Existing files may be reused; do not restart.", "project_required")
+                    return True
+                self._stop_outcome = ("unverified", "Project contract was not registered after three requests.")
+                return False
+            if self.project.complete and self._tool_failures:
+                if self._verification_retries < 2:
+                    self._verification_retries += 1
+                    self._append_nudge("Checks passed, but tool failures remain: " +
+                        json.dumps([[list(k), v] for k, v in self._tool_failures.items()]) +
+                        " Resolve them, or use project_resolve_failure for each superseded error with an evidence-based reason.", "resolve_failures")
+                    return True
+            if not self.project.state and self._needs_verification and not self._tool_failures:
+                verification = self._verify_work()
+                if not verification["passed"] and self._verification_retries < 2:
+                    self._verification_retries += 1
+                    self._append_nudge("Implementation is not verified: " + verification["summary"] +
+                        " Repair the failure. For multi-feature work register project_plan with the correct root "
+                        "and behavior checks, then project_verify. If blocked, explain the blocker honestly.", "verification_repair")
+                    return True
+            gate = self.project.gate()
+            if isinstance(gate, str):
+                self._append_nudge(gate, "project_incomplete")
+                return True
+            return False  # Ordinary conversation or verified/blocked project
 
         # ── There were tool calls - execute them ──
         msg: dict[str, Any] = {
@@ -1024,6 +1166,9 @@ class AgentEngine:
             return False  # Stop the loop
 
         # ── Autonomous Controller Hook (Phase 1 + Phase 5) ──
+        if self._stop_outcome:
+            return False
+
         # After tool execution, check for auto-advance, self-eval, budget,
         # health monitoring, self-healing, and auto-rollback
         if self.autonomous.enabled and parsed_calls:
@@ -1094,7 +1239,7 @@ class AgentEngine:
             return True  # The newly selected model must receive the handoff result.
 
         # ── Check if work is clearly done before auto-continuing ──
-        if (not self._needs_verification and not self._tool_failures
+        if (not self.project.state and not self._needs_verification and not self._tool_failures
                 and not self._is_nudge_message(full_content) and detect_completion(full_content)):
             return False  # Work is done, stop
 
@@ -1118,9 +1263,17 @@ class AgentEngine:
         self.continuation.reset(user_message)
         self._turn_count = 0
         # ── Start autonomous session tracking ──
-        self.autonomous.on_session_start(goal=user_message)
+        self._verification_retries = 0
+        self._repeated_results = {}
+        self.project.idle_rounds = 0
+        self.project.verify_rounds = 0
+        if self.project.state:
+            self.project.state["paused"] = ""
+        self.autonomous.on_session_start(goal=self.project.state["goal"] if self.project.state else user_message)
 
         self.messages.append({"role": "user", "content": user_message})
+        if self.project.state:
+            self._append_nudge("Current project contract (retain all requirements): " + self.project.summary(), "project_state")
 
         while self._turn_count < MAX_TURNS:
             # ── Stop before starting a new turn if user requested it ──

@@ -143,6 +143,8 @@ class ChatSession:
                             else 'รอบนี้ผมยังตอบไม่สำเร็จครับ ลองบอกผมให้ทำต่อได้')
         agent.save_transcript()
         self.store.session(agent.autonomous.session.session_id)
+        if turn["text"] != "/new":
+            response = agent.delivery_response(response)
         self.store.finish(turn['id'], response)
 
 

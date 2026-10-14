@@ -6,6 +6,7 @@ from pathlib import Path
 
 from judecode.agent.context import ContextManager, estimate_tokens
 from judecode.agent.tools import TOOL_DEFINITIONS
+from judecode.agent.project import DEFINITIONS as PROJECT_TOOLS
 from .test_reliability import agent, ScriptedAPI, calls
 
 
@@ -78,12 +79,12 @@ def test_every_request_counts_full_context_and_tools_without_double_output(agent
     agent.api = ScriptedAPI()
     agent.messages.append({"role": "user", "content": "hello"})
     assert agent.autonomous.budget.total_input_tokens == 0
-    expected = sum(estimate_tokens(m) for m in agent.messages) + estimate_tokens(agent.expert.tools(TOOL_DEFINITIONS))
+    expected = sum(estimate_tokens(m) for m in agent.messages) + estimate_tokens(agent.expert.tools(TOOL_DEFINITIONS + PROJECT_TOOLS))
     asyncio.run(agent._process_turn(1))
     budget = agent.autonomous.budget
     assert budget.total_input_tokens == expected
     assert budget.total_output_tokens == estimate_tokens("Finished response")
-    second = sum(estimate_tokens(m) for m in agent.messages) + estimate_tokens(agent.expert.tools(TOOL_DEFINITIONS))
+    second = sum(estimate_tokens(m) for m in agent.messages) + estimate_tokens(agent.expert.tools(TOOL_DEFINITIONS + PROJECT_TOOLS))
     asyncio.run(agent._process_turn(2))
     assert budget.total_input_tokens == expected + second
     assert budget.total_output_tokens == 2 * estimate_tokens("Finished response")

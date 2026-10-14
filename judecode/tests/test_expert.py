@@ -62,13 +62,15 @@ def setup(tmp_path, monkeypatch):
 
 def test_handoff_executes_tools_and_returns_to_primary(setup, tmp_path):
     agent, primary, specialist, kwargs = setup(
-        [calls(('expert_help', BRIEF)), response('Summary of expert findings')],
+        [calls(('expert_help', BRIEF)), response('Summary of expert findings'),
+         response('Checks unavailable'), response('Still unverified')],
         [calls(('write', {'path': 'result.txt', 'content': 'fixed'})),
          calls(('read', {'path': 'result.txt'})),
          calls(('expert_return', {'summary': 'File written and read; tests not run'}))])
     asyncio.run(agent.chat('Implement fix'))
     assert (tmp_path / 'result.txt').read_text() == 'fixed'
-    assert len(primary.requests) == 2 and len(specialist.requests) == 3
+    assert len(primary.requests) == 4 and len(specialist.requests) == 3
+    assert agent.autonomous.session.status == "unverified"
     assert specialist.closed == 3
     assert kwargs[0]['model'] == 'z-ai/glm-5.3'
     assert kwargs[0]['max_retries'] == 1
