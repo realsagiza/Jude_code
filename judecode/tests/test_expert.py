@@ -211,3 +211,15 @@ def test_repair_handoff_changes_route_without_bypassing_pause(setup):
     assert 'deployment approval' in agent.messages[-1]['content']
     agent._repair_failures = 3
     assert not agent._try_repair_handoff()
+
+
+def test_exhausted_expert_returns_to_primary_with_unverified_notice(setup):
+    agent, primary, specialist, _ = setup([response('Remaining work reported')], [])
+    agent.expert.active = True
+    agent.expert.turns = agent.expert.max_turns
+    asyncio.run(agent._process_turn())
+    assert not agent.expert.active
+    assert len(primary.requests) == 1
+    assert not specialist.requests
+    assert any('Work remains unverified' in m.get('content', '') for m in primary.requests[0][0])
+    assert agent.expert.turns == agent.expert.max_turns

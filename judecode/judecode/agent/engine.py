@@ -923,6 +923,13 @@ class AgentEngine:
             content = self.messages[0].get("content", "")
             if isinstance(content, str) and ROUTING_PROMPT not in content:
                 self.messages[0]["content"] = content + ROUTING_PROMPT
+        if self.expert.active and self.expert.turns >= self.expert.max_turns:
+            self.expert.active = False
+            self.messages.append({"role": "user", "content":
+                "[SYSTEM: Expert request allowance exhausted; returning control to primary. "
+                "Work remains unverified. Inspect existing edits and test evidence, preserve the "
+                "same sandbox and acceptance criteria, and continue within normal task limits. "
+                "Do not retry expert delegation or treat this handoff as completion.]"})
         full_content = ""
         full_reasoning = ""
         tool_calls: list[dict[str, Any]] = []
