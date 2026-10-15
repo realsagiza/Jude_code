@@ -224,3 +224,30 @@ def test_non_test_checks_and_real_tests_still_pass(tmp_path):
     for output in ['', 'Ran 2 tests in 0.002s\n\nOK', 'Expected text: No tests found']:
         contract.verify(lambda *a: dict(exit_code=0, stdout=output), lambda: False)
         assert contract.complete
+
+
+def test_failure_ids_resolve_exact_error_and_preserve_audit(agent, tmp_path):
+    key = ('shell', json.dumps({'command':'missing-python test.py'}, sort_keys=True))
+    agent._tool_failures[key] = 'not found'
+    records = json.loads(agent._project_tool('project_failures', {}))
+    resolution = {'failure_id': records[0]['failure_id'], 'reason': 'Tests now passed with python3'}
+    with pytest.raises(ValueError):
+        agent._project_tool('project_resolve_failure', resolution)
+    agent._project_tool('project_plan', plan(tmp_path))
+    (tmp_path/'sale.ok').touch(); (tmp_path/'refund.ok').touch()
+    agent._project_tool('project_verify', {})
+    agent._project_tool('project_resolve_failure', resolution)
+    assert not agent._tool_failures
+    assert agent.project.state['resolved_failures'][0]['error'] == 'not found'
+
+
+@pytest.mark.parametrize('bad', ['', 'ls workspace', '[]', 'null'])
+def test_bad_legacy_resolution_returns_recoverable_instructions(agent, tmp_path, bad):
+    agent._tool_failures[('shell', '{}')] = 'historical failure'
+    agent._project_tool('project_plan', plan(tmp_path))
+    (tmp_path/'sale.ok').touch(); (tmp_path/'refund.ok').touch()
+    agent._project_tool('project_verify', {})
+    result = agent._execute_tool_safe('project_resolve_failure', {'failed_tool':'shell', 'failed_arguments':bad, 'reason':'superseded'})
+    assert 'project_failures' in result and 'failure_id' in result
+    assert 'JSONDecodeError' not in result
+    assert agent._tool_failures

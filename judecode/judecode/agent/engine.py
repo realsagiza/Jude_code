@@ -484,6 +484,12 @@ class AgentEngine:
                                       "Work is preserved; inspect the last tool result and change approach. No deployment was authorized by this stop.")
         return result
 
+    def _failure_records(self):
+        import hashlib
+        return [{"failure_id": hashlib.sha256(json.dumps(list(key), ensure_ascii=False).encode()).hexdigest()[:16],
+                 "tool": key[0], "arguments_key": key[1], "error": value}
+                for key, value in self._tool_failures.items()]
+
     def _project_tool(self, name: str, args: dict) -> str:
         if name == "project_plan":
             if self.isolation:
@@ -505,16 +511,33 @@ class AgentEngine:
             feature["passed"] = False
             feature["evidence"] = []
             result = self.project.summary()
+        elif name == "project_failures":
+            return json.dumps(self._failure_records(), ensure_ascii=False)
         elif name == "project_resolve_failure":
             if self.project.complete and not self._tool_failures:
-                return "All checks pass; no unresolved implementation failures remain. Provide the final summary."
+                return "All checks pass; no unresolved implementation failures remain. Continue the requested next step. If deployment was requested, prepare its concrete plan; do not claim it has deployed."
             if not self.project.complete or not str(args.get("reason", "")).strip():
                 raise ValueError("All project checks must pass first; provide the evidence explaining resolution")
-            failed_args = json.loads(args["failed_arguments"])
-            key = (args["failed_tool"], str(Path(failed_args["path"]).resolve()) if "path" in failed_args
-                   else json.dumps(failed_args, sort_keys=True))
+            if args.get("failure_id"):
+                record = next((r for r in self._failure_records() if r['failure_id'] == args['failure_id']), None)
+                key = (record['tool'], record['arguments_key']) if record else None
+            else:
+                try:
+                    failed_args = json.loads(args.get("failed_arguments", ""))
+                    if not isinstance(failed_args, dict):
+                        raise ValueError('Expected an object')
+                    if self.isolation and args.get('failed_tool') in FILE_TOOLS:
+                        failed_args = self.isolation.file_args(args['failed_tool'], failed_args)
+                    key = (args.get("failed_tool"), str(Path(failed_args["path"]).resolve()) if "path" in failed_args
+                           else json.dumps(failed_args, sort_keys=True))
+                except (ValueError, TypeError):
+                    raise ValueError('Use project_failures, then project_resolve_failure(failure_id=..., reason=...). '
+                                     'failed_arguments must be a JSON object string, not a shell command. Available failures: ' +
+                                     json.dumps(self._failure_records(), ensure_ascii=False)) from None
             if key not in self._tool_failures:
-                raise ValueError("No matching unresolved failure")
+                raise ValueError("No matching unresolved failure. Call project_failures for current failure_id values.")
+            self.project.state.setdefault('resolved_failures', []).append({
+                'tool': key[0], 'arguments_key': key[1], 'error': self._tool_failures[key], 'reason': args['reason']})
             del self._tool_failures[key]
             result = "Historical failure resolved against passing project checks: " + args["reason"]
         elif name == "project_pause":
@@ -1171,8 +1194,8 @@ class AgentEngine:
                 if self._verification_retries < 2:
                     self._verification_retries += 1
                     self._append_nudge("Checks passed, but tool failures remain: " +
-                        json.dumps([[list(k), v] for k, v in self._tool_failures.items()]) +
-                        " Resolve them, or use project_resolve_failure for each superseded error with an evidence-based reason.", "resolve_failures")
+                        json.dumps(self._failure_records(), ensure_ascii=False) +
+                        " Repair active failures. For a superseded error use project_resolve_failure with its failure_id and evidence-based reason.", "resolve_failures")
                     return True
             if not self.project.state and self._needs_verification and not self._tool_failures:
                 verification = self._verify_work()

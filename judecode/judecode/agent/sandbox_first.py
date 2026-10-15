@@ -35,6 +35,9 @@ Use normal read/write/edit/search in the private workspace. Start sandbox_enviro
 before shell/tests; use sandbox_status and sandbox_stop. To run servers use foreground
 commands in service specs or a background server in shell. sandbox_preview exposes
 an HTTP preview via a fixed upstream relay. All project_verify checks run in sandbox.
+Passing checks is verification, not completion of a requested deployment. Resolve superseded
+tool failures via project_failures and project_resolve_failure(failure_id, reason),
+then continue preparing the release rather than ending with "ready to deploy".
 If deployment is requested, first pass project_verify, then production_prepare with
 the exact host command, destination and rollback instructions. Show its complete plan
 and ask the human to type "deploy แผนนี้" (or DEPLOY token). Only a direct human confirmation executes that
