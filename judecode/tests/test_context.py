@@ -154,3 +154,27 @@ def test_archived_evidence_restores_only_registered_unchanged_files(tmp_path, mo
     import hashlib
     restored.restore_archives({str(outside): hashlib.sha256(b'private').hexdigest()})
     assert str(outside) not in restored.archived_results
+
+
+def test_large_old_writes_compact_as_complete_recoverable_exchanges(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path,'home',lambda:tmp_path)
+    messages=history()[:2]
+    for i in range(20):
+        messages.extend([{'role':'assistant','content':'Implement feature '+str(i),
+            'tool_calls':[{'id':str(i),'type':'function','function':{'name':'write','arguments':__import__('json').dumps({'path':'app.py','content':'code '*8000})}}]},
+            {'role':'tool','tool_call_id':str(i),'content':'File written'}])
+    original=copy.deepcopy(messages)
+    manager=ContextManager(target_tokens=24000)
+    reduced=manager.prune(messages,[])
+    assert messages==original
+    assert reduced[:2]==messages[:2]
+    assert reduced[-24:]==messages[-24:]
+    assert len(reduced)<len(messages)
+    assert any(__import__('json').loads(value)==messages[2:4] for value in manager.archived_results.values())
+    pending=set()
+    for m in reduced:
+        if m['role']=='tool':pending.remove(m['tool_call_id'])
+        else:
+            assert not pending
+            pending.update(c['id'] for c in m.get('tool_calls',[]))
+    assert not pending

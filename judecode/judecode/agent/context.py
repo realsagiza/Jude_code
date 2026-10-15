@@ -89,6 +89,56 @@ class ContextManager:
                 except OSError:
                     logger.warning("Cannot archive tool output; keeping full context", exc_info=True)
             result.append(message)
+        result = self._compact_exchanges(result, tools)
         self.last_input_tokens = estimate_tokens(result) + estimate_tokens(tools)
         self.saved_tokens += max(0, before - self.last_input_tokens)
+        return result
+
+    def _compact_exchanges(self, messages, tools):
+        """Archive old complete code-writing exchanges under sustained pressure.
+
+        Keep every user/system instruction and the twelve newest assistant turns.
+        Never split a tool batch or remove an unresolved action.
+        """
+        assistant_indices = [i for i, m in enumerate(messages) if m.get('role') == 'assistant']
+        total = estimate_tokens(messages) + estimate_tokens(tools)
+        assistant_size = sum(estimate_tokens(messages[i]) for i in assistant_indices)
+        if total <= self.target_tokens or assistant_size <= self.target_tokens or len(assistant_indices) <= 12:
+            return messages
+        cutoff = assistant_indices[-12]
+        result = []
+        i = 0
+        while i < len(messages):
+            message = messages[i]
+            calls = message.get('tool_calls', []) if message.get('role') == 'assistant' else []
+            end = i + 1
+            while calls and end < len(messages) and messages[end].get('role') == 'tool':
+                end += 1
+            batch = messages[i:end]
+            complete = calls and {c.get('id') for c in calls} == {m.get('tool_call_id') for m in batch[1:]}
+            if i < cutoff and complete and total > self.target_tokens and estimate_tokens(batch) > 1000:
+                try:
+                    directory = Path.home() / '.judecode' / 'context-results'
+                    directory.mkdir(parents=True, exist_ok=True)
+                    content = json.dumps(batch, ensure_ascii=False)
+                    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', suffix='.txt', dir=directory, delete=False) as archive:
+                        archive.write(content)
+                        path = archive.name
+                    self.archived_results[path] = content
+                    names = ', '.join(c.get('function', {}).get('name', '?') for c in calls)
+                    decision = message.get('content') or ''
+                    if not isinstance(decision, str):
+                        decision = json.dumps(decision, ensure_ascii=False)
+                    excerpt = {'role': 'assistant', 'content':
+                        'Earlier completed tool exchange archived: ' + names + '. Full arguments/results: ' + path +
+                        '. Read the archive for exact evidence; do not repeat actions to recover it. This is not a completion claim.\n' +
+                        decision[:1000] + '\nResult excerpts:\n' + '\n'.join(str(m.get('content', ''))[-300:] for m in batch[1:])}
+                    total -= estimate_tokens(batch) - estimate_tokens(excerpt)
+                    result.append(excerpt)
+                    i = end
+                    continue
+                except OSError:
+                    logger.warning('Cannot archive old exchange; retaining full history')
+            result.append(message)
+            i += 1
         return result
