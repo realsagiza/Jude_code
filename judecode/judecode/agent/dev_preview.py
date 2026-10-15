@@ -10,7 +10,7 @@ import urllib.error
 import urllib.request
 import uuid
 
-from judecode.agent.dev_sandbox import docker, snapshot
+from judecode.agent.dev_sandbox import docker, snapshot, capability_args, dependency_preflight
 from judecode.agent.project import definition
 
 LABEL = 'judecode.web-preview'
@@ -64,10 +64,15 @@ def preview_status(container):
     bindings = [binding for values in ports.values() for binding in (values or [])
                 if binding.get('HostIp') == '127.0.0.1']
     url = f"http://127.0.0.1:{bindings[0]['HostPort']}/" if bindings else None
+    ready_path = data['Config']['Labels'].get('judecode.ready-path', '/')
+    if url:
+        url = url.rstrip('/') + ready_path
     code = http_ready(url) if url and data['State']['Running'] else None
     _, logs = docker(['logs', '--tail', '80', container], 15)
-    return {'container': container, 'running': data['State']['Running'], 'url': url,
-            'http_status': code, 'ready': code is not None and 200 <= code < 400,
+    match = re.search(r'^JUDE_PREVIEW_EXIT:(\d+)$', logs, re.M)
+    startup_exit = int(match.group(1)) if match else None
+    return {'container': container, 'startup_exit_code': startup_exit, 'running': data['State']['Running'], 'url': url,
+            'http_status': code, 'ready': startup_exit is None and code is not None and 200 <= code < 400,
             'logs': logs, 'expires_at': data['Config']['Labels'].get('judecode.expires-at')}
 
 
@@ -78,7 +83,7 @@ def preview_stop(container):
     return {'container': container, 'stopped': True}
 
 
-def preview_start(root, command, port, image='python:3.12-slim', setup='', timeout=60, ttl=3600):
+def preview_start(root, command, port, image='python:3.12-slim', setup='', timeout=60, ttl=3600, system_packages=False, ready_path='/'):
     root = Path(root).expanduser().resolve()
     if not root.is_dir() or root in {Path.home(), Path(root.anchor)}:
         raise ValueError('Use an existing project directory, not home or filesystem root')
@@ -92,6 +97,10 @@ def preview_start(root, command, port, image='python:3.12-slim', setup='', timeo
         raise ValueError('command is required and setup must be text')
     if not isinstance(image, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_./:@-]*', image):
         raise ValueError('Invalid image')
+    caps = capability_args(system_packages)
+    dependency_preflight(setup, command, True, system_packages)
+    if not isinstance(ready_path, str) or not ready_path.startswith('/') or ready_path.startswith('//') or any(c.isspace() for c in ready_path):
+        raise ValueError('ready_path must be a local URL path such as /docs or /health')
     local_daemon()
     name = 'judecode-preview-' + uuid.uuid4().hex
     created = False
@@ -109,12 +118,14 @@ def preview_start(root, command, port, image='python:3.12-slim', setup='', timeo
                       'trap \'kill "$timer" 2>/dev/null; exit 124\' TERM INT; '
                       '(tar xf /tmp/judecode-source.tar -C /workspace && '
                       'rm /tmp/judecode-source.tar && sh -lc "$1" && exec sh -lc "$2") & '
-                      'app=$!; wait "$app"; result=$?; kill "$timer" 2>/dev/null; exit "$result"')
+                      'app=$!; wait "$app"; result=$?; echo "JUDE_PREVIEW_EXIT:$result"; '
+                      'wait "$timer"; exit "$result"')
             created = True
             checked(['create', '--rm', '--name', name, '--label', LABEL + '=true',
+                     '--label', 'judecode.ready-path=' + ready_path,
                      '--label', f'judecode.expires-at={int(time.time()) + ttl}',
                      '--publish', f'127.0.0.1::{port}', '--network', 'bridge',
-                     '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+                     '--cap-drop', 'ALL', *caps, '--security-opt', 'no-new-privileges',
                      '--memory', '1g', '--memory-swap', '1g', '--cpus', '2', '--pids-limit', '128',
                      '--log-opt', 'max-size=5m', '--log-opt', 'max-file=1',
                      '--init', '--no-healthcheck', '--workdir', '/workspace',
@@ -124,6 +135,8 @@ def preview_start(root, command, port, image='python:3.12-slim', setup='', timeo
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             receipt.update(preview_status(name))
+            if receipt.get('startup_exit_code') is not None:
+                raise RuntimeError(f"Preview setup/server exited with code {receipt['startup_exit_code']}. Inspect logs; verify dependencies and the application entrypoint.")
             if receipt['ready']:
                 return receipt
             time.sleep(.25)
@@ -152,7 +165,8 @@ DEFINITIONS = [
         'HTTP readiness is not acceptance-test success. Local Docker required.',
         {'root': {'type': 'string'}, 'command': {'type': 'string'}, 'port': {'type': 'integer'},
          'image': {'type': 'string'}, 'setup': {'type': 'string'}, 'timeout': {'type': 'integer'},
-         'ttl': {'type': 'integer'}}, ['root', 'command', 'port']),
+         'ready_path': {'type': 'string', 'description': 'HTTP readiness and preview path; default /; use /docs for FastAPI or /health.'},
+         'ttl': {'type': 'integer'}, 'system_packages': {'type': 'boolean'}}, ['root', 'command', 'port']),
     definition('dev_preview_status', 'Read preview URL, HTTP readiness, expiry and recent logs.',
                {'container': {'type': 'string'}}, ['container']),
     definition('dev_preview_stop', 'Stop and remove a Jude Code preview container.',

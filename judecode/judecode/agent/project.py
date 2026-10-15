@@ -26,6 +26,12 @@ append missing features. A passing build or an empty test suite is not product p
 For development/pre-deployment checks, use dev_sandbox_run to exercise a fresh Linux
 copy without modifying the host. Choose an appropriate image, explicit dependency
 setup and meaningful tests (including server/API/browser journeys inside the container).
+For dependency installation explicitly set network=true, put installs in setup, and
+never pipe installs through tail or hide stderr. For apt/apk set system_packages=true;
+prefer prebuilt images when possible. Inspect the actual app entrypoint before starting
+a preview (do not guess app:app). Install the project requirements, not a guessed
+subset. For APIs without a root page use ready_path=/docs or a real health endpoint.
+Read failure logs and fix the invocation.
 Enable network only when dependencies require it; never use production credentials/data.
 For persistent contract evidence, register a check invoking the host Jude Code Python:
 python -m judecode.agent.dev_sandbox --root . --image python:3.12-slim 'python -m unittest discover -s tests'

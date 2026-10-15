@@ -58,7 +58,23 @@ def docker(args, timeout=60):
         return result.returncode, ('[output truncated]\n' if length > 24000 else '') + text
 
 
-def run_sandbox(root, command, image='python:3.12-slim', setup='', network=False, timeout=120):
+
+def capability_args(system_packages):
+    if type(system_packages) is not bool:
+        raise ValueError('system_packages must be boolean')
+    # Only opt-in package installation capabilities; never privileged/host mounts.
+    return [item for cap in ('CHOWN', 'DAC_OVERRIDE', 'FOWNER', 'SETUID', 'SETGID')
+            for item in ('--cap-add', cap)] if system_packages else []
+
+
+def dependency_preflight(setup, command, network, system_packages):
+    text = setup + '\n' + command
+    if not network and re.search(r'\b(?:pip3?|npm|pnpm|yarn|apt-get|apt|apk)\s+(?:(?:-[^\s]+)\s+)*(?:install|ci|update|add)\b', text):
+        raise ValueError('Dependency commands need network=true. Put installs in setup; do not hide failures with pipes or output redirection.')
+    if not system_packages and re.search(r'\b(apt-get|apt|apk)\s+(?:update|install|add)\b', text):
+        raise ValueError('OS package installation needs system_packages=true and network=true; or use an image with the packages preinstalled. Python/Node packages do not need system_packages.')
+
+def run_sandbox(root, command, image='python:3.12-slim', setup='', network=False, timeout=120, system_packages=False):
     root = Path(root).expanduser().resolve()
     if not root.is_dir() or root == Path(root.anchor) or root == Path.home():
         raise ValueError('Use an existing project directory, not home or filesystem root')
@@ -68,6 +84,8 @@ def run_sandbox(root, command, image='python:3.12-slim', setup='', network=False
         raise ValueError('timeout must be 1..600 seconds; network must be boolean')
     if not isinstance(setup, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_./:@-]*', image):
         raise ValueError('Invalid setup or Docker image')
+    caps = capability_args(system_packages)
+    dependency_preflight(setup, command, network, system_packages)
     name = 'judecode-dev-' + uuid.uuid4().hex
     receipt = {'container': name, 'root': str(root), 'image': image, 'command': command,
                'setup': setup, 'network': network, 'passed': False, 'exit_code': None}
@@ -89,7 +107,7 @@ def run_sandbox(root, command, image='python:3.12-slim', setup='', network=False
             receipt['image_id'] = checked(['image', 'inspect', '--format', '{{.Id}}', image], 15)
             created = True
             checked(['create', '--name', name, '--label', 'judecode.dev-sandbox=true',
-                     '--network', 'bridge' if network else 'none', '--cap-drop', 'ALL',
+                     '--network', 'bridge' if network else 'none', '--cap-drop', 'ALL', *caps,
                      '--security-opt', 'no-new-privileges', '--memory', '1g', '--memory-swap', '1g',
                      '--cpus', '2', '--pids-limit', '128', '--init', '--no-healthcheck',
                      '--workdir', '/workspace', '--entrypoint', '/bin/sh', image,
@@ -129,6 +147,7 @@ DEFINITIONS = [definition('dev_sandbox_run',
     'Use test data only. Commands run in /workspace. Does not deploy or modify source. '
     'Tests may start a server and exercise it inside the same command.',
     {'root': {'type': 'string'}, 'command': {'type': 'string'}, 'image': {'type': 'string'},
+     'system_packages': {'type': 'boolean', 'description': 'Opt in to limited capabilities required for apt/apk installs. Default false.'},
      'setup': {'type': 'string'}, 'network': {'type': 'boolean'}, 'timeout': {'type': 'integer'}},
     ['root', 'command'])]
 
@@ -138,6 +157,7 @@ def main():
     parser.add_argument('--root', default='.')
     parser.add_argument('--image', default='python:3.12-slim')
     parser.add_argument('--setup', default='')
+    parser.add_argument('--system-packages', action='store_true')
     parser.add_argument('--network', action='store_true')
     parser.add_argument('--timeout', type=int, default=120)
     parser.add_argument('command')

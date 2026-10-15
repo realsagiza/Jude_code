@@ -72,3 +72,45 @@ def test_tools_registered_and_failures_propagated(monkeypatch):
     assert set(preview.FUNCTIONS) <= names
     monkeypatch.setitem(tools.PREVIEW_FUNCTIONS, 'dev_preview_start', lambda **kw: {'error': 'failed', 'ready': False})
     assert tools.execute_tool('dev_preview_start', {}).startswith(tools.TOOL_ERROR_PREFIX)
+
+
+def test_early_exit_logs_survive_until_cleanup(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(preview, 'local_daemon', lambda: None)
+    def fake(args, timeout=60):
+        calls.append(args)
+        return 0, 'ok'
+    monkeypatch.setattr(preview, 'docker', fake)
+    monkeypatch.setattr(preview, 'preview_status', lambda name: {
+        'ready': False, 'startup_exit_code': 7, 'logs': 'missing dependency\nJUDE_PREVIEW_EXIT:7'})
+    result = preview.preview_start(str(tmp_path), 'server', 8000)
+    assert result['startup_exit_code'] == 7
+    assert 'missing dependency' in result['logs'] and result['cleaned_up']
+    assert 'exited with code 7' in result['error']
+    assert calls[-1][0] == 'rm'
+
+
+def test_exit_marker_overrides_http_readiness(monkeypatch):
+    monkeypatch.setattr(preview, 'local_daemon', lambda: None)
+    monkeypatch.setattr(preview, 'inspect_preview', lambda name: {
+        'State': {'Running': True}, 'Config': {'Labels': {}},
+        'NetworkSettings': {'Ports': {'8000/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '1234'}]}}})
+    monkeypatch.setattr(preview, 'http_ready', lambda url: 200)
+    monkeypatch.setattr(preview, 'docker', lambda *a: (0, 'JUDE_PREVIEW_EXIT:1\n'))
+    result = preview.preview_status(NAME)
+    assert not result['ready'] and result['startup_exit_code'] == 1
+
+
+def test_api_readiness_path(monkeypatch):
+    monkeypatch.setattr(preview, 'local_daemon', lambda: None)
+    monkeypatch.setattr(preview, 'inspect_preview', lambda name: {
+        'State': {'Running': True}, 'Config': {'Labels': {'judecode.ready-path': '/docs'}},
+        'NetworkSettings': {'Ports': {'8000/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '1234'}]}}})
+    urls = []
+    def probe(url):
+        urls.append(url)
+        return 200
+    monkeypatch.setattr(preview, 'http_ready', probe)
+    monkeypatch.setattr(preview, 'docker', lambda *a: (0, ''))
+    assert preview.preview_status(NAME)['ready']
+    assert urls == ['http://127.0.0.1:1234/docs']

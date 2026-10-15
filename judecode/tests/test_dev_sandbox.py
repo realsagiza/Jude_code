@@ -93,3 +93,14 @@ def test_cli_exit_status_matches_evidence(tmp_path, monkeypatch, capsys, passed)
         sandbox.main()
     assert exc.value.code == (0 if passed else 1)
     assert json.loads(capsys.readouterr().out)['passed'] is passed
+
+
+def test_dependency_preflight_actionable_and_offline_tests_allowed():
+    with pytest.raises(ValueError, match='network=true'):
+        sandbox.dependency_preflight('pip install -r requirements.txt', '', False, False)
+    with pytest.raises(ValueError, match='system_packages=true'):
+        sandbox.dependency_preflight('apt-get update', '', True, False)
+    sandbox.dependency_preflight('', 'npm test', False, False)
+    sandbox.dependency_preflight('apt-get update', '', True, True)
+    assert '--privileged' not in sandbox.capability_args(True)
+    assert sandbox.capability_args(False) == []

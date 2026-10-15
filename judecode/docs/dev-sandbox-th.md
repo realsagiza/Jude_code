@@ -101,8 +101,8 @@ Jude Code มีเครื่องมือ `dev_preview_start`, `dev_preview
 - Docker เลือก host port ว่างอัตโนมัติ ผูกเฉพาะ `127.0.0.1`
 - ใช้ bridge network เพื่อ publish port จึงมี outbound/LAN access; ใช้ test data เท่านั้น
 - URL ใช้บนเครื่องที่รัน Jude Code; ไม่ใช่ public URL และเปิดจากมือถือผ่าน Telegram ไม่ได้
-- start รอ HTTP 2xx/3xx ที่ `/` (ไม่ follow redirects); timeout แล้วล้าง container
-  HTTP 4xx/5xx ถือว่ายังไม่พร้อม หากแอปไม่มี route `/` ให้เพิ่มสำหรับ preview
+- start รอ HTTP 2xx/3xx ที่ ready_path (default `/`, ไม่ follow redirects); timeout แล้วล้าง container
+  HTTP 4xx/5xx ถือว่ายังไม่พร้อม หากแอปไม่มี route `/` ให้ตั้ง ready_path เช่น `/docs` หรือ `/health`
 - status แสดง URL, HTTP status, expiry และ logs ล่าสุด; readiness ไม่ใช่ test success
 - หมดอายุในหนึ่งชั่วโมง ปรับได้ 5 วินาที–4 ชั่วโมง; timer รวมช่วงติดตั้ง dependencies
 - ปิดด้วย dev_preview_stop โดยใช้ชื่อ container จากผล start
@@ -113,3 +113,17 @@ Jude Code มีเครื่องมือ `dev_preview_start`, `dev_preview
 
 การผูกพอร์ตอ้างอิง [Docker port publishing](https://docs.docker.com/engine/network/port-publishing/)
 ใช้ Docker Engine 28 ขึ้นไปเพื่อหลีกเลี่ยงข้อจำกัด localhost publishing ของรุ่นเก่า
+
+
+## แก้ปัญหาเปิด sandbox ไม่ได้ (2026-10-15)
+
+- ติดตั้ง pip/npm dependencies: กำหนด network=true และใช้ setup ติดตั้ง requirements ของโปรเจค
+- apt/apk: เพิ่ม system_packages=true (CLI: --system-packages) เพื่อให้สิทธิ์จำกัด
+  CHOWN/DAC_OVERRIDE/FOWNER/SETUID/SETGID ใน container เท่านั้น; default ยัง drop ทั้งหมด
+- การติดตั้งโดยปิด network หรือไม่เปิดสิทธิ์ OS packages จะคืนคำแนะนำก่อนสร้าง container
+- ไม่ซ่อน output ของ setup ด้วย redirect หรือ pipe ผ่าน tail ซึ่งอาจกลบ failure
+- Preview ที่ setup/server จบทันที จะเก็บ logs + startup_exit_code ให้เครื่องมืออ่านก่อน cleanup
+  ขณะที่ไม่มี caller มารับ error container ยังถูก TTL ล้างตามเดิม
+- API ที่ไม่มีหน้า root ใช้ ready_path=/docs หรือ endpoint สุขภาพที่มีจริง
+- ผลตรวจ: apt-get install curl จริงผ่าน, log ของ setup failure/uvicorn import failure
+  ไม่หาย; HTTP/status/stop/TTL/readiness timeout ยังผ่าน
