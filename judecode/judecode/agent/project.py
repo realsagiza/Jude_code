@@ -23,6 +23,16 @@ path. Implement one vertical slice through UI/API/storage before expanding it.
 Write checks from requirements, not by copying the implementation's assumptions.
 Before delivery, compare the original request against the contract for omitted scope;
 append missing features. A passing build or an empty test suite is not product proof.
+For development/pre-deployment checks, use dev_sandbox_run to exercise a fresh Linux
+copy without modifying the host. Choose an appropriate image, explicit dependency
+setup and meaningful tests (including server/API/browser journeys inside the container).
+Enable network only when dependencies require it; never use production credentials/data.
+For persistent contract evidence, register a check invoking the host Jude Code Python:
+python -m judecode.agent.dev_sandbox --root . --image python:3.12-slim 'python -m unittest discover -s tests'
+Use the actual interpreter that has judecode installed. Each invocation takes a fresh
+snapshot; rerun after code edits. A failed/unavailable sandbox blocks claims of tested
+readiness: fix it or report the blocker, never silently fall back to host execution.
+Sandbox success is evidence for its explicit tests, not permission to deploy.
 Report what was actually exercised and what remains untested; do not claim 100% quality.
 """
 

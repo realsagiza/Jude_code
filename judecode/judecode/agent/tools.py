@@ -1328,6 +1328,9 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
 
 from judecode.agent.schedule_tools import SCHEDULE_DEFINITIONS, SCHEDULE_NAMES, execute_schedule_tool
 
+from judecode.agent.dev_sandbox import DEFINITIONS as DEV_SANDBOX_DEFINITIONS, run_sandbox
+
+TOOL_DEFINITIONS.extend(DEV_SANDBOX_DEFINITIONS)
 TOOL_DEFINITIONS.extend(SCHEDULE_DEFINITIONS)
 TOOL_DEFINITIONS.extend(MEDIA_TOOL_DEFINITIONS)
 TOOL_DEFINITIONS.extend(DIRECTOR_DEFINITIONS)
@@ -1337,6 +1340,10 @@ def execute_tool(
     tool_params: dict[str, Any],
 ) -> str:
     try:
+        if tool_name == "dev_sandbox_run":
+            result = run_sandbox(**tool_params)
+            output = json.dumps(result, ensure_ascii=False)
+            return output if result["passed"] else f"{TOOL_ERROR_PREFIX} 'dev_sandbox_run': {output}"
         if tool_name in SCHEDULE_NAMES:
             return execute_schedule_tool(tool_name, tool_params)
         if tool_name in DIRECTOR_FUNCTIONS:
