@@ -206,3 +206,22 @@ def test_staged_snapshot_is_rejected(engine):
     path.write_text(json.dumps(data))
     with pytest.raises(ValueError, match='staged'):
         engine.resume_session(engine.autonomous.session.session_id)
+
+
+def test_interrupted_batch_followed_by_status_restores_unknown_without_replay(engine):
+    engine.messages += [{'role':'assistant','content':None,'tool_calls':[
+        {'id':'interrupted','type':'function','function':{'name':'shell','arguments':'{}'}}]},
+        {'role':'assistant','content':'Paused: execution interrupted'}]
+    engine.save_transcript()
+    source=engine.autonomous.session.session_id
+    original=TranscriptStore().path(source).read_bytes()
+    engine = AgentEngine('system', ScriptedAPI(), sandbox_first=False)
+    engine.autonomous.enabled = False
+    engine.resume_session(source)
+    assert engine._resume_uncertain
+    assert engine.messages[-2]['tool_call_id']=='interrupted'
+    assert 'unknown' in engine.messages[-2]['content']
+    assert engine.messages[-1]['content']=='Paused: execution interrupted'
+    asyncio.run(engine.continue_task())
+    assert not engine.api.requests
+    assert TranscriptStore().path(source).read_bytes()==original

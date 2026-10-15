@@ -83,6 +83,7 @@ class TranscriptStore:
             raise ValueError('Missing system message')
         # Only accept structurally valid conversations, including unfinished tool batches.
         pending = set()
+        repaired = []
         for message in messages:
             if not isinstance(message, dict) or message.get('role') not in ('system', 'user', 'assistant', 'tool'):
                 raise ValueError('Invalid conversation message')
@@ -95,7 +96,13 @@ class TranscriptStore:
                 pending.remove(identifier)
             else:
                 if pending:
-                    raise ValueError('Unfinished tool batch inside conversation')
+                    # An interruption can append a final status before every tool
+                    # result is recorded. Preserve uncertainty, never replay calls.
+                    for identifier in sorted(pending):
+                        repaired.append({'role': 'tool', 'tool_call_id': identifier,
+                            'content': 'Execution outcome unknown after interruption. Do not replay this action. Inspect current state before deciding what remains.'})
+                    data['uncertain'] = True
+                    pending.clear()
                 calls = message.get('tool_calls', [])
                 if not isinstance(calls, list):
                     raise ValueError('Invalid tool calls')
@@ -106,6 +113,8 @@ class TranscriptStore:
                     if not isinstance(function, dict) or not isinstance(function.get('name'), str) or not isinstance(function.get('arguments'), str):
                         raise ValueError('Invalid tool function')
                     pending.add(call['id'])
+            repaired.append(message)
+        data['messages'] = repaired
         return data, pending
 
     def list(self, cwd):
