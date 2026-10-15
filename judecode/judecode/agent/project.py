@@ -33,6 +33,12 @@ Use the actual interpreter that has judecode installed. Each invocation takes a 
 snapshot; rerun after code edits. A failed/unavailable sandbox blocks claims of tested
 readiness: fix it or report the blocker, never silently fall back to host execution.
 Sandbox success is evidence for its explicit tests, not permission to deploy.
+When a user wants web preview, call dev_preview_start with a foreground server bound
+on 0.0.0.0 and its container port, then show the returned localhost URL. Use
+dev_preview_status for logs/readiness and dev_preview_stop when finished or replacing
+it. Previews are fresh snapshots, so restart after editing source. They expire after
+one hour by default. HTTP readiness is not acceptance-test success. Local URLs are
+only accessible on the machine running Jude Code, not a remote Telegram client.
 Report what was actually exercised and what remains untested; do not claim 100% quality.
 """
 

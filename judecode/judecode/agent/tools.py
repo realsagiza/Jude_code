@@ -1330,6 +1330,9 @@ from judecode.agent.schedule_tools import SCHEDULE_DEFINITIONS, SCHEDULE_NAMES, 
 
 from judecode.agent.dev_sandbox import DEFINITIONS as DEV_SANDBOX_DEFINITIONS, run_sandbox
 
+from judecode.agent.dev_preview import DEFINITIONS as PREVIEW_DEFINITIONS, FUNCTIONS as PREVIEW_FUNCTIONS
+
+TOOL_DEFINITIONS.extend(PREVIEW_DEFINITIONS)
 TOOL_DEFINITIONS.extend(DEV_SANDBOX_DEFINITIONS)
 TOOL_DEFINITIONS.extend(SCHEDULE_DEFINITIONS)
 TOOL_DEFINITIONS.extend(MEDIA_TOOL_DEFINITIONS)
@@ -1340,6 +1343,10 @@ def execute_tool(
     tool_params: dict[str, Any],
 ) -> str:
     try:
+        if tool_name in PREVIEW_FUNCTIONS:
+            result = PREVIEW_FUNCTIONS[tool_name](**tool_params)
+            output = json.dumps(result, ensure_ascii=False)
+            return f"{TOOL_ERROR_PREFIX} '{tool_name}': {output}" if result.get("error") else output
         if tool_name == "dev_sandbox_run":
             result = run_sandbox(**tool_params)
             output = json.dumps(result, ensure_ascii=False)

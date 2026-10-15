@@ -49,7 +49,8 @@ CLI exit 1 เมื่อ test/setup/cleanup ล้มเหลว, timeout ห
   output (ท้ายสุดไม่เกิน 24KB ต่อขั้นตอน), cleanup status ในผล tool/ประวัติแชต
 - source ไม่เกิน 256MiB; timeout 1–600 วินาทีต่อ setup/test (pull สูงสุด 300s)
 - test เปิด server แล้วเรียก localhost ภายใน container เดียวกันได้
-  ไม่มี port เปิดออก host, interactive preview, database companion หรือ Compose ในรุ่นนี้
+  dev_sandbox_run ไม่มี port เปิดออก host; web preview ใช้เครื่องมือแยกด้านล่าง
+  ยังไม่มี database companion หรือ Compose
 - ผลผ่านยืนยันเฉพาะ assertions ที่รัน ต้องเขียน user-journey tests ตามงานจริง
 - ถ้า daemon ล่มระหว่าง cleanup ผลจะเป็น failed พร้อมชื่อ container สำหรับตรวจสอบ
   ถ้า process ถูก SIGKILL อาจเหลือ container: ตรวจ `docker ps -a --filter label=judecode.dev-sandbox=true`
@@ -74,3 +75,41 @@ Ubuntu ต้องติดตั้ง source รุ่นนี้และ�
 - live pip install pytest แล้ว import ได้เมื่อเปิด network
 - ยังไม่ได้ benchmark การเลือกเครื่องมือโดยโมเดลจริงหรือ browser UI E2E;
   ยังไม่ได้ติดตั้ง source รุ่นนี้บน Ubuntu หรือ rebuild legacy .app
+
+
+## Web preview (เพิ่ม 2026-10-15)
+
+สั่งในแชต: “เปิด web preview ของโปรเจคนี้ให้ดูหน่อย”
+Jude Code มีเครื่องมือ `dev_preview_start`, `dev_preview_status`, `dev_preview_stop`
+และจะส่ง URL เช่น `http://127.0.0.1:32768/` ให้กดเปิดใน browser
+
+ตัวอย่าง arguments ของ dev_preview_start:
+
+```json
+{
+  "root": "/path/to/web-project",
+  "image": "node:22-slim",
+  "setup": "npm ci",
+  "command": "npm run dev -- --host 0.0.0.0 --port 5173",
+  "port": 5173,
+  "timeout": 120,
+  "ttl": 3600
+}
+```
+
+- server ต้องรัน foreground และ bind `0.0.0.0` ภายใน container
+- Docker เลือก host port ว่างอัตโนมัติ ผูกเฉพาะ `127.0.0.1`
+- ใช้ bridge network เพื่อ publish port จึงมี outbound/LAN access; ใช้ test data เท่านั้น
+- URL ใช้บนเครื่องที่รัน Jude Code; ไม่ใช่ public URL และเปิดจากมือถือผ่าน Telegram ไม่ได้
+- start รอ HTTP 2xx/3xx ที่ `/` (ไม่ follow redirects); timeout แล้วล้าง container
+  HTTP 4xx/5xx ถือว่ายังไม่พร้อม หากแอปไม่มี route `/` ให้เพิ่มสำหรับ preview
+- status แสดง URL, HTTP status, expiry และ logs ล่าสุด; readiness ไม่ใช่ test success
+- หมดอายุในหนึ่งชั่วโมง ปรับได้ 5 วินาที–4 ชั่วโมง; timer รวมช่วงติดตั้ง dependencies
+- ปิดด้วย dev_preview_stop โดยใช้ชื่อ container จากผล start
+  ลบได้เฉพาะชื่อและ label ของ preview; container ที่หมดอายุแล้วจะรายงานว่าไม่พบ
+- snapshot แยกจาก source ไม่มี live reload จาก host: แก้โค้ดแล้ว stop/start ใหม่
+- ใช้ Docker daemon ในเครื่องเท่านั้น ไม่รองรับ remote Docker context
+- ทดสอบจริง: เปิด HTTP/read content, status, stop, expiry, readiness timeout และ setup failure ผ่าน
+
+การผูกพอร์ตอ้างอิง [Docker port publishing](https://docs.docker.com/engine/network/port-publishing/)
+ใช้ Docker Engine 28 ขึ้นไปเพื่อหลีกเลี่ยงข้อจำกัด localhost publishing ของรุ่นเก่า

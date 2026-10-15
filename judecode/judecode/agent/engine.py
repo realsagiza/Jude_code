@@ -330,7 +330,8 @@ class AgentEngine:
         )
 
     # Conservatively treat other tools as requiring outcome verification.
-    READ_ONLY_TOOLS = {"read", "glob", "grep", "ls", "web_fetch", "web_search",
+    # Preview lifecycle changes containers, not implementation files or acceptance evidence.
+    READ_ONLY_TOOLS = {"dev_preview_start", "dev_preview_status", "dev_preview_stop", "read", "glob", "grep", "ls", "web_fetch", "web_search",
                        "codebase_search", "codebase_summary", "vault_read_note",
                        "vault_search", "task_list", "task_get", "task_summary",
                        "schedule_create", "schedule_list", "schedule_manage",
