@@ -20,11 +20,12 @@ PROMPT = '''
 SANDBOX-FIRST IS ENFORCED. This overrides legacy dev_sandbox/preview instructions.
 Do not nest Docker or use host interpreter paths in checks; shell cwd is /workspace. All implementation files are a private copy; original
 source and production are untouched. shell runs only in the isolated environment,
-not on the host. Start sandbox_environment with a runtime image and all required
+not on the host. Start sandbox_environment with a runtime image (this automatically creates the persistent
+app service; services=[] suffices for a single Python app) and all required
 services (database/cache/worker/mock integrations). Each service uses fresh test data
 and private DNS by name. No production credentials, host socket, external/LAN egress,
 or arbitrary Compose/host mounts. Images must contain dependencies; setup commands
-run offline. For Python 3.12, sandbox_python_packages fetches binary wheels in a
+run offline. sandbox_python_packages detects the selected Python runtime (3.10–3.13) and fetches binary wheels in a
 source-free helper then installs them offline; it never runs application code online.
 For Node20 use sandbox_node_packages (install scripts disabled), then rebuild offline.
 Give code-running service specs workspace=true to mount only the private copy.
@@ -67,12 +68,12 @@ SAFE_TOOLS = {'task_add', 'task_list', 'task_get', 'task_start', 'task_complete'
 DEFINITIONS = [
     definition('sandbox_environment', 'Start isolated full-system test environment. All services are disposable; no external network. Dependencies must be in images. Existing environment must be stopped first.',
         {'image': {'type': 'string'}, 'services': {'type': 'array', 'items': {'type': 'object',
-          'properties': {'name': {'type': 'string'}, 'image': {'type': 'string'},
-                         'command': {'type': 'string'}, 'workspace': {'type': 'boolean', 'description': 'Mount only the private source copy at /workspace, never original source.'}, 'env': {'type': 'object', 'additionalProperties': {'type': 'string'}}},
+          'properties': {'name': {'type': 'string', 'description': 'Unique service name; app is reserved and already created from the top-level image.'}, 'image': {'type': 'string'},
+                         'command': {'type': 'string'}, 'workspace': {'type': 'boolean', 'description': 'Mount private source at /workspace. Without command, keep this runtime alive for sandbox_exec; supply command to start a server.'}, 'env': {'type': 'object', 'additionalProperties': {'type': 'string'}}},
           'required': ['name', 'image'], 'additionalProperties': False}},
          'env': {'type': 'object', 'additionalProperties': {'type': 'string'}}}, ['image', 'services']),
-    definition('sandbox_python_packages', 'Download binary Python 3.12 wheels from PyPI in a source-free helper and install offline in the sandbox app. No source distributions or build scripts. Supply package names/version constraints, never URLs.', {'packages': {'type': 'array', 'items': {'type': 'string'}}, 'service': {'type': 'string'}}, ['packages']),
-    definition('sandbox_node_packages', 'Install named npm packages with scripts disabled in a source-free Node20 helper; copy node_modules to the selected sandbox runtime. No URLs. Run required rebuild scripts offline. Does not edit source package.json.', {'packages': {'type': 'array', 'items': {'type': 'string'}}, 'service': {'type': 'string'}, 'directory': {'type': 'string'}}, ['packages']),
+    definition('sandbox_python_packages', 'Download binary wheels matching the selected Python 3.10–3.13 runtime from PyPI in a source-free helper and install offline in the sandbox app. No source distributions or build scripts. Supply package names/version constraints, never URLs.', {'packages': {'type': 'array', 'items': {'type': 'string'}}, 'service': {'type': 'string'}}, ['packages']),
+    definition('sandbox_node_packages', 'Install npm dependencies with scripts disabled in a source-free Node20 helper. Omit packages to run npm ci from the project package.json/package-lock.json (registry-only lockfile). Or supply package names/version ranges. Copy node_modules into selected runtime; no source code/credentials mounted online.', {'packages': {'type': 'array', 'items': {'type': 'string'}}, 'service': {'type': 'string'}, 'directory': {'type': 'string'}, 'legacy_peer_deps': {'type': 'boolean'}}, []),
     definition('sandbox_exec', 'Run a command in a named sandbox service; same isolated network and no host execution.', {'service': {'type': 'string'}, 'command': {'type': 'string'}, 'cwd': {'type': 'string'}, 'timeout': {'type': 'integer'}}, ['service', 'command']),
     definition('sandbox_status', 'Show private workspace, containers, logs and network.', {}, []),
     definition('sandbox_stop', 'Remove test containers/network; preserve private source edits.', {}, []),
@@ -208,7 +209,10 @@ class SandboxFirst:
                 argv = self.base_args(container) + [*capability_args(True), '--network-alias', name, *variables]
                 if workspace:
                     argv += ['--mount', f'type=bind,src={self.workspace},dst=/workspace', '--workdir', '/workspace']
-                argv += [candidate]
+                if workspace and command is None:
+                    argv += ['--entrypoint', 'sh', candidate, '-c', 'while :; do sleep 3600; done']
+                else:
+                    argv += [candidate]
                 if command is not None:
                     if not isinstance(command, str):
                         raise ValueError('Service command must be text')
@@ -440,6 +444,11 @@ class SandboxFirst:
                 any(not isinstance(p, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*(?:\[[A-Za-z0-9_,.-]+\])?(?:[=<>!~]{1,2}[A-Za-z0-9.*+-]+(?:,[=<>!~]{1,2}[A-Za-z0-9.*+-]+)*)?', p) for p in packages)):
             raise ValueError('Only package names and version constraints are accepted')
         target = self.target(service)
+        version = checked(['exec', target, 'python', '-c',
+                           'import sys; print(str(sys.version_info.major) + "." + str(sys.version_info.minor))'], 15).strip()
+        if version not in {'3.10', '3.11', '3.12', '3.13'}:
+            raise ValueError('Binary wheel helper supports Python 3.10–3.13')
+        helper_image = 'python:' + version + '-slim'
         cache = self.base / ('wheels-' + uuid.uuid4().hex)
         cache.mkdir()
         helper = 'jude-packages-' + self.identifier
@@ -447,7 +456,7 @@ class SandboxFirst:
             checked(['run', '--name', helper, '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
                      '--memory', '1g', '--pids-limit', '128', '--network', 'bridge',
                      '--mount', f'type=bind,src={cache},dst=/wheels', '--entrypoint', 'python',
-                     'python:3.12-slim', '-m', 'pip', '--isolated', 'download', '--only-binary=:all:',
+                     helper_image, '-m', 'pip', '--isolated', 'download', '--only-binary=:all:',
                      '--index-url', 'https://pypi.org/simple', '--dest', '/wheels', *packages], 300)
             # Copy wheels into the container; never let the downloader see source or credentials.
             checked(['cp', str(cache) + '/.', target + ':/tmp/'])
@@ -459,29 +468,54 @@ class SandboxFirst:
             docker(['rm', '-f', '-v', helper], 30)
 
 
-    def node_packages(self, packages, service='app', directory='.'):
+    def node_packages(self, packages=None, service='app', directory='.', legacy_peer_deps=False):
         target = self.target(service)
         destination = '/workspace/' + self.mapped(directory).relative_to(self.workspace).as_posix()
         pattern = r'(?:@[A-Za-z0-9_.-]+/)?[A-Za-z0-9][A-Za-z0-9_.-]*(?:@[A-Za-z0-9.*^~<>=|+ -]+)?'
-        if (not isinstance(packages, list) or not 1 <= len(packages) <= 100 or
+        if packages is not None and (not isinstance(packages, list) or not 1 <= len(packages) <= 100 or
                 any(not isinstance(p, str) or not re.fullmatch(pattern, p) for p in packages)):
             raise ValueError('Use npm package names/version ranges only, never URLs or paths')
+        if type(legacy_peer_deps) is not bool:
+            raise ValueError('legacy_peer_deps must be boolean')
+        manifest = {'name': 'judecode-sandbox-deps', 'version': '1.0.0', 'private': True}
+        lock = None
+        if packages is None:
+            project_dir = self.mapped(directory)
+            original = json.loads(self.mapped(str(project_dir / 'package.json')).read_text())
+            lock = json.loads(self.mapped(str(project_dir / 'package-lock.json')).read_text())
+            if lock.get('lockfileVersion') not in {2, 3} or not isinstance(lock.get('packages'), dict):
+                raise ValueError('Use npm package-lock v2/v3 for reproducible installation')
+            for field in ('dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'):
+                values = original.get(field, {})
+                if not isinstance(values, dict) or any(not isinstance(v, str) or not re.fullmatch(pattern, k + '@' + v) for k, v in values.items()):
+                    raise ValueError('Manifest dependencies must be registry package names/version ranges')
+                manifest[field] = values
+            for item in lock['packages'].values():
+                resolved = item.get('resolved', '')
+                if item.get('link') or (resolved and not resolved.startswith('https://registry.npmjs.org/')):
+                    raise ValueError('Lockfile may contain only npm registry artifacts, no URLs/links outside registry')
+            # Strip scripts, config, npmrc and all source. Preserve the dependency graph.
+            manifest['name'] = original.get('name', manifest['name'])
+            manifest['version'] = original.get('version', manifest['version'])
         cache = self.base / ('node-' + uuid.uuid4().hex)
         cache.mkdir()
-        (cache / 'package.json').write_text('{"name":"judecode-sandbox-deps","version":"1.0.0","private":true}')
+        (cache / 'package.json').write_text(json.dumps(manifest))
+        if lock is not None:
+            (cache / 'package-lock.json').write_text(json.dumps(lock))
         helper = 'jude-node-packages-' + self.identifier
         try:
             checked(['run', '--name', helper, '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
                      '--memory', '1g', '--pids-limit', '128', '--network', 'bridge',
                      '--mount', f'type=bind,src={cache},dst=/packages', '--workdir', '/packages',
-                     '--entrypoint', 'npm', 'node:20-alpine', 'install', '--ignore-scripts', '--no-audit',
-                     '--no-fund', '--registry=https://registry.npmjs.org', *packages], 300)
+                     '--entrypoint', 'npm', 'node:20-alpine', 'ci' if packages is None else 'install', '--ignore-scripts', '--no-audit',
+                     '--no-fund', '--registry=https://registry.npmjs.org',
+                     *(['--legacy-peer-deps'] if legacy_peer_deps else []), *(packages or [])], 600)
             # Only copy to container paths. Source package manifests remain authored in sandbox.
             result = self.run('mkdir -p ' + shlex.quote(destination), service=service)
             if result['exit_code']:
                 raise RuntimeError(result['stdout'] + result['stderr'])
             checked(['cp', str(cache / 'node_modules'), target + ':' + destination + '/'])
-            return {'installed': packages, 'service': service, 'directory': destination,
+            return {'installed': packages if packages is not None else 'project lockfile', 'service': service, 'directory': destination,
                     'scripts': 'disabled; run necessary build/rebuild commands offline in sandbox'}
         finally:
             docker(['rm', '-f', '-v', helper], 30)

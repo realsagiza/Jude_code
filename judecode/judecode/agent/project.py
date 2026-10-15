@@ -49,6 +49,11 @@ Report what was actually exercised and what remains untested; do not claim 100% 
 """
 
 
+# Strict mode must not advertise legacy host/network tools that it blocks.
+SANDBOX_PROMPT = PROMPT.split('For development/pre-deployment checks,')[0] + (
+    'All checks run inside the active sandbox. Report actual evidence and remaining gaps.\n')
+
+
 def _empty_test_run(output):
     # These are runner summaries, not arbitrary mentions of "0 tests" in logs.
     return bool(re.search(r'(?m)^\s*(?:Ran 0 tests in [^\n]+|'

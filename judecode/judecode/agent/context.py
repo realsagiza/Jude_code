@@ -31,6 +31,7 @@ class ContextManager:
         self.saved_tokens = 0
         self.last_input_tokens = 0
         self._excerpts: set[str] = set()
+        self.archived_results: dict[str, str] = {}
 
     def prune(self, messages: list[dict], tools: list[dict]) -> list[dict]:
         before = estimate_tokens(messages) + estimate_tokens(tools)
@@ -55,6 +56,7 @@ class ContextManager:
                             suffix=".txt", dir=directory, delete=False) as archive:
                         archive.write(content)
                         path = archive.name
+                    self.archived_results[path] = content
                     notice = (f"\n[Excerpt of {len(content)} chars. Full result: {path}. "
                               "Use read with offset/limit or search this file for omitted details; "
                               "do not rerun the original tool just to recover output.]\n")

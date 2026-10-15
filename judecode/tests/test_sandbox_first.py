@@ -401,3 +401,74 @@ def test_chat_exits_package_loop_without_more_model_calls(engine, monkeypatch):
     assert len(installed) == len(engine.api.requests) == 3
     assert engine.autonomous.session.status == 'unverified'
     assert 'Stopped a loop' in engine.autonomous.session.outcome_reason
+
+
+def test_strict_prompt_has_no_legacy_host_sandbox_recipe(engine):
+    assert 'python -m judecode.agent.dev_sandbox --root' not in engine.system_prompt
+    assert 'For dependency installation explicitly set network=true' not in engine.system_prompt
+
+
+def test_workspace_runtime_stays_alive_without_command(engine, monkeypatch):
+    from judecode.agent import sandbox_first as module
+    invoked = []
+    monkeypatch.setattr(module, 'local_daemon', lambda: None)
+    def checked(args, *rest):
+        invoked.append(args)
+        return '29.2.1' if args[0] == 'version' else 'ok'
+    monkeypatch.setattr(module, 'checked', checked)
+    monkeypatch.setattr(module, 'docker', lambda *args: (0, 'running'))
+    engine.isolation.start(services=[{'name':'frontend','image':'node:20-alpine','workspace':True}])
+    service = next(args for args in invoked if args[:2] == ['run','-d'] and 'frontend' in args)
+    assert service[-5:] == ['--entrypoint', 'sh', 'node:20-alpine', '-c', 'while :; do sleep 3600; done']
+
+
+def test_context_archive_can_be_read_without_host_file_access(engine):
+    path = '/private/session-tool-output.txt'
+    engine.context.archived_results[path] = 'first\nactual failure details\nlast'
+    assert engine._execute_tool_safe('read', {'path':path, 'offset':2, 'limit':1}) == 'actual failure details'
+    assert engine._execute_tool_safe('write', {'path':path, 'content':'bad'}).startswith('Error')
+    assert engine._execute_tool_safe('read', {'path':'/private/other-session.txt'}).startswith('Error')
+
+
+def test_wheels_match_selected_python_runtime(engine, monkeypatch):
+    from judecode.agent import sandbox_first as module
+    root=engine.isolation
+    root.ensure_workspace(); root.containers=[root.app]
+    commands=[]
+    def checked(args, *rest):
+        commands.append(args)
+        return '3.10' if args[0] == 'exec' else ''
+    monkeypatch.setattr(module, 'checked', checked)
+    monkeypatch.setattr(module, 'docker', lambda *args: (0, ''))
+    monkeypatch.setattr(root, 'run', lambda *args, **kwargs: {'exit_code':0,'stdout':'installed','stderr':''})
+    root.python_packages(['pymongo'])
+    helper=next(args for args in commands if args[0]=='run')
+    assert 'python:3.10-slim' in helper
+    assert str(root.workspace) not in ' '.join(helper)
+
+
+def test_npm_lockfile_install_is_source_free_and_scripts_disabled(engine, monkeypatch):
+    from judecode.agent import sandbox_first as module
+    root=engine.isolation
+    root.ensure_workspace(); root.containers=[root.app]
+    root.mapped('package.json').write_text(json.dumps({'name':'demo','version':'1.0.0','scripts':{'preinstall':'bad'},'dependencies':{'react':'18.3.1'}}))
+    root.mapped('package-lock.json').write_text(json.dumps({'lockfileVersion':3,'packages':{'':{},'node_modules/react':{'resolved':'https://registry.npmjs.org/react/-/react-18.3.1.tgz'}}}))
+    commands=[]
+    monkeypatch.setattr(module, 'checked', lambda args,*rest: commands.append(args) or '')
+    monkeypatch.setattr(module, 'docker', lambda *args: (0,''))
+    monkeypatch.setattr(root, 'run', lambda *args,**kwargs: {'exit_code':0,'stdout':'','stderr':''})
+    root.node_packages()
+    helper=next(args for args in commands if args[0]=='run')
+    assert 'ci' in helper and '--ignore-scripts' in helper
+    assert str(root.workspace) not in ' '.join(helper)
+    cached=next(root.base.glob('node-*/package.json'))
+    assert 'scripts' not in json.loads(cached.read_text())
+
+
+def test_npm_lockfile_rejects_non_registry_sources(engine, monkeypatch):
+    root=engine.isolation
+    root.ensure_workspace(); root.containers=[root.app]
+    root.mapped('package.json').write_text('{}')
+    root.mapped('package-lock.json').write_text(json.dumps({'lockfileVersion':3,'packages':{'node_modules/bad':{'resolved':'http://10.0.0.1/private'}}}))
+    with pytest.raises(ValueError,match='registry'):
+        root.node_packages()

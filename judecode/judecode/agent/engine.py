@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from judecode.api.client import ApiClient
 from judecode.agent.tools import TOOL_DEFINITIONS, execute_tool
-from judecode.agent.project import ProjectContract, PROMPT as PROJECT_PROMPT, DEFINITIONS as PROJECT_TOOLS, NAMES as PROJECT_NAMES
+from judecode.agent.project import ProjectContract, PROMPT as PROJECT_PROMPT, SANDBOX_PROMPT as SANDBOX_PROJECT_PROMPT, DEFINITIONS as PROJECT_TOOLS, NAMES as PROJECT_NAMES
 from judecode.agent.expert import ExpertRouting, ROUTING_PROMPT, NAMES as EXPERT_TOOLS
 from judecode.agent.continuation import (
     ContinuationTracker,
@@ -64,8 +64,11 @@ class AgentEngine:
     ):
         self.isolation = SandboxFirst() if sandbox_first else None
         self.project = ProjectContract()
-        if PROJECT_PROMPT not in system_prompt:
-            system_prompt += PROJECT_PROMPT
+        project_prompt = SANDBOX_PROJECT_PROMPT if sandbox_first else PROJECT_PROMPT
+        if sandbox_first:
+            system_prompt = system_prompt.replace(PROJECT_PROMPT, '')
+        if project_prompt not in system_prompt:
+            system_prompt += project_prompt
         self.expert = ExpertRouting()
         if self.expert.available and ROUTING_PROMPT not in system_prompt:
             system_prompt += ROUTING_PROMPT
@@ -207,8 +210,11 @@ class AgentEngine:
             restored.autonomous.evaluator.project_root = restored.project.state["root"]
         restored._restored_session = True
         restored.messages = repair_tool_history(data['messages'])
-        if PROJECT_PROMPT not in restored.messages[0]["content"]:
-            restored.messages[0]["content"] += PROJECT_PROMPT
+        project_prompt = SANDBOX_PROJECT_PROMPT if restored.isolation else PROJECT_PROMPT
+        if restored.isolation:
+            restored.messages[0]["content"] = restored.messages[0]["content"].replace(PROJECT_PROMPT, '')
+        if project_prompt not in restored.messages[0]["content"]:
+            restored.messages[0]["content"] += project_prompt
         if restored.isolation and SANDBOX_FIRST_PROMPT not in restored.messages[0]["content"]:
             restored.messages[0]["content"] += SANDBOX_FIRST_PROMPT
         restored._tool_failures = {tuple(key): value for key, value in data.get('failures', [])
@@ -393,6 +399,17 @@ class AgentEngine:
 
     def _execute_tool_safe(self, tool_name: str, args: dict) -> str:
         """All execution paths share preflight, staging and outcome recording."""
+        if self.isolation and tool_name == 'read' and args.get('path') in self.context.archived_results:
+            # Recover only this session's recorded tool output, never arbitrary host files.
+            try:
+                offset = int(args.get('offset', 1))
+                limit = int(args.get('limit', 200))
+                if offset < 1 or not 1 <= limit <= 2000:
+                    raise ValueError('Use positive offset and limit 1..2000')
+                lines = self.context.archived_results[args['path']].splitlines()
+                return '\n'.join(lines[offset - 1:offset - 1 + limit])
+            except (ValueError, TypeError) as exc:
+                return 'Error executing tool read: ' + str(exc)
         if self.isolation and tool_name in FILE_TOOLS:
             try:
                 args = self.isolation.file_args(tool_name, args)

@@ -187,3 +187,24 @@ environment setup และ production_prepare ใช้ขีดจำกัด
 
 ตรวจ regression 468 tests ผ่าน รวมแชตจำลองที่ติดตั้งแพ็กเกจวนและต้องจบหลัง 3 ครั้ง
 ไม่มีการส่งคำขอโมเดลเพิ่มเติม ต้องเปิด process Jude ใหม่เพื่อโหลดการแก้ไข
+
+## Live agent acceptance (15 ตุลาคม 2026)
+
+เริ่มทดสอบผ่านโมเดลและ AgentEngine จริงด้วย `scripts/live_agent_acceptance.py`
+ใช้ `--source`, `--task` (ไฟล์โจทย์), `--report` (JSON ผล), และ `--resume` ถ้าต้องการ
+ต่อ transcript เดิม หลังจบแต่ละรอบรับข้อความจาก stdin หรือ `/file <ไฟล์รีวิว>`
+ไม่มีการจำลองโมเดล/เครื่องมือและไม่อนุมัติ deploy อัตโนมัติ ต้องตรวจแผนก่อนยืนยัน
+
+สิ่งที่แก้จากการลองใช้จริง:
+- strict prompt ไม่ใส่สูตร legacy host sandbox ที่ถูกบล็อก
+- workspace service ที่ไม่ระบุ command จะคง runtime ไว้สำหรับ sandbox_exec
+- read กู้ผลเครื่องมือที่ถูกย่อได้จากหลักฐานของ session เท่านั้น ไม่เปิด host file access
+- Python wheel helper เลือก 3.10–3.13 ตาม runtime จริง
+- sandbox_node_packages ไม่ส่ง packages จะติดตั้งด้วย npm ci จาก package-lock v2/v3
+  ตรวจเฉพาะ npm registry, ตัด scripts/config ออกจาก manifest ของ helper และใช้ --ignore-scripts
+  ไม่มี project source/credentials mount ออนไลน์; legacy_peer_deps เป็นตัวเลือก boolean
+
+หลักฐานล่าสุด: configured live model สร้าง Todo API + SQLite, แก้เทสต์ที่ล้มเหลว,
+ผ่าน unit/integration tests และ deploy ด้วย human confirmation ไป container แยก
+HTTP health/create/list ผ่านการตรวจอิสระ ไม่ใช่ผลการ deploy HR production
+กำลังตรวจ failure/rollback เพิ่ม และทำ HR acceptance แยก; ห้ามถือว่า HR ผ่านตาม Todo
