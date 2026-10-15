@@ -276,7 +276,7 @@ class AsyncAgentRunner:
 
             try:
                 self.agent.reset_stop()
-                await self.agent.chat(message)
+                await self.agent.chat(message, trusted_user=True)
             except Exception as e:
                 console.print(f"\n  [bold red]Error:[/bold red] {e}\n")
             finally:

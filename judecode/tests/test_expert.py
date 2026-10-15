@@ -68,7 +68,8 @@ def test_handoff_executes_tools_and_returns_to_primary(setup, tmp_path):
          calls(('read', {'path': 'result.txt'})),
          calls(('expert_return', {'summary': 'File written and read; tests not run'}))])
     asyncio.run(agent.chat('Implement fix'))
-    assert (tmp_path / 'result.txt').read_text() == 'fixed'
+    assert agent.isolation.mapped('result.txt').read_text() == 'fixed'
+    assert not (tmp_path / 'result.txt').exists()
     assert len(primary.requests) == 4 and len(specialist.requests) == 3
     assert agent.autonomous.session.status == "unverified"
     assert specialist.closed == 3

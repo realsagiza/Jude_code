@@ -172,7 +172,8 @@ def test_tui_startup_two_spoken_turns_without_keyboard(monkeypatch, tmp_path):
             return data
         async def say(self, text):
             await answers.put(text)
-        async def chat(text):
+        async def chat(text, *, trusted_user=False):
+            assert trusted_user is True
             submitted.append(text)
             app.agent.messages.append({'role': 'assistant', 'content': 'ผลลัพธ์ ' + str(len(submitted))})
         monkeypatch.setattr(cv, 'record_utterance', record)

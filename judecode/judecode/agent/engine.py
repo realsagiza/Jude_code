@@ -46,6 +46,9 @@ from rich.text import Text
 logger = get_logger("judecode.engine")
 
 
+from judecode.agent.sandbox_first import SandboxFirst, PROMPT as SANDBOX_FIRST_PROMPT, DEFINITIONS as SANDBOX_TOOLS, CONTROL_NAMES, FILE_TOOLS, SAFE_TOOLS
+
+
 class AgentEngine:
     """Main agent logic: stream completions, handle tool calls, iterate."""
 
@@ -57,13 +60,17 @@ class AgentEngine:
         continue_on_stream_error: bool = CONTINUE_ON_STREAM_ERROR,
         continue_on_incomplete_work: bool = CONTINUE_ON_INCOMPLETE_WORK,
         continue_on_tool_error: bool = CONTINUE_ON_TOOL_ERROR,
+        sandbox_first: bool = True,
     ):
+        self.isolation = SandboxFirst() if sandbox_first else None
         self.project = ProjectContract()
         if PROJECT_PROMPT not in system_prompt:
             system_prompt += PROJECT_PROMPT
         self.expert = ExpertRouting()
         if self.expert.available and ROUTING_PROMPT not in system_prompt:
             system_prompt += ROUTING_PROMPT
+        if self.isolation and SANDBOX_FIRST_PROMPT not in system_prompt:
+            system_prompt += SANDBOX_FIRST_PROMPT
         self.system_prompt = system_prompt
         self.api = api_client
         self.messages: list[dict[str, Any]] = [
@@ -83,7 +90,7 @@ class AgentEngine:
         self.autonomous = AutonomousController(
             max_budget=AUTONOMOUS_MAX_BUDGET,
             enabled=AUTONOMOUS_MODE,
-            auto_rollback=AUTO_ROLLBACK_ENABLED,
+            auto_rollback=AUTO_ROLLBACK_ENABLED and not sandbox_first,
         )
         self.context = ContextManager(
             CONTEXT_TARGET_TOKENS, CONTEXT_RESULT_CHARS, CONTEXT_RECENT_RESULTS
@@ -122,6 +129,13 @@ class AgentEngine:
         self._project_required = False
 
 
+    def _base_tools(self):
+        base = TOOL_DEFINITIONS + PROJECT_TOOLS
+        if self.isolation:
+            allowed = FILE_TOOLS | SAFE_TOOLS | CONTROL_NAMES | PROJECT_NAMES | {'shell'}
+            return [tool for tool in base + SANDBOX_TOOLS if tool['function']['name'] in allowed]
+        return base
+
     def save_transcript(self) -> None:
         """Persist before requests/actions and after results; fail closed on I/O errors."""
         from judecode.agent.transcripts import TranscriptStore
@@ -131,6 +145,7 @@ class AgentEngine:
             "total_tool_calls", "status", "outcome_reason", "errors", "started_at")}
         budget = self.autonomous.budget
         TranscriptStore().save(session.session_id, {
+            "sandbox_id": self.isolation.identifier if self.isolation and self.isolation.workspace.exists() else None,
             "cwd": str(Path.cwd().resolve()), "messages": self.messages,
             "expert": self.expert.snapshot(), "project": self.project.state,
             "project_required": self._project_required,
@@ -175,7 +190,7 @@ class AgentEngine:
             max_continuations=self.continuation.max_continuations,
             continue_on_stream_error=self.continuation.continue_on_stream_error,
             continue_on_incomplete_work=self.continuation.continue_on_incomplete_work,
-            continue_on_tool_error=self.continuation.continue_on_tool_error)
+            continue_on_tool_error=self.continuation.continue_on_tool_error, sandbox_first=self.isolation is not None)
         restored.autonomous.enabled = self.autonomous.enabled
         for key in ('original_goal', 'completed_tasks', 'current_task_id',
                     'total_turns', 'total_tool_calls', 'errors', 'started_at'):
@@ -183,6 +198,8 @@ class AgentEngine:
         for key in ('total_input_tokens', 'total_output_tokens', 'total_cost', 'tokens'):
             setattr(restored.autonomous.budget, key, data['budget'][key])
         restored.expert.restore(data.get("expert"))
+        if restored.isolation and data.get("sandbox_id"):
+            restored.isolation.restore(data["sandbox_id"])
         restored.project = ProjectContract(data.get("project"))
         restored.project.invalidate()  # Files/deployment may have changed while offline.
         restored._project_required = bool(data.get("project_required"))
@@ -192,6 +209,8 @@ class AgentEngine:
         restored.messages = repair_tool_history(data['messages'])
         if PROJECT_PROMPT not in restored.messages[0]["content"]:
             restored.messages[0]["content"] += PROJECT_PROMPT
+        if restored.isolation and SANDBOX_FIRST_PROMPT not in restored.messages[0]["content"]:
+            restored.messages[0]["content"] += SANDBOX_FIRST_PROMPT
         restored._tool_failures = {tuple(key): value for key, value in data.get('failures', [])
                                    if key[0] not in PROJECT_NAMES}
         restored._needs_verification = bool(data.get('needs_verification')) or bool(pending)
@@ -227,7 +246,9 @@ class AgentEngine:
             raise ValueError("Resolve staged changes before clearing the conversation")
         if len(self.messages) > 1:
             self.save_transcript()
-        fresh = AgentEngine(self.system_prompt, self.api)
+        if self.isolation and self.isolation.containers:
+            self.isolation.stop()
+        fresh = AgentEngine(self.system_prompt, self.api, sandbox_first=self.isolation is not None)
         fresh.autonomous.enabled = self.autonomous.enabled
         self.__dict__.update(fresh.__dict__)
         self.sandbox.before_apply = self._snapshot_file
@@ -236,7 +257,7 @@ class AgentEngine:
 
     def _prune_context(self) -> None:
         """Reduce old output only after saving a retrievable full copy."""
-        self.messages = self.context.prune(self.messages, self.expert.tools(TOOL_DEFINITIONS + PROJECT_TOOLS))
+        self.messages = self.context.prune(self.messages, self.expert.tools(self._base_tools()))
         self.autonomous.budget.context_tokens_saved = self.context.saved_tokens
         self.autonomous.budget.context_input_tokens = self.context.last_input_tokens
 
@@ -353,6 +374,9 @@ class AgentEngine:
             self.autonomous.session.save()
 
     def _verify_work(self) -> dict:
+        if self.isolation:
+            return {"passed": self.project.complete, "status": "passed" if self.project.complete else "unverified",
+                    "results": [], "summary": "Sandbox contract checks passed" if self.project.complete else "Create project_plan and run project_verify inside sandbox"}
         if self.sandbox.is_active and self.sandbox.get_pending_changes():
             return {"passed": False, "status": "unverified", "results": [],
                     "summary": "Changes are staged only; real project has not been verified."}
@@ -366,6 +390,11 @@ class AgentEngine:
 
     def _execute_tool_safe(self, tool_name: str, args: dict) -> str:
         """All execution paths share preflight, staging and outcome recording."""
+        if self.isolation and tool_name in FILE_TOOLS:
+            try:
+                args = self.isolation.file_args(tool_name, args)
+            except Exception as exc:
+                return f"Error executing tool '{tool_name}': {exc}"
         key = (tool_name, str(Path(args["path"]).resolve()) if "path" in args
                else json.dumps(args, sort_keys=True))
         if tool_name in PROJECT_NAMES:
@@ -374,6 +403,35 @@ class AgentEngine:
             blocked = self._pre_tool_hook(tool_name, args)
             if blocked:
                 result = f"Error executing tool '{tool_name}': {blocked}"
+            elif self.isolation and tool_name in FILE_TOOLS and self.isolation.app in self.isolation.containers:
+                if tool_name in {'write', 'edit', 'delete'}:
+                    self.project.invalidate()
+                    self._needs_verification = True
+                result = self.isolation.files(tool_name, args)
+            elif self.isolation and tool_name in CONTROL_NAMES:
+                if tool_name == 'sandbox_environment':
+                    self.project.invalidate()
+                    result = self.isolation.start(**args)
+                elif tool_name == 'sandbox_python_packages':
+                    self.project.invalidate()
+                    result = self.isolation.python_packages(**args)
+                elif tool_name == 'sandbox_status':
+                    result = self.isolation.status()
+                elif tool_name == 'sandbox_stop':
+                    result = self.isolation.stop()
+                elif tool_name == 'sandbox_preview':
+                    result = self.isolation.preview(**args)
+                else:
+                    result = self.isolation.prepare(**args, verified=self.project.complete)
+                    console.print(json.dumps(result, ensure_ascii=False, indent=2), markup=False)
+                result = json.dumps(result, ensure_ascii=False)
+            elif self.isolation and tool_name == 'shell':
+                self.project.invalidate()
+                self._needs_verification = True
+                outcome = self.isolation.run(**args)
+                result = json.dumps(outcome, ensure_ascii=False)
+                if outcome['exit_code'] != 0:
+                    result = "Error executing tool 'shell': " + result
             elif tool_name in PROJECT_NAMES:
                 result = self._project_tool(tool_name, args)
             elif tool_name in EXPERT_TOOLS:
@@ -413,6 +471,8 @@ class AgentEngine:
 
     def _project_tool(self, name: str, args: dict) -> str:
         if name == "project_plan":
+            if self.isolation:
+                args = {**args, 'root': str(self.isolation.mapped(args['root']))}
             result = self.project.plan(**args)
             self.autonomous.evaluator.project_root = self.project.state["root"]
             self.autonomous.session.original_goal = self.project.state["goal"]
@@ -455,6 +515,8 @@ class AgentEngine:
                 if blocked:
                     return {"exit_code": -1, "stderr": blocked}
                 try:
+                    if self.isolation:
+                        return self.isolation.run(**params)
                     return execute_shell(**params)
                 except Exception as exc:
                     return {"exit_code": -1, "stderr": str(exc)}
@@ -465,6 +527,9 @@ class AgentEngine:
     def delivery_response(self, response: str) -> str:
         """Do not relay an unverified model success claim as the final result."""
         state = self.autonomous.session
+        if self.isolation and self.isolation.pending:
+            response += "\n\nแผนที่ยังไม่ได้ deploy (ตรวจคำสั่งก่อนอนุมัติ):\n" + json.dumps(self.isolation.pending, ensure_ascii=False, indent=2)
+            response += "\nอนุมัติครั้งเดียว: DEPLOY " + self.isolation.pending["token"]
         if state.status in {"failed", "unverified", "paused", "crashed"}:
             pending = ""
             if self.project.state:
@@ -522,7 +587,7 @@ class AgentEngine:
         """Count the whole outgoing request on every turn, including tool schemas."""
         budget = self.autonomous.budget
         budget.new_turn()
-        budget.record_tool_request(estimate_tokens(self.expert.tools(TOOL_DEFINITIONS + PROJECT_TOOLS)))
+        budget.record_tool_request(estimate_tokens(self.expert.tools(self._base_tools())))
         for message in self.messages:
             count = estimate_tokens(message)
             role = message.get("role")
@@ -556,7 +621,7 @@ class AgentEngine:
             )
             # Save project context if we're in a project directory
             import os
-            cwd = os.getcwd()
+            cwd = str(self.isolation.workspace) if self.isolation else os.getcwd()
             self.memory.save_project_context(
                 project_path=cwd,
                 conventions={"last_session": s.session_id},
@@ -572,7 +637,7 @@ class AgentEngine:
                     "go.mod", "JUDE.md",
                 )
             )
-            if is_project and (len(goal) > 20 or s.completed_tasks):
+            if not self.isolation and is_project and (len(goal) > 20 or s.completed_tasks):
                 summary = f"[{s.status}] " + goal[:150]
                 if s.completed_tasks:
                     summary += f" — completed tasks: {s.completed_tasks}"
@@ -585,6 +650,14 @@ class AgentEngine:
 
         Returns an error string if execution should be blocked, or None.
         """
+        if self.isolation:
+            allowed = FILE_TOOLS | SAFE_TOOLS | CONTROL_NAMES | PROJECT_NAMES | {'shell'}
+            if tool_name not in allowed:
+                return "Sandbox-first blocks this host/external tool. Use sandbox_environment, sandbox shell and private files; production requires direct human DEPLOY approval."
+            if self.sandbox.is_active:
+                return "Legacy staging mode conflicts with sandbox-first. Disable /sandbox staging; the isolated workspace is already active."
+            if tool_name in CONTROL_NAMES:
+                return None
         if tool_name in PROJECT_NAMES:
             if self.sandbox.is_active:
                 return "Project verification requires applied changes outside staging sandbox."
@@ -612,7 +685,8 @@ class AgentEngine:
             path = tool_params.get("path")
             if not path:
                 return "Missing file path"
-            self._snapshot_file(path, tool_name)
+            if not (self.isolation and self.isolation.app in self.isolation.containers):
+                self._snapshot_file(path, tool_name)
 
         return None  # Allow execution
 
@@ -791,7 +865,7 @@ class AgentEngine:
         # Stream the response
         try:
             async for chunk in self.expert.completion(
-                self.api, self.messages, self.expert.tools(TOOL_DEFINITIONS + PROJECT_TOOLS)
+                self.api, self.messages, self.expert.tools(self._base_tools())
             ):
                 # ── Abort streaming IMMEDIATELY if user pressed Ctrl+C ──
                 # This is the key fix: previously cancel was only checked AFTER
@@ -1253,8 +1327,18 @@ class AgentEngine:
 
         return True  # Continue to next turn naturally (no nudge needed)
 
-    async def chat(self, user_message: str) -> None:
+    async def chat(self, user_message: str, *, trusted_user: bool = False) -> None:
         """Send a user message and handle streaming + tool calls."""
+        if self.isolation and user_message.strip().startswith('DEPLOY '):
+            try:
+                result = await asyncio.to_thread(self.isolation.release, user_message, trusted_user, self.project.complete)
+            except Exception as exc:
+                result = {"error": str(exc), "production": "locked"}
+            response = json.dumps(result, ensure_ascii=False)
+            self.messages.extend([{"role": "user", "content": user_message}, {"role": "assistant", "content": response}])
+            console.print(response, markup=False)
+            self.save_transcript()
+            return
         # A fresh request starts with the primary; /continue preserves the active expert.
         self.expert = ExpertRouting()
         # A new explicit instruction permits inspecting uncertain interrupted work.

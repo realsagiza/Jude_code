@@ -1,0 +1,202 @@
+import asyncio
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from judecode.agent.engine import AgentEngine
+from judecode.agent.sandbox_first import SandboxFirst, CONTROL_NAMES
+
+
+@pytest.fixture
+def engine(tmp_path, monkeypatch):
+    project = tmp_path / 'source'
+    project.mkdir()
+    (project / 'app.py').write_text('original')
+    (project / '.env').write_text('PROD_SECRET=hidden')
+    monkeypatch.chdir(project)
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path / 'home')
+    agent = AgentEngine('test', SimpleNamespace(), sandbox_first=True)
+    agent.autonomous.enabled = False
+    return agent
+
+
+def test_default_is_sandbox_first(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path / 'home')
+    assert AgentEngine('test', SimpleNamespace()).isolation is not None
+
+
+def test_file_edits_never_touch_source(engine):
+    result = engine._execute_tool_safe('write', {'path': 'app.py', 'content': 'sandbox only'})
+    assert not result.startswith('Error'), result
+    assert Path('app.py').read_text() == 'original'
+    assert engine.isolation.mapped('app.py').read_text() == 'sandbox only'
+    assert not (engine.isolation.workspace / '.env').exists()
+
+
+@pytest.mark.parametrize('path', ['../escaped', '/etc/hosts', '/tmp/deploy.sh'])
+def test_path_escape_blocked(engine, path):
+    assert engine._execute_tool_safe('write', {'path': path, 'content': 'bad'}).startswith('Error')
+
+
+def test_symlink_escape_and_grep_option_blocked(engine, tmp_path):
+    engine.isolation.ensure_workspace()
+    (engine.isolation.workspace / 'escape').symlink_to(tmp_path)
+    assert engine._execute_tool_safe('read', {'path': 'escape/anything'}).startswith('Error')
+    assert engine._execute_tool_safe('grep', {'pattern': '--pre=evil'}).startswith('Error')
+
+
+@pytest.mark.parametrize('tool,args', [('dev_sandbox_run', {'root': '.', 'command': 'ssh production', 'network': True}),
+    ('dev_preview_start', {}), ('web_fetch', {'url': 'http://production/delete'}),
+    ('unknown_host_tool', {}), ('keyboard_type', {'text': 'deploy'}), ('batch_copy', {})])
+def test_alternative_host_routes_blocked(engine, tool, args):
+    assert 'Sandbox-first blocks' in engine._execute_tool_safe(tool, args)
+
+
+def test_shell_without_container_never_falls_back(engine, tmp_path):
+    marker = tmp_path / 'production'
+    result = engine._execute_tool_safe('shell', {'command': f'touch {marker}'})
+    assert 'host execution is blocked' in result
+    assert not marker.exists()
+
+
+def test_model_only_sees_safe_tools(engine):
+    names = {t['function']['name'] for t in engine._base_tools()}
+    assert CONTROL_NAMES <= names
+    assert 'dev_preview_start' not in names and 'web_fetch' not in names
+
+
+def test_acceptance_runs_via_sandbox(engine, monkeypatch):
+    engine._project_tool('project_plan', {'goal': 'test', 'root': str(Path.cwd()),
+        'features': [{'id':'flow','criteria':'real behavior','checks':['python test.py']}]})
+    calls = []
+    def run(**args):
+        calls.append(args)
+        return {'exit_code': 0, 'stdout': 'one real check passed', 'stderr': ''}
+    monkeypatch.setattr(engine.isolation, 'run', run)
+    engine._project_tool('project_verify', {})
+    assert calls[0]['cwd'] == str(engine.isolation.workspace)
+    assert engine.project.complete
+
+
+def test_host_evaluator_not_used(engine, monkeypatch):
+    monkeypatch.setattr(engine.autonomous.evaluator, 'run_verification', lambda: pytest.fail('host verification ran'))
+    assert not engine._verify_work()['passed']
+
+
+def prepare(engine):
+    return engine.isolation.prepare('printf approved > release.txt', 'test destination', 'restore backup', True)
+
+
+def test_prepare_requires_checks(engine):
+    with pytest.raises(ValueError, match='checks'):
+        engine.isolation.prepare('touch production', 'production', 'restore', False)
+
+
+@pytest.mark.parametrize('trusted,verified', [(False,True),(True,False)])
+def test_untrusted_or_unverified_cannot_deploy(engine, trusted, verified):
+    plan = prepare(engine)
+    with pytest.raises(ValueError, match='blocked'):
+        engine.isolation.release(plan['approval'], trusted, verified)
+    assert not (engine.isolation.workspace / 'release.txt').exists()
+    assert engine.isolation.pending is None
+
+
+def test_approval_exact_single_use_and_stale_protected(engine):
+    plan = prepare(engine)
+    engine.isolation.mapped('app.py').write_text('new version')
+    with pytest.raises(ValueError):
+        engine.isolation.release(plan['approval'], True, True)
+    plan = prepare(engine)
+    result = engine.isolation.release(plan['approval'], True, True)
+    assert result['exit_code'] == 0
+    assert engine.isolation.mapped('release.txt').read_text() == 'approved'
+    with pytest.raises(ValueError):
+        engine.isolation.release(plan['approval'], True, True)
+
+
+def test_expired_approval_blocked(engine):
+    plan = prepare(engine)
+    engine.isolation.pending['expires'] = 0
+    with pytest.raises(ValueError):
+        engine.isolation.release(plan['approval'], True, True)
+
+
+def test_scheduled_chat_cannot_release(engine):
+    plan = prepare(engine)
+    asyncio.run(engine.chat(plan['approval']))
+    assert 'locked' in engine.messages[-1]['content']
+    assert not engine.isolation.mapped('release.txt').exists()
+
+
+def test_restore_never_restores_deploy_permission(engine):
+    prepare(engine)
+    other = SandboxFirst()
+    other.restore(engine.isolation.identifier)
+    assert other.workspace == engine.isolation.workspace
+    assert other.pending is None
+
+
+def test_active_files_use_container_namespace_not_host_io(engine, monkeypatch):
+    engine.isolation.ensure_workspace()
+    engine.isolation.containers = [engine.isolation.app]
+    monkeypatch.setattr(engine, '_snapshot_file', lambda *a: pytest.fail('host file snapshot'))
+    calls = []
+    monkeypatch.setattr(engine.isolation, 'files', lambda name, args: calls.append((name,args)) or 'container write')
+    result = engine._execute_tool_safe('write', {'path': 'app.py', 'content': 'new'})
+    assert result == 'container write' and calls
+    assert Path('app.py').read_text() == 'original'
+
+
+def test_session_memory_does_not_modify_project_files(engine):
+    Path('package.json').write_text('{}')
+    engine.autonomous.session.original_goal = 'A sufficiently long implementation request'
+    engine._save_session_memory()
+    assert not Path('JUDE.md').exists()
+
+
+def test_direct_trusted_approval_executes_exact_plan_once(engine):
+    engine.isolation.ensure_workspace()
+    engine.project.plan('test', str(engine.isolation.workspace), [{'id':'test','criteria':'test passed','checks':['check']}])
+    engine.project.verify(lambda *a: {'exit_code':0,'stdout':'assertion passed'}, lambda:False)
+    plan = engine.isolation.prepare('printf approved > release.txt','temporary test artifact','remove test artifact',True)
+    asyncio.run(engine.chat(plan['approval'], trusted_user=True))
+    assert engine.isolation.mapped('release.txt').read_text() == 'approved'
+    assert engine.isolation.pending is None
+    assert not Path('release.txt').exists()
+    assert engine.isolation is not None
+
+
+def test_approval_delivery_includes_concrete_command(engine):
+    plan = prepare(engine)
+    response = engine.delivery_response('Please review')
+    assert plan['command'] in response
+    assert plan['destination'] in response
+    assert plan['rollback'] in response
+    assert plan['approval'] in response
+
+
+@pytest.mark.parametrize('extra', [{'privileged': True}, {'volumes': ['/var/run/docker.sock:/sock']}, {'network_mode':'host'}])
+def test_service_cannot_request_host_access(engine, monkeypatch, extra):
+    from judecode.agent import sandbox_first as module
+    monkeypatch.setattr(module, 'local_daemon', lambda: None)
+    monkeypatch.setattr(module, 'checked', lambda *a: '29.2.1')
+    monkeypatch.setattr(module, 'docker', lambda *a: pytest.fail('Docker launch should not occur'))
+    with pytest.raises(ValueError, match='Only'):
+        engine.isolation.start(services=[{'name':'db','image':'mongo:4.4', **extra}])
+
+
+def test_artifact_digest_binds_file_boundaries_and_permissions(engine):
+    root = engine.isolation
+    root.ensure_workspace()
+    root.mapped('a').write_bytes(b'x')
+    root.mapped('b').write_bytes(b'y')
+    first = root.fingerprint()
+    root.mapped('a').write_bytes(b'xb\x00y')
+    root.mapped('b').unlink()
+    assert root.fingerprint() != first
+    first = root.fingerprint()
+    root.mapped('a').chmod(0o755)
+    assert root.fingerprint() != first

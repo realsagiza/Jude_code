@@ -14,7 +14,7 @@ from tests.test_reliability import ScriptedAPI, calls
 def agent(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, 'home', lambda: tmp_path / 'home')
-    obj = AgentEngine('system', ScriptedAPI())
+    obj = AgentEngine('system', ScriptedAPI(), sandbox_first=False)
     obj.autonomous.enabled = False
     obj.notifications.providers = []
     return obj
@@ -69,7 +69,7 @@ def test_mutation_invalidates_and_plan_cannot_erase_missing_features(agent, tmp_
 def test_restore_keeps_contract_without_execution(agent, tmp_path):
     agent._project_tool('project_plan', plan(tmp_path))
     identifier = agent.autonomous.session.session_id
-    restored = AgentEngine('system', ScriptedAPI())
+    restored = AgentEngine('system', ScriptedAPI(), sandbox_first=False)
     restored.resume_session(identifier)
     assert restored.project.state == agent.project.state
     assert not restored.api.requests
@@ -172,7 +172,7 @@ def test_restore_rechecks_previously_passing_files(agent, tmp_path):
     (tmp_path/'sale.ok').touch(); (tmp_path/'refund.ok').touch()
     agent._project_tool('project_verify', {})
     assert agent.project.complete
-    restored = AgentEngine('system', ScriptedAPI())
+    restored = AgentEngine('system', ScriptedAPI(), sandbox_first=False)
     restored.resume_session(agent.autonomous.session.session_id)
     assert not restored.project.complete
     assert restored.project.state['features']['sale']['evidence']

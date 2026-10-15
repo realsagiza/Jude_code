@@ -14,7 +14,7 @@ from tests.test_reliability import ScriptedAPI, calls
 def engine(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, 'home', lambda: tmp_path / 'home')
-    agent = AgentEngine('system', ScriptedAPI())
+    agent = AgentEngine('system', ScriptedAPI(), sandbox_first=False)
     agent.autonomous.enabled = False
     return agent
 
@@ -25,7 +25,7 @@ def test_restart_restores_conversation_budget_and_forks(engine):
     engine.autonomous.session.current_task_id = 42
     engine.save_transcript()
     original = TranscriptStore().path(source_id).read_bytes()
-    fresh = AgentEngine('system', ScriptedAPI())
+    fresh = AgentEngine('system', ScriptedAPI(), sandbox_first=False)
     fresh.resume_session(source_id)
     assert fresh.messages == engine.messages
     assert fresh.autonomous.session.current_task_id == 42
@@ -45,7 +45,7 @@ def test_resume_repairs_legacy_invalid_arguments_without_replay(engine, monkeypa
     engine.save_transcript()
     source_id = engine.autonomous.session.session_id
     original = TranscriptStore().path(source_id).read_bytes()
-    engine = AgentEngine('system', ScriptedAPI())
+    engine = AgentEngine('system', ScriptedAPI(), sandbox_first=False)
     engine.autonomous.enabled = False
     engine.resume_session(source_id)
     monkeypatch.setattr(engine, '_execute_tool_safe', lambda *a: pytest.fail('Replayed tool'))
@@ -60,7 +60,7 @@ def test_completed_tools_not_replayed(engine, monkeypatch):
     Path('sample.txt').write_text('evidence')
     asyncio.run(engine.chat('Read sample'))
     source_id = engine.autonomous.session.session_id
-    fresh = AgentEngine('system', ScriptedAPI())
+    fresh = AgentEngine('system', ScriptedAPI(), sandbox_first=False)
     fresh.autonomous.enabled = False
     fresh.resume_session(source_id)
     monkeypatch.setattr(fresh, '_execute_tool_safe', lambda *args: pytest.fail('Replayed a tool'))

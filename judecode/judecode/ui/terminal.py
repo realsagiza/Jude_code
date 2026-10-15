@@ -337,6 +337,9 @@ async def run_agent_interactive() -> None:
                 console.print()
                 continue
 
+            if agent.isolation and user_input.lower().startswith("/rollback"):
+                console.print("Sandbox-first blocks legacy host rollback. Restore files inside the private sandbox; source is unchanged.")
+                continue
             if user_input.lower().startswith("/rollback"):
                 from judecode.agent.checkpoint import CheckpointManager
                 parts = user_input.strip().split(maxsplit=1)
@@ -433,6 +436,13 @@ async def run_agent_interactive() -> None:
                 console.print()
                 continue
 
+            if agent.isolation and user_input.lower().startswith("/sandbox"):
+                if user_input.lower() == "/sandbox stop":
+                    console.print(str(agent.isolation.stop()))
+                else:
+                    console.print(str(agent.isolation.status()))
+                    console.print("Sandbox-first is always active. /sandbox stop removes test services; production requires a prepared DEPLOY token.")
+                continue
             if user_input.lower() == "/sandbox":
                 if agent.sandbox.is_active:
                     result = agent.sandbox.deactivate()
@@ -579,7 +589,7 @@ async def run_agent_interactive() -> None:
             # ── Normal message - process through agent ──
             agent_running = True
             try:
-                await agent.chat(user_input)
+                await agent.chat(user_input, trusted_user=True)
             except Exception as e:
                 console.print(f"\n  [bold red]Error:[/bold red] {e}\n")
             finally:

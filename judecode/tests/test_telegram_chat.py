@@ -35,7 +35,7 @@ def native(tmp_path, monkeypatch):
     from judecode.agent.engine import AgentEngine
     from judecode.config import SYSTEM_PROMPT
     api = FakeAPI()
-    agent = AgentEngine(SYSTEM_PROMPT, api)
+    agent = AgentEngine(SYSTEM_PROMPT, api, sandbox_first=False)
     store = ChatStore(tmp_path / 'transport')
     session = ChatSession(agent, store)
     session.restore()
@@ -85,7 +85,7 @@ def test_native_transcript_restore_without_replaying(native):
     session.store.enqueue(1, 'remember me')
     asyncio.run(session.handle(session.store.claim()))
     from judecode.agent.engine import AgentEngine
-    restored = ChatSession(AgentEngine(session.agent.system_prompt, api), session.store)
+    restored = ChatSession(AgentEngine(session.agent.system_prompt, api, sandbox_first=False), session.store)
     count = len(api.requests)
     restored.restore()
     assert len(api.requests) == count

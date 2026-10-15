@@ -40,7 +40,7 @@ def calls(*items, finish="tool_calls"):
 def agent(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
-    obj = AgentEngine("system", ScriptedAPI())
+    obj = AgentEngine("system", ScriptedAPI(), sandbox_first=False)
     obj.autonomous.enabled = False
     obj.notifications.notify_task_complete = lambda **kw: None
     obj.notifications.notify_session_complete = lambda **kw: None

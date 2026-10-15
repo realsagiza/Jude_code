@@ -1,5 +1,9 @@
 # เครื่องทดสอบระหว่างพัฒนา
 
+> โหมดปกติเปลี่ยนเป็น [sandbox-first](sandbox-first-th.md) แล้ว: เครื่องมือ legacy
+> dev_sandbox_run/dev_preview_* ที่เปิด outbound ถูกบล็อกใน AgentEngine ปกติ
+> ใช้ sandbox_environment/shell/sandbox_preview ตามคู่มือใหม่ ข้อมูลด้านล่างเป็นรุ่นเดิม
+
 Jude Code มี `dev_sandbox_run` ให้โมเดลสร้าง Linux container ชั่วคราวจาก snapshot
 ของโปรเจค ติดตั้ง dependencies รัน test/build/API/browser test แล้วล้าง container
 บน Mac ใช้ Docker ผ่าน Colima VM; Linux ใช้ Docker Engine ที่กำลังทำงาน

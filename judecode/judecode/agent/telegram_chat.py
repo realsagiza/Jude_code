@@ -132,7 +132,7 @@ class ChatSession:
                 await agent.continue_task()
             else:
                 # Exact same call and tool loop as run_agent_interactive on Mac.
-                await agent.chat(turn['text'])
+                await agent.chat(turn['text'], trusted_user=True)
             last_user = max((i for i, m in enumerate(agent.messages) if m.get('role') == 'user'), default=-1)
             new_messages = agent.messages[last_user + 1:]
             self.store.track_schedules(agent.messages)

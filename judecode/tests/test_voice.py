@@ -184,7 +184,8 @@ def test_tui_voice_roundtrip(monkeypatch, tmp_path):
             return b'wav'
         async def playback(audio):
             assert audio == b'wav'
-        async def chat(text):
+        async def chat(text, *, trusted_user=False):
+            assert trusted_user is True
             assert text == 'ช่วยตอบภาษาไทย'
             app.agent.messages.append({'role': 'assistant', 'content': 'ได้ครับ'})
         monkeypatch.setattr(app._voice_client, 'transcribe', transcribe)
