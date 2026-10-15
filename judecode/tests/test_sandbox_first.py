@@ -175,7 +175,7 @@ def test_approval_delivery_includes_concrete_command(engine):
     assert plan['command'] in response
     assert plan['destination'] in response
     assert plan['rollback'] in response
-    assert plan['approval'] in response
+    assert 'deploy แผนนี้' in response
 
 
 @pytest.mark.parametrize('extra', [{'privileged': True}, {'volumes': ['/var/run/docker.sock:/sock']}, {'network_mode':'host'}])
@@ -279,7 +279,7 @@ def test_ambiguous_container_paths_rejected(engine, command):
         engine.isolation.prepare(command, 'production', 'restore', True)
 
 
-@pytest.mark.parametrize('message', ['deploy แผนนี้', 'ยืนยัน deploy', 'deploy this plan'])
+@pytest.mark.parametrize('message', ['deploy', 'deploy เลย', 'deploy ได้เลย', 'DEPLOY', 'deploy แผนนี้', 'ยืนยัน deploy', 'deploy this plan'])
 def test_simple_confirmation_still_requires_direct_human(engine, message):
     prepare(engine)
     asyncio.run(engine.chat(message))
@@ -287,13 +287,14 @@ def test_simple_confirmation_still_requires_direct_human(engine, message):
     assert not engine.isolation.mapped('release.txt').exists()
 
 
-def test_simple_confirmation_engine_dispatch(engine):
+@pytest.mark.parametrize('message', ['deploy', 'deploy ได้เลย', 'deploy แผนนี้'])
+def test_simple_confirmation_engine_dispatch(engine, message):
     root = engine.isolation
     root.ensure_workspace()
     engine.project.plan('test', str(root.workspace), [{'id':'test','criteria':'passed','checks':['check']}])
     engine.project.verify(lambda *a: {'exit_code':0,'stdout':'assertion passed'}, lambda:False)
     prepare(engine)
-    asyncio.run(engine.chat('deploy แผนนี้', trusted_user=True))
+    asyncio.run(engine.chat(message, trusted_user=True))
     assert root.mapped('release.txt').read_text() == 'approved'
 
 
@@ -504,3 +505,57 @@ def test_handoff_never_overrides_explicit_pause(engine, monkeypatch):
     engine._stop_outcome=('paused','Stopped by user')
     assert not engine._try_repair_handoff()
     assert not engine.expert.active
+
+
+@pytest.mark.parametrize('copy_fails', [True, False])
+def test_npm_copy_publishes_only_complete_modules(engine, monkeypatch, tmp_path, copy_fails):
+    import shutil
+    import subprocess
+    from judecode.agent import sandbox_first as module
+    root = engine.isolation
+    root.ensure_workspace()
+    root.containers = [root.app]
+    destination = tmp_path / 'container'
+    destination.mkdir()
+    (destination / 'node_modules').mkdir()
+    (destination / 'node_modules' / 'working').write_text('previous installation')
+    def checked(args, *rest):
+        if args[0] == 'run':
+            cache = next(root.base.glob('node-*'))
+            (cache / 'node_modules').mkdir()
+        elif args[0] == 'exec':
+            command = [value.replace('/workspace/.', str(destination)) for value in args[2:]]
+            subprocess.run(command, check=True)
+        elif args[0] == 'cp':
+            assert rest == (600,)
+            target = args[2].split(':', 1)[1].replace('/workspace/.', str(destination))
+            (Path(target) / 'node_modules').mkdir()
+            if copy_fails:
+                raise subprocess.TimeoutExpired('docker cp', 600)
+            (Path(target) / 'node_modules' / 'complete').write_text('new installation')
+        return ''
+    def docker(args, *rest):
+        if args[0] == 'exec':
+            shutil.rmtree(args[-1].replace('/workspace/.', str(destination)))
+        return 0, ''
+    monkeypatch.setattr(module, 'checked', checked)
+    monkeypatch.setattr(module, 'docker', docker)
+    monkeypatch.setattr(root, 'run', lambda *a, **k: {'exit_code':0})
+    if copy_fails:
+        with pytest.raises(subprocess.TimeoutExpired):
+            root.node_packages(['react'])
+        assert (destination / 'node_modules' / 'working').read_text() == 'previous installation'
+    else:
+        root.node_packages(['react'])
+        assert (destination / 'node_modules' / 'complete').read_text() == 'new installation'
+        assert not (destination / 'node_modules' / 'working').exists()
+    assert list(destination.iterdir()) == [destination / 'node_modules']
+
+
+def test_deploy_plan_is_readable_without_internal_metadata(engine):
+    prepare(engine)
+    response = engine.delivery_response('')
+    assert engine.isolation.pending['destination'] in response
+    assert engine.isolation.pending['command'] in response
+    assert 'deploy ได้เลย' in response
+    assert 'sha256' not in response and 'expires' not in response

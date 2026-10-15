@@ -612,8 +612,13 @@ class AgentEngine:
             return response
         state = self.autonomous.session
         if self.isolation and self.isolation.pending:
-            response += "\n\nแผนที่ยังไม่ได้ deploy (ตรวจคำสั่งก่อนอนุมัติ):\n" + json.dumps(self.isolation.pending, ensure_ascii=False, indent=2)
-            response += "\nอนุมัติครั้งเดียว: พิมพ์ deploy แผนนี้ หรือ DEPLOY " + self.isolation.pending["token"]
+            plan = self.isolation.pending
+            response += ("\n\nพร้อม deploy — ยังไม่ได้ขึ้นระบบจริง"
+                         + "\nปลายทาง: " + plan["destination"]
+                         + "\nคำสั่ง: " + plan["command"]
+                         + "\nโฟลเดอร์: " + plan["cwd"]
+                         + "\nย้อนกลับ: " + plan["rollback"]
+                         + "\nพิมพ์ deploy แผนนี้ หรือ deploy ได้เลย เพื่อเริ่ม")
             return response
         if state.status in {"failed", "unverified", "paused", "crashed"}:
             pending = ""
@@ -1439,7 +1444,8 @@ class AgentEngine:
         """Send a user message and handle streaming + tool calls."""
         self._deployment_response = None
         self._last_verification_notice = None
-        if self.isolation and self.isolation.is_approval(user_message):
+        if self.isolation and self.isolation.is_approval(user_message) and (
+                self.isolation.pending or user_message.strip().startswith("DEPLOY ")):
             try:
                 result = await asyncio.to_thread(self.isolation.release, user_message, trusted_user, self.project.complete)
             except Exception as exc:

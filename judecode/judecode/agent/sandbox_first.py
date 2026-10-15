@@ -374,7 +374,7 @@ class SandboxFirst:
 
     @staticmethod
     def is_approval(message):
-        return message.strip() in {'deploy แผนนี้', 'ยืนยัน deploy', 'deploy this plan'} or message.strip().startswith('DEPLOY ')
+        return message.strip().lower() in {'deploy', 'deploy เลย', 'deploy ได้เลย', 'deploy แผนนี้', 'ยืนยัน deploy', 'deploy this plan'} or message.strip().startswith('DEPLOY ')
 
     def prepare(self, command, destination, rollback, verified, cwd='.', required_commands=None, timeout=600):
         if not verified:
@@ -427,7 +427,7 @@ class SandboxFirst:
 
     def release(self, message, trusted_user, verified):
         plan, self.pending = self.pending, None  # Consume before any possible execution.
-        if (not trusted_user or not plan or message.strip() not in {'DEPLOY ' + plan['token'], 'deploy แผนนี้', 'ยืนยัน deploy', 'deploy this plan'} or
+        if (not trusted_user or not plan or not (message.strip() == 'DEPLOY ' + plan['token'] or (self.is_approval(message) and not message.strip().startswith('DEPLOY '))) or
                 time.time() > plan['expires'] or not verified or self.fingerprint() != plan['sha256']):
             raise ValueError('Deployment blocked: require fresh passing checks and direct human approval of this exact plan')
         try:
@@ -520,7 +520,20 @@ class SandboxFirst:
             result = self.run('mkdir -p ' + shlex.quote(destination), service=service)
             if result['exit_code']:
                 raise RuntimeError(result['stdout'] + result['stderr'])
-            checked(['cp', str(cache / 'node_modules'), target + ':' + destination + '/'])
+            # Publish only a complete dependency tree. A timed-out copy must not
+            # leave half-installed modules that trigger misleading build errors.
+            staging = destination + '/.jude-npm-' + uuid.uuid4().hex
+            q = shlex.quote
+            checked(['exec', target, 'mkdir', '-p', staging])
+            try:
+                checked(['cp', str(cache / 'node_modules'), target + ':' + staging + '/'], 600)
+                checked(['exec', target, 'sh', '-c',
+                         'set -e; cd ' + q(destination) + '; '
+                         'if [ -e node_modules ]; then mv node_modules ' + q(staging + '/previous') + '; fi; '
+                         'if ! mv ' + q(staging + '/node_modules') + ' node_modules; then '
+                         'if [ -e ' + q(staging + '/previous') + ' ]; then mv ' + q(staging + '/previous') + ' node_modules; fi; exit 1; fi'])
+            finally:
+                docker(['exec', target, 'rm', '-rf', staging], 60)
             return {'installed': packages if packages is not None else 'project lockfile', 'service': service, 'directory': destination,
                     'scripts': 'disabled; run necessary build/rebuild commands offline in sandbox'}
         finally:
