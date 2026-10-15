@@ -334,3 +334,70 @@ def test_deployment_result_not_hidden_by_prior_session_failure(engine):
     result = engine.messages[-1]['content']
     # Even blocked approval must report its actual cause to Telegram.
     assert engine.delivery_response(result) == result
+
+
+def test_repeated_package_install_stops_loop(engine, monkeypatch):
+    monkeypatch.setattr(engine.isolation, 'node_packages', lambda **kw: {'installed': ['react']})
+    for _ in range(3):
+        engine._execute_tool_safe('sandbox_node_packages', {'packages': ['react']})
+    assert engine._stop_outcome[0] == 'unverified'
+    assert 'sandbox_node_packages' in engine._stop_outcome[1]
+
+
+def test_repeated_sandbox_exec_stops_loop(engine, monkeypatch):
+    monkeypatch.setattr(engine.isolation, 'run', lambda **kw: {'exit_code': 1, 'stdout': '', 'stderr': 'missing module'})
+    for _ in range(6):
+        engine._execute_tool_safe('sandbox_exec', {'service': 'app', 'command': 'python app.py'})
+    assert 'sandbox_exec' in engine._stop_outcome[1]
+
+
+def test_verification_reminder_does_not_repeat_each_turn(engine):
+    from tests.test_reliability import ScriptedAPI, calls
+    engine.api = ScriptedAPI(*[calls(('read', {'path': 'app.py'})) for _ in range(3)])
+    engine._needs_verification = True
+    async def run():
+        for i in range(3):
+            await engine._process_turn(i)
+    asyncio.run(run())
+    notices = [m for m in engine.messages if str(m.get('content', '')).startswith('[SYSTEM: Verification status:')]
+    assert len(notices) == 1
+
+
+def test_prepared_plan_stops_model_and_skips_remaining_batch(engine):
+    from tests.test_reliability import ScriptedAPI, calls
+    root = engine.isolation
+    root.ensure_workspace()
+    engine.project.plan('test', str(root.workspace), [{'id':'test','criteria':'passed','checks':['check']}])
+    engine.project.verify(lambda *a: {'exit_code':0,'stdout':'assertion passed'}, lambda:False)
+    engine.api = ScriptedAPI(calls(
+        ('production_prepare', {'command':'printf approved > release.txt','destination':'local test','rollback':'remove test artifact'}),
+        ('write', {'path':'app.py', 'content':'must not run'})))
+    assert asyncio.run(engine._process_turn(1)) is False
+    assert root.pending
+    assert root.mapped('app.py').read_text() == 'original'
+    assert len([m for m in engine.messages if m['role'] == 'tool']) == 2
+    engine._finish_session()
+    assert 'deploy แผนนี้' in engine.delivery_response('')
+    asyncio.run(engine.continue_task())
+    assert len(engine.api.requests) == 1
+    assert not root.mapped('release.txt').exists()
+
+
+def test_new_human_instruction_can_replace_pending_plan(engine):
+    from tests.test_reliability import ScriptedAPI
+    prepare(engine)
+    engine.api = ScriptedAPI()
+    asyncio.run(engine.chat('เปลี่ยนแผนก่อน', trusted_user=True))
+    assert engine.isolation.pending is None
+    assert not engine.isolation.mapped('release.txt').exists()
+
+
+def test_chat_exits_package_loop_without_more_model_calls(engine, monkeypatch):
+    from tests.test_reliability import ScriptedAPI, calls
+    engine.api = ScriptedAPI(*[calls(('sandbox_node_packages', {'packages': ['react']})) for _ in range(10)])
+    installed = []
+    monkeypatch.setattr(engine.isolation, 'node_packages', lambda **kw: installed.append(kw) or {'installed': ['react']})
+    asyncio.run(engine.chat('prepare build', trusted_user=True))
+    assert len(installed) == len(engine.api.requests) == 3
+    assert engine.autonomous.session.status == 'unverified'
+    assert 'Stopped a loop' in engine.autonomous.session.outcome_reason

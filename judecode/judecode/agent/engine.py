@@ -376,7 +376,10 @@ class AgentEngine:
     def _verify_work(self) -> dict:
         if self.isolation:
             return {"passed": self.project.complete, "status": "passed" if self.project.complete else "unverified",
-                    "results": [], "summary": "Sandbox contract checks passed" if self.project.complete else "Create project_plan and run project_verify inside sandbox"}
+                    "results": [], "summary": "Sandbox contract checks passed" if self.project.complete else (
+                        "Run project_verify inside sandbox for the existing contract. Pending: " +
+                        ", ".join(key for key, feature in self.project.state['features'].items() if not feature['passed'])
+                        if self.project.state else "Create project_plan and run project_verify inside sandbox")}
         if self.sandbox.is_active and self.sandbox.get_pending_changes():
             return {"passed": False, "status": "unverified", "results": [],
                     "summary": "Changes are staged only; real project has not been verified."}
@@ -471,12 +474,14 @@ class AgentEngine:
             self._tool_failures[key] = result
         else:
             self._tool_failures.pop(key, None)
-        if tool_name in {"write", "edit", "shell"}:
+        if tool_name not in {"project_pause"}:
             import hashlib
             signature = hashlib.sha256((tool_name + json.dumps(args, sort_keys=True) + result).encode()).hexdigest()
             self._repeated_results[signature] = self._repeated_results.get(signature, 0) + 1
-            if self._repeated_results[signature] >= 6:
-                self._stop_outcome = ("unverified", "Repeated identical action/result six times; inspect state and change approach.")
+            limit = 3 if tool_name in {'sandbox_python_packages', 'sandbox_node_packages', 'sandbox_environment', 'production_prepare'} else 6
+            if self._repeated_results[signature] >= limit:
+                self._stop_outcome = ("unverified", f"Stopped a loop: {tool_name} repeated the same arguments/result {limit} times. "
+                                      "Work is preserved; inspect the last tool result and change approach. No deployment was authorized by this stop.")
         return result
 
     def _project_tool(self, name: str, args: dict) -> str:
@@ -542,6 +547,7 @@ class AgentEngine:
         if self.isolation and self.isolation.pending:
             response += "\n\nแผนที่ยังไม่ได้ deploy (ตรวจคำสั่งก่อนอนุมัติ):\n" + json.dumps(self.isolation.pending, ensure_ascii=False, indent=2)
             response += "\nอนุมัติครั้งเดียว: พิมพ์ deploy แผนนี้ หรือ DEPLOY " + self.isolation.pending["token"]
+            return response
         if state.status in {"failed", "unverified", "paused", "crashed"}:
             pending = ""
             if self.project.state:
@@ -784,6 +790,9 @@ class AgentEngine:
         Manually trigger a continuation nudge.
         Called when user types /continue.
         """
+        if self.isolation and self.isolation.pending:
+            console.print(self.delivery_response("รอการยืนยันแผน deploy จากคุณครับ"), markup=False)
+            return
         if self._resume_uncertain:
             console.print(Text("Cannot continue: interrupted tool outcomes are unknown. Inspect state and send a new instruction.", style="yellow"))
             return
@@ -863,10 +872,12 @@ class AgentEngine:
 
         if self._needs_verification and self._verification is None:
             verification = await asyncio.to_thread(self._verify_work)
-            self.messages.append({"role": "user", "content":
-                "[SYSTEM: Verification status: " + verification["status"] + ". " +
-                verification["summary"] +
-                " Do not claim verified success unless checks passed; report limitations.]"})
+            notice = ("[SYSTEM: Verification status: " + verification["status"] + ". " +
+                      verification["summary"] +
+                      " Do not claim verified success unless checks passed; report limitations.]")
+            if notice != getattr(self, '_last_verification_notice', None):
+                self.messages.append({"role": "user", "content": notice})
+                self._last_verification_notice = notice
 
         # Include fresh verification context before estimating/pruning the request.
         self.messages = repair_tool_history(self.messages)
@@ -1235,6 +1246,10 @@ class AgentEngine:
             self._show_tool_call(tc["name"], tc["args"])
             if len(tool_calls) != 1 and any(c["name"] in EXPERT_TOOLS for c in parsed_calls):
                 result = "Error executing tool: handoff must be the only tool call in this response"
+            elif self._stop_outcome:
+                result = "Error executing tool: skipped because the loop guard stopped this batch"
+            elif self.isolation and self.isolation.pending:
+                result = "Skipped: deployment plan prepared; waiting for direct human confirmation."
             elif self.cancel_requested:
                 result = "Error executing tool: skipped because user stopped the batch"
             else:
@@ -1261,6 +1276,10 @@ class AgentEngine:
 
         # ── Autonomous Controller Hook (Phase 1 + Phase 5) ──
         if self._stop_outcome:
+            return False
+
+        if self.isolation and self.isolation.pending:
+            self._stop_outcome = ('paused', 'Deployment plan prepared; waiting for direct human confirmation.')
             return False
 
         # After tool execution, check for auto-advance, self-eval, budget,
@@ -1342,6 +1361,7 @@ class AgentEngine:
     async def chat(self, user_message: str, *, trusted_user: bool = False) -> None:
         """Send a user message and handle streaming + tool calls."""
         self._deployment_response = None
+        self._last_verification_notice = None
         if self.isolation and self.isolation.is_approval(user_message):
             try:
                 result = await asyncio.to_thread(self.isolation.release, user_message, trusted_user, self.project.complete)
@@ -1353,6 +1373,9 @@ class AgentEngine:
             console.print(response, markup=False)
             self.save_transcript()
             return
+        if self.isolation and trusted_user:
+            # A new instruction supersedes the displayed plan, never silently approves it.
+            self.isolation.pending = None
         # A fresh request starts with the primary; /continue preserves the active expert.
         self.expert = ExpertRouting()
         # A new explicit instruction permits inspecting uncertain interrupted work.
