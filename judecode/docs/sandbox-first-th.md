@@ -44,8 +44,15 @@ scheduled workers) ใช้ sandbox-first เป็นค่าเริ่ม�
   ไม่อนุญาต source distributions/build scripts หรือ package URL
 - การ pull images และ downloader เป็น network ขั้นเตรียมที่แยกจาก application
   โค้ดโปรเจคไม่มีสิทธิ์ใช้ helper นี้เป็น shell ออก Internet
+- Node20 มี sandbox_node_packages รับ package names/version constraints;
+  helper ไม่เห็น source/credentials และ npm install ใช้ --ignore-scripts
+  จากนั้น copy node_modules ไป runtime ที่เลือก; native modules ที่ต้อง rebuild
+  ให้รันใน sandbox แบบ offline เครื่องมือนี้ไม่แก้ package.json ของ source
+- ใช้ service spec workspace=true สำหรับ frontend/worker ที่ต้องอ่าน source copy;
+  sandbox_exec(service=...) รันคำสั่งใน runtime นั้น และ sandbox_preview(service=...)
+  เปิดเว็บของ service ที่เลือกได้
 - ระบบภาษา/OS อื่นที่ต้อง build dependencies ใช้ image ที่เตรียมไว้ก่อน
-  ยังไม่มี npm/apt downloader หรือ arbitrary online build ใน strict mode
+  ยังไม่มี apt downloader หรือ arbitrary online build ใน strict mode
 - Email, payment, production databases และ third-party APIs ต้องใช้ mock services
   หรือ test fixtures ในเครือข่ายนี้ ไม่คัดลอก credentials จริงมาใช้
 - ตัวกรอง source ไม่ใช่ secret scanner; credentials ที่ hardcode อยู่ใน source
@@ -89,8 +96,8 @@ DEPLOY <รหัสจากแผน>
   /sandbox apply ไม่ได้คัดลอกงานไปต้นฉบับ
 - ยังไม่มี websocket/HMR proxy; ใช้ HTTP preview และ reload หน้า
 - ใช้ local Docker เท่านั้น; URL localhost เปิดบนเครื่องรัน Jude Code
-- บริการควรใช้ image ที่มี application/worker พร้อมแล้ว; service containers ไม่มี
-  source mount จาก host โดยพลการ ส่วน app container mount ได้เฉพาะ private workspace
+- บริการใช้ image ที่มี application/worker พร้อมแล้ว หรือ workspace=true เพื่อ mount
+  private workspace เดียวกับ app; ไม่สามารถเลือก arbitrary host paths ได้
 - Runtime/DB/environment ไม่ได้ถูกบรรจุไปกับ deployment โดยอัตโนมัติ:
   แผน deployment ต้องระบุ artifacts และ config ปลายทางให้ชัด
 
@@ -106,9 +113,9 @@ DEPLOY <รหัสจากแผน>
 
 อ้างอิง: [Docker isolated gateway](https://docs.docker.com/engine/network/port-publishing/)
 
-ผลตรวจสุดท้าย: 439 tests ผ่านบน clean HEAD + เฉพาะ patch นี้
+ผลตรวจสุดท้าย: 445 tests ผ่านบน clean HEAD + เฉพาะ patch นี้
 (legacy host/staging tests ระบุ opt-out ใน test constructor โดยตรง;
-entrypoints ปกติทั้งหมดใช้ strict default และมี 31 boundary tests แยกต่างหาก)
+entrypoints ปกติทั้งหมดใช้ strict default และมี 37 boundary tests แยกต่างหาก)
 มี live AgentEngine write/edit/read ที่ไม่เปลี่ยน source และ live MongoDB/HTTP smoke test
 เรียกทดสอบ Docker แบบ opt-in ได้ด้วย:
 
@@ -119,3 +126,8 @@ python scripts/verify_sandbox_first.py
 script นี้สร้าง MongoDB ใหม่พร้อม test data, ดาวน์โหลด pymongo binary wheels,
 ตรวจว่าไม่มี default route, ตรวจ API→DB→HTTP และล้าง test containers/network หลังจบ
 ไม่ใช่ benchmark ของระบบ HR หรือการอนุมัติ deploy ระบบใด
+
+ทดสอบเพิ่ม: Node20/Express frontend → Python API → MongoDB → localhost HTTP preview
+ด้วย runtime แยกกันและ private source mount; downloader ไม่รัน install scripts
+
+ตัวอย่าง full-stack แบบ opt-in: `python scripts/verify_sandbox_fullstack.py`

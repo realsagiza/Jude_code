@@ -24,7 +24,11 @@ services (database/cache/worker/mock integrations). Each service uses fresh test
 and private DNS by name. No production credentials, host socket, external/LAN egress,
 or arbitrary Compose/host mounts. Images must contain dependencies; setup commands
 run offline. For Python 3.12, sandbox_python_packages fetches binary wheels in a
-source-free helper then installs them offline; it never runs application code online. Use mocks for external integrations. Never claim full-system testing
+source-free helper then installs them offline; it never runs application code online.
+For Node20 use sandbox_node_packages (install scripts disabled), then rebuild offline.
+Give code-running service specs workspace=true to mount only the private copy.
+Use sandbox_exec(service=...) for commands in frontend/worker runtimes and
+sandbox_preview(service=...) for the selected web frontend. Use mocks for external integrations. Never claim full-system testing
 unless the contract covers and actually exercises all user journeys and services.
 Use normal read/write/edit/search in the private workspace. Start sandbox_environment
 before shell/tests; use sandbox_status and sandbox_stop. To run servers use foreground
@@ -38,7 +42,7 @@ approve deployment. After it finishes all actions remain sandboxed. Do not deplo
 because tests passed or because an earlier conversation authorized something else.
 '''
 
-CONTROL_NAMES = {'sandbox_environment', 'sandbox_status', 'sandbox_stop', 'sandbox_preview', 'production_prepare', 'sandbox_python_packages'}
+CONTROL_NAMES = {'sandbox_environment', 'sandbox_status', 'sandbox_stop', 'sandbox_preview', 'production_prepare', 'sandbox_python_packages', 'sandbox_node_packages', 'sandbox_exec'}
 FILE_TOOLS = {'read', 'write', 'edit', 'delete', 'ls', 'glob', 'grep'}
 SAFE_TOOLS = {'task_add', 'task_list', 'task_get', 'task_start', 'task_complete', 'task_summary',
               'vault_read_note', 'vault_search', 'memory_recall', 'expert_help', 'expert_return',
@@ -48,14 +52,16 @@ DEFINITIONS = [
     definition('sandbox_environment', 'Start isolated full-system test environment. All services are disposable; no external network. Dependencies must be in images. Existing environment must be stopped first.',
         {'image': {'type': 'string'}, 'services': {'type': 'array', 'items': {'type': 'object',
           'properties': {'name': {'type': 'string'}, 'image': {'type': 'string'},
-                         'command': {'type': 'string'}, 'env': {'type': 'object', 'additionalProperties': {'type': 'string'}}},
+                         'command': {'type': 'string'}, 'workspace': {'type': 'boolean', 'description': 'Mount only the private source copy at /workspace, never original source.'}, 'env': {'type': 'object', 'additionalProperties': {'type': 'string'}}},
           'required': ['name', 'image'], 'additionalProperties': False}},
          'env': {'type': 'object', 'additionalProperties': {'type': 'string'}}}, ['image', 'services']),
-    definition('sandbox_python_packages', 'Download binary Python 3.12 wheels from PyPI in a source-free helper and install offline in the sandbox app. No source distributions or build scripts. Supply package names/version constraints, never URLs.', {'packages': {'type': 'array', 'items': {'type': 'string'}}}, ['packages']),
+    definition('sandbox_python_packages', 'Download binary Python 3.12 wheels from PyPI in a source-free helper and install offline in the sandbox app. No source distributions or build scripts. Supply package names/version constraints, never URLs.', {'packages': {'type': 'array', 'items': {'type': 'string'}}, 'service': {'type': 'string'}}, ['packages']),
+    definition('sandbox_node_packages', 'Install named npm packages with scripts disabled in a source-free Node20 helper; copy node_modules to the selected sandbox runtime. No URLs. Run required rebuild scripts offline. Does not edit source package.json.', {'packages': {'type': 'array', 'items': {'type': 'string'}}, 'service': {'type': 'string'}, 'directory': {'type': 'string'}}, ['packages']),
+    definition('sandbox_exec', 'Run a command in a named sandbox service; same isolated network and no host execution.', {'service': {'type': 'string'}, 'command': {'type': 'string'}, 'cwd': {'type': 'string'}, 'timeout': {'type': 'integer'}}, ['service', 'command']),
     definition('sandbox_status', 'Show private workspace, containers, logs and network.', {}, []),
     definition('sandbox_stop', 'Remove test containers/network; preserve private source edits.', {}, []),
     definition('sandbox_preview', 'Publish an HTTP preview of the app container via localhost-only relay. App must already listen on 0.0.0.0:port. No websocket support.',
-        {'port': {'type': 'integer'}}, ['port']),
+        {'port': {'type': 'integer'}, 'service': {'type': 'string'}}, ['port']),
     definition('production_prepare', 'Prepare immutable exact deployment for direct human approval. Requires passing project contract; does not execute. Token expires in 15 minutes and is single-use.',
         {'command': {'type': 'string'}, 'destination': {'type': 'string'}, 'rollback': {'type': 'string'}},
         ['command', 'destination', 'rollback']),
@@ -156,13 +162,15 @@ class SandboxFirst:
         names = set()
         specs = []
         for service in services:
-            if not isinstance(service, dict) or set(service) - {'name', 'image', 'command', 'env'}:
+            if not isinstance(service, dict) or set(service) - {'name', 'image', 'command', 'env', 'workspace'}:
                 raise ValueError('Only name/image/command/test env are allowed for services')
             name = service.get('name', '')
             if not re.fullmatch(r'[a-z][a-z0-9-]{0,30}', name) or name in names or name == 'app':
                 raise ValueError('Service names must be unique DNS names, excluding app')
             names.add(name)
-            specs.append((name, image_name(service['image']), env_args(service.get('env', {})), service.get('command')))
+            if type(service.get('workspace', False)) is not bool:
+                raise ValueError('workspace must be boolean')
+            specs.append((name, image_name(service['image']), env_args(service.get('env', {})), service.get('command'), service.get('workspace', False)))
         app_env = env_args(env or {})
         # Only image pull uses host networking. No application command runs there.
         for candidate in {image, *(s[1] for s in specs)}:
@@ -174,10 +182,13 @@ class SandboxFirst:
         try:
             checked(['network', 'create', '--internal', '--label', 'judecode.sandbox-first=true',
                      '-o', 'com.docker.network.bridge.gateway_mode_ipv4=isolated', self.network])
-            for name, candidate, variables, command in specs:
+            for name, candidate, variables, command, workspace in specs:
                 container = 'jude-service-' + self.identifier + '-' + name
                 self.containers.append(container)
-                argv = self.base_args(container) + [*capability_args(True), '--network-alias', name, *variables, candidate]
+                argv = self.base_args(container) + [*capability_args(True), '--network-alias', name, *variables]
+                if workspace:
+                    argv += ['--mount', f'type=bind,src={self.workspace},dst=/workspace', '--workdir', '/workspace']
+                argv += [candidate]
                 if command is not None:
                     if not isinstance(command, str):
                         raise ValueError('Service command must be text')
@@ -237,12 +248,29 @@ class SandboxFirst:
             return invoke('grep -Rn -- ' + shlex.quote(args['pattern']) + ' ' + quoted + ' | head -200')
         raise ValueError('Unsupported file tool')
 
-    def run(self, command, cwd=None, timeout=120):
+    def target(self, service='app'):
+        names = {'app': self.app}
+        names.update({s['name']: 'jude-service-' + self.identifier + '-' + s['name'] for s in self.spec.get('services', [])})
+        if service not in names or names[service] not in self.containers:
+            raise ValueError('Select app or a declared running sandbox service')
+        return names[service]
+
+    def run(self, command, cwd=None, timeout=120, service='app'):
         if self.app not in self.containers:
             return {'exit_code': -1, 'stdout': '', 'stderr': 'Start sandbox_environment first; host execution is blocked'}
-        relative = self.mapped(cwd or '.').relative_to(self.workspace).as_posix()
+        if type(timeout) is not int or not 1 <= timeout <= 600:
+            raise ValueError('timeout must be 1..600 seconds')
+        target = self.target(service)
+        spec = next((s for s in self.spec.get('services', []) if s['name'] == service), None)
+        if spec is not None and not spec.get('workspace', False):
+            if cwd not in (None, '.', '/'):
+                raise ValueError('This service has no source mount; use its default container directory')
+            container_cwd = '/'
+        else:
+            relative = self.mapped(cwd or '.').relative_to(self.workspace).as_posix()
+            container_cwd = '/workspace/' + relative
         try:
-            code, output = docker(['exec', '--workdir', '/workspace/' + relative, self.app,
+            code, output = docker(['exec', '--workdir', container_cwd, target,
                                   'sh', '-lc', command], timeout)
             return {'exit_code': code, 'stdout': output, 'stderr': ''}
         except subprocess.TimeoutExpired:
@@ -329,12 +357,13 @@ class SandboxFirst:
         return {'destination': plan['destination'], 'exit_code': result.returncode,
                 'stdout': result.stdout[-24000:], 'stderr': result.stderr[-24000:], 'mode': 'sandbox-first'}
 
-    def python_packages(self, packages):
+    def python_packages(self, packages, service='app'):
         if self.app not in self.containers:
             raise ValueError('Start sandbox_environment first')
         if (not isinstance(packages, list) or not 1 <= len(packages) <= 80 or
                 any(not isinstance(p, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*(?:\[[A-Za-z0-9_,.-]+\])?(?:[=<>!~]{1,2}[A-Za-z0-9.*+-]+(?:,[=<>!~]{1,2}[A-Za-z0-9.*+-]+)*)?', p) for p in packages)):
             raise ValueError('Only package names and version constraints are accepted')
+        target = self.target(service)
         cache = self.base / ('wheels-' + uuid.uuid4().hex)
         cache.mkdir()
         helper = 'jude-packages-' + self.identifier
@@ -345,8 +374,8 @@ class SandboxFirst:
                      'python:3.12-slim', '-m', 'pip', '--isolated', 'download', '--only-binary=:all:',
                      '--index-url', 'https://pypi.org/simple', '--dest', '/wheels', *packages], 300)
             # Copy wheels into the container; never let the downloader see source or credentials.
-            checked(['cp', str(cache) + '/.', self.app + ':/tmp/'])
-            result = self.run('python -m pip install --no-index --find-links=/tmp ' + shlex.join(packages))
+            checked(['cp', str(cache) + '/.', target + ':/tmp/'])
+            result = self.run('python -m pip install --no-index --find-links=/tmp ' + shlex.join(packages), service=service)
             if result['exit_code']:
                 raise RuntimeError(result['stdout'] + result['stderr'])
             return result
@@ -354,9 +383,37 @@ class SandboxFirst:
             docker(['rm', '-f', '-v', helper], 30)
 
 
-    def preview(self, port):
+    def node_packages(self, packages, service='app', directory='.'):
+        target = self.target(service)
+        destination = '/workspace/' + self.mapped(directory).relative_to(self.workspace).as_posix()
+        pattern = r'(?:@[A-Za-z0-9_.-]+/)?[A-Za-z0-9][A-Za-z0-9_.-]*(?:@[A-Za-z0-9.*^~<>=|+ -]+)?'
+        if (not isinstance(packages, list) or not 1 <= len(packages) <= 100 or
+                any(not isinstance(p, str) or not re.fullmatch(pattern, p) for p in packages)):
+            raise ValueError('Use npm package names/version ranges only, never URLs or paths')
+        cache = self.base / ('node-' + uuid.uuid4().hex)
+        cache.mkdir()
+        (cache / 'package.json').write_text('{"name":"judecode-sandbox-deps","version":"1.0.0","private":true}')
+        helper = 'jude-node-packages-' + self.identifier
+        try:
+            checked(['run', '--name', helper, '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+                     '--memory', '1g', '--pids-limit', '128', '--network', 'bridge',
+                     '--mount', f'type=bind,src={cache},dst=/packages', '--workdir', '/packages',
+                     '--entrypoint', 'npm', 'node:20-alpine', 'install', '--ignore-scripts', '--no-audit',
+                     '--no-fund', '--registry=https://registry.npmjs.org', *packages], 300)
+            # Only copy to container paths. Source package manifests remain authored in sandbox.
+            result = self.run('mkdir -p ' + shlex.quote(destination), service=service)
+            if result['exit_code']:
+                raise RuntimeError(result['stdout'] + result['stderr'])
+            checked(['cp', str(cache / 'node_modules'), target + ':' + destination + '/'])
+            return {'installed': packages, 'service': service, 'directory': destination,
+                    'scripts': 'disabled; run necessary build/rebuild commands offline in sandbox'}
+        finally:
+            docker(['rm', '-f', '-v', helper], 30)
+
+    def preview(self, port, service='app'):
         if type(port) is not int or not 1 <= port <= 65535 or self.app not in self.containers:
             raise ValueError('Start environment and provide a valid app port')
+        self.target(service)
         name = 'jude-relay-' + self.identifier
         if name in self.containers:
             raise ValueError('Preview already active; use sandbox_status')
@@ -374,7 +431,7 @@ class SandboxFirst:
                      '--memory', '128m', '--pids-limit', '64',
                      '--log-opt', 'max-size=5m', '--log-opt', 'max-file=1',
                      '--mount', f'type=bind,src={script},dst=/relay.py,readonly',
-                     '--entrypoint', 'python', image, '/relay.py', str(port)])
+                     '--entrypoint', 'python', image, '/relay.py', str(port), service])
             checked(['network', 'connect', self.network, name])
             checked(['start', name])
             binding = checked(['port', name, '8080/tcp'], 15).strip()
@@ -413,6 +470,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import http.client
 import sys
 PORT = int(sys.argv[1])
+UPSTREAM = sys.argv[2]
 HOP = {'connection','transfer-encoding','keep-alive','upgrade','proxy-authorization','proxy-authenticate'}
 class Relay(BaseHTTPRequestHandler):
     def do_request(self):
@@ -422,7 +480,7 @@ class Relay(BaseHTTPRequestHandler):
                 self.send_error(400); return
             body = self.rfile.read(length)
             # Fixed destination. No CONNECT, URL proxy, redirects, host selection or DNS input.
-            conn = http.client.HTTPConnection('app', PORT, timeout=30)
+            conn = http.client.HTTPConnection(UPSTREAM, PORT, timeout=30)
             headers = {k:v for k,v in self.headers.items() if k.lower() not in HOP}
             headers['Host'] = self.headers.get('Host', 'localhost')
             conn.request(self.command, self.path, body, headers)

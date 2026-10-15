@@ -403,7 +403,7 @@ class AgentEngine:
             blocked = self._pre_tool_hook(tool_name, args)
             if blocked:
                 result = f"Error executing tool '{tool_name}': {blocked}"
-            elif self.isolation and tool_name in FILE_TOOLS and self.isolation.app in self.isolation.containers:
+            elif self.isolation and tool_name in FILE_TOOLS and self.isolation.containers:
                 if tool_name in {'write', 'edit', 'delete'}:
                     self.project.invalidate()
                     self._needs_verification = True
@@ -415,6 +415,14 @@ class AgentEngine:
                 elif tool_name == 'sandbox_python_packages':
                     self.project.invalidate()
                     result = self.isolation.python_packages(**args)
+                elif tool_name == 'sandbox_node_packages':
+                    self.project.invalidate()
+                    result = self.isolation.node_packages(**args)
+                elif tool_name == 'sandbox_exec':
+                    self.project.invalidate()
+                    result = self.isolation.run(**args)
+                    if result['exit_code']:
+                        raise RuntimeError(json.dumps(result, ensure_ascii=False))
                 elif tool_name == 'sandbox_status':
                     result = self.isolation.status()
                 elif tool_name == 'sandbox_stop':
@@ -685,7 +693,7 @@ class AgentEngine:
             path = tool_params.get("path")
             if not path:
                 return "Missing file path"
-            if not (self.isolation and self.isolation.app in self.isolation.containers):
+            if not (self.isolation and self.isolation.containers):
                 self._snapshot_file(path, tool_name)
 
         return None  # Allow execution

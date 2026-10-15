@@ -200,3 +200,25 @@ def test_artifact_digest_binds_file_boundaries_and_permissions(engine):
     first = root.fingerprint()
     root.mapped('a').chmod(0o755)
     assert root.fingerprint() != first
+
+
+@pytest.mark.parametrize('packages', [['https://example.com/package.tgz'], ['../source'], ['--script=bad'], ['pkg@file:/tmp/package']])
+def test_node_downloader_rejects_urls_paths_options(engine, monkeypatch, packages):
+    monkeypatch.setattr(engine.isolation, 'target', lambda service: 'fake')
+    with pytest.raises(ValueError, match='package names'):
+        engine.isolation.node_packages(packages)
+
+
+def test_service_target_cannot_select_production_container(engine):
+    engine.isolation.containers = [engine.isolation.app, 'unrelated-production']
+    with pytest.raises(ValueError, match='declared'):
+        engine.isolation.target('unrelated-production')
+
+
+def test_remaining_service_cannot_trigger_host_file_fallback(engine, monkeypatch):
+    engine.isolation.ensure_workspace()
+    engine.isolation.containers = ['still-running-workspace-service']
+    monkeypatch.setattr(engine, '_snapshot_file', lambda *a: pytest.fail('host snapshot'))
+    monkeypatch.setattr(engine.isolation, 'files', lambda *a: 'namespace-only')
+    assert engine._execute_tool_safe('write', {'path':'app.py','content':'changed'}) == 'namespace-only'
+    assert Path('app.py').read_text() == 'original'
