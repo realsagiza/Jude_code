@@ -64,26 +64,31 @@ scheduled workers) ใช้ sandbox-first เป็นค่าเริ่ม�
 คำสั่ง host ที่จะรันจริง, destination และ rollback instructions
 โปรแกรมหยุด test services เพื่อหยุด background writers แล้วผูกแผนกับ SHA256 ของไฟล์
 
-Jude ต้องแสดงแผนเต็มให้ผู้ใช้ตรวจ จากนั้นผู้ใช้พิมพ์:
+Jude แยกความหมายจากคำสั่งปกติของผู้ใช้ ไม่บังคับจำรหัสหรือประโยคเฉพาะ:
 
-```text
-deploy แผนนี้
-```
+- “ทดสอบแล้วเอาระบบนี้ขึ้นเซิร์ฟเวอร์ X ให้เลย” → ทดสอบใน sandbox แล้วเตรียม
+  release และรันบนเครื่องจริงตามขอบเขตที่สั่ง ไม่ถามอนุมัติเดิมซ้ำ
+- “เตรียมให้พร้อม แต่ยังไม่ขึ้นจริง” → เตรียมและแสดงแผน โดยไม่ deploy
+- “ตามแผนนี้ได้เลยครับ” → ใช้แผนที่แสดงอยู่ประกอบความหมาย
+- คำถาม ตัวอย่างที่ยกมา ข้อความปฏิเสธ และการเปลี่ยนปลายทาง ไม่ใช่สิทธิ์ deploy เดิม
 
-- คำสั่งนี้ใช้ได้โดยตรงใน chat input ของ Terminal/TUI/Telegram ไม่มี slash ข้างหน้า
-- รันเฉพาะคำสั่งที่เตรียมไว้ ด้วย cwd เป็นสำเนา sandbox ที่ทดสอบแล้ว
-- ใช้ `DEPLOY <รหัสจากแผน>` ได้เช่นเดิม หรือ `ยืนยัน deploy` / `deploy this plan`
-- ต้องผ่าน checks, ยืนยันแผนปัจจุบัน, ไม่หมดอายุ (15 นาที), และ source fingerprint ยังตรง
-- ใช้ครั้งเดียวและลบทิ้งก่อนเริ่มรัน; ข้อความโมเดล/tool/scheduler/ประวัติ/resume
-  ไม่สามารถอนุมัติได้ และ authorization ไม่ถูกบันทึกเพื่อ restore
-- คำสั่ง deploy ทำงานบน host ด้วยสิทธิ์บัญชี Jude Code **เฉพาะการอนุมัตินี้**
-  ผู้ใช้ควรเห็น command/destination/rollback ทั้งหมดก่อนส่งรหัส
-- ถ้า timeout จะรายงาน outcome unknown; ไม่ retry อัตโนมัติ
-- จบการ deploy แล้วเครื่องมือทุกตัวกลับอยู่ภายใต้ sandbox-first เช่นเดิม
-- คำสั่ง “แก้ให้เสร็จ”, “ทดสอบผ่านแล้ว”, “ทำต่อ” ไม่อนุญาต deploy
+`host_inspect` ใช้ตรวจเครื่องจริง เช่น SSH ดูสถานะบริการ/path หรือ HTTP health
+ก่อนและหลัง deploy โดยไม่ต้องเปิดทางออก Internet ให้ application sandbox
+การอ่านสถานะไม่ทำให้ผลทดสอบ sandbox ที่ผ่านแล้วกลายเป็นไม่ผ่าน
 
-นี่ไม่ใช่ deployment pipeline ที่รู้ rollback ของทุกระบบอัตโนมัติ
-โมเดลต้องเตรียมแผนให้ตรงเป้าหมาย ผู้ใช้ตรวจแผนก่อนรัน
+ก่อนทำงานบน host จะมี model review แยกหนึ่งคำขอ ใช้โมเดล/provider ที่ตั้งไว้
+อ่านเฉพาะข้อความที่มาจากผู้ใช้จริงและการกระทำที่เสนอ (รวม release script)
+ไม่ให้เครื่องมือแก่ reviewer และไม่ส่ง transcript/tool output เป็นอำนาจอนุมัติ
+การตรวจนี้มีเวลาไม่เกิน 30 วินาที และใช้ reasoning ระดับ low สำหรับ OpenRouter โดยไม่เปลี่ยนโมเดลหลัก; ถ้าตรวจไม่ได้จะอธิบายว่าอะไรยังไม่ชัด
+เป็นการประเมินความหมายด้วยโมเดล ไม่ใช่ OS sandbox หรือคำรับประกันว่าแยกทุกกรณีได้ถูกต้อง
+
+- การ deploy ยังต้องผ่าน checks, fingerprint ตรง และใช้แผนครั้งเดียว
+- model/tool/scheduler/saved transcript ให้สิทธิ์ host ไม่ได้; หลัง restart ต้องมี
+  คำสั่งจากผู้ใช้ในแชตปัจจุบันก่อนทำงานบน host
+- timeout หมายถึงยังไม่ทราบผล ต้องตรวจปลายทางก่อนขอทำใหม่ ไม่ retry เอง
+- `deploy แผนนี้` และ `DEPLOY <token>` ยังใช้ได้เป็นทางลัดสำหรับแผนที่แสดงแล้ว
+- คำสั่ง release ต้องมี backup/activation/live health และรักษา config/data จริง
+  runtime ไม่สามารถสร้าง rollback ที่ถูกต้องสำหรับทุกระบบจากชื่อโปรเจคอย่างเดียว
 
 ## อายุข้อมูลและการกู้คืน
 
@@ -208,3 +213,14 @@ environment setup และ production_prepare ใช้ขีดจำกัด
 ผ่าน unit/integration tests และ deploy ด้วย human confirmation ไป container แยก
 HTTP health/create/list ผ่านการตรวจอิสระ ไม่ใช่ผลการ deploy HR production
 กำลังตรวจ failure/rollback เพิ่ม และทำ HR acceptance แยก; ห้ามถือว่า HR ผ่านตาม Todo
+
+## ตรวจเส้นทางภาษาปกติ
+
+`tests/test_host_access.py` ตรวจการอนุมัติตามบทสนทนา การหยุดก่อน execute,
+source fingerprint, การไม่ใช้ tool output เป็นสิทธิ์ และ host inspection ที่ไม่ล้างผล tests
+ทดสอบโมเดลจริงแบบ opt-in ด้วย `python scripts/verify_host_intent.py` จากโฟลเดอร์
+judecode: ใช้ API ที่ตั้งไว้ มีค่าใช้จ่ายโมเดล และไม่รันคำสั่งบน production
+
+แนวทางอ้างอิงเรื่องการแยกขอบเขต sandbox กับการอนุมัติการทำงาน:
+[Agent approvals & security](https://learn.chatgpt.com/docs/agent-approvals-security)
+การใช้งานของ Jude เป็น implementation ของโปรเจคนี้ ไม่ใช่การนำ Codex harness มาใช้

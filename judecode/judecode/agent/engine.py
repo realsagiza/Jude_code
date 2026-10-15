@@ -131,7 +131,127 @@ class AgentEngine:
         self._repair_failures = 0
         self._implementation_paths = set()
         self._project_required = False
+        # Only direct interactive input enters this ledger; never restored from files.
+        self._deployment_response = None
+        self._human_requests = []
+        self._host_turn = False
+        self._host_denial = ''
+        self._last_release_epoch = -1
+        self._last_release_unknown = False
+        self._inspected_after_release = False
 
+
+    async def _review_host_action(self, action):
+        from judecode.agent.host_access import review_action
+        if not self._host_turn or self.cancel_requested:
+            return {'allowed': False, 'reason': 'การทำงานบนเครื่องจริงต้องมาจากคำสั่งของคุณในแชตนี้'}
+        requests = self._human_requests
+        if action.get('kind') == 'deploy' and self._last_release_epoch >= 0:
+            # A completed/attempted release consumes that instruction. A greeting
+            # or new coding task cannot revive an old deployment request.
+            action = {**action, 'previous_request_context': requests[:self._last_release_epoch]}
+            requests = requests[self._last_release_epoch:]
+        return await review_action(self.api, requests, action, self.autonomous.budget)
+
+    async def _inspect_host(self, args):
+        import subprocess
+        command, timeout = args.get('command'), args.get('timeout', 60)
+        if (set(args) - {'command', 'timeout'} or not isinstance(command, str)
+                or not command.strip() or type(timeout) is not int or not 1 <= timeout <= 120):
+            return 'Error executing tool host_inspect: command and timeout (1..120s) required'
+        review_key = 'host-inspect:' + command
+        self._repeated_results[review_key] = self._repeated_results.get(review_key, 0) + 1
+        if self._repeated_results[review_key] > 3:
+            self._stop_outcome = ('paused', 'ตรวจคำสั่งเดิมซ้ำแล้ว ต้องใช้ผลที่มีหรือเปลี่ยนวิธีตรวจ')
+            return json.dumps({'executed': False, 'reason': self._stop_outcome[1]}, ensure_ascii=False)
+        decision = await self._review_host_action({'kind': 'inspect', 'command': command,
+                                                  'project': str(self.isolation.source)})
+        if not decision['allowed']:
+            if decision.get('needs_user', True):
+                self._stop_outcome = ('paused', decision['reason'])
+            return json.dumps({'executed': False, 'reason': decision['reason'],
+                               'next_step': 'Use sandbox for development, or correct the inspection command. Ask only for missing user scope.'}, ensure_ascii=False)
+        if self.cancel_requested:
+            return 'Skipped: stopped by user before host execution'
+        # Record pending execution first; interrupted sessions never silently replay it.
+        self.messages.append({'role': 'system', 'content': 'Host inspection approved: ' + decision['reason']})
+        self.save_transcript()
+        console.print('กำลังตรวจเครื่องจริง: ' + command, markup=False)
+        def run():
+            try:
+                result = subprocess.run(command, shell=True, cwd=self.isolation.source,
+                                        capture_output=True, text=True, timeout=timeout)
+                return {'runner': 'host', 'exit_code': result.returncode,
+                        'stdout': result.stdout[-16000:], 'stderr': result.stderr[-4000:]}
+            except subprocess.TimeoutExpired:
+                return {'runner': 'host', 'error': 'Inspection timed out; no automatic retry'}
+        result = await asyncio.to_thread(run)
+        if result.get('exit_code') == 0:
+            self._inspected_after_release = True
+        return json.dumps(result, ensure_ascii=False)
+
+    async def _release_requested_plan(self, displayed=False):
+        """Review exactly the frozen release, using live human messages only."""
+        plan = self.isolation.pending
+        if not plan:
+            return None
+        if self._last_release_epoch == len(self._human_requests):
+            self._host_denial = 'มีการรัน deploy ตามคำสั่งนี้แล้ว จะไม่รันซ้ำโดยอัตโนมัติ'
+            return None
+        if self._last_release_unknown and not self._inspected_after_release:
+            self._host_denial = 'ยังไม่ทราบผล deploy ครั้งก่อน ต้องตรวจปลายทางก่อนลองใหม่'
+            return None
+        review_key = 'host-release:' + plan['command'] + ':' + plan['destination']
+        self._repeated_results[review_key] = self._repeated_results.get(review_key, 0) + 1
+        if self._repeated_results[review_key] > 3:
+            self._host_denial = 'แผนเดิมยังติดปัญหา ต้องแก้ตามผลตรวจครั้งก่อนก่อนลองใหม่'
+            return None
+        scripts = {}
+        # Include release scripts in the independent review; opaque shell wrappers
+        # are not a substitute for reviewing what will actually run on the host.
+        import re
+        for name in set(re.findall(r'[\w./-]+\.(?:sh|py)', plan['command'])):
+            path = (Path(plan['cwd']) / name).resolve()
+            if path.is_relative_to(self.isolation.workspace) and path.is_file() and path.stat().st_size <= 24000:
+                scripts[name] = path.read_text()
+        action = {'kind': 'deploy', 'project': str(self.isolation.source),
+                  'displayed_plan' if displayed else 'proposed_plan': plan,
+                  'release_scripts': scripts, 'previous_outcome_unknown': self._last_release_unknown}
+        decision = await self._review_host_action(action)
+        self._host_denial = decision['reason'] if not decision['allowed'] else ''
+        if self.cancel_requested:
+            return None
+        if not decision['allowed']:
+            if not decision.get('needs_user', True):
+                self.isolation.pending = None
+                return {'executed': False, 'review': 'revise_action', 'reason': decision['reason']}
+            return None
+        self._last_release_epoch = len(self._human_requests)
+        self._last_release_unknown = True  # Persist before dispatch, including crashes mid-release.
+        self.messages.append({'role': 'system', 'content': 'Deployment authorized by human request: ' + decision['reason']})
+        self.save_transcript()
+        console.print('กำลัง deploy ไปยัง ' + plan['destination'], markup=False)
+        try:
+            result = await asyncio.to_thread(self.isolation.release, 'DEPLOY ' + plan['token'], True, self.project.complete)
+        except Exception as exc:
+            result = {'error': str(exc), 'executed': False}
+        self._last_release_unknown = result.get('outcome') == 'unknown'
+        self._inspected_after_release = False
+        self._deployment_response = self._format_deployment(result)
+        self._stop_outcome = ('completed' if result.get('exit_code') == 0 else 'unverified',
+                              self._deployment_response)
+        return result
+
+    @staticmethod
+    def _format_deployment(result):
+        if result.get('outcome') == 'unknown':
+            title = 'deploy หมดเวลารอ ยังไม่ทราบผล ต้องตรวจปลายทางก่อนลองใหม่'
+        elif result.get('exit_code') == 0:
+            title = 'รันคำสั่ง deploy สำเร็จ — ผลการตรวจจากสคริปต์อยู่ด้านล่าง'
+        else:
+            title = 'deploy ยังไม่สำเร็จ'
+        detail = result.get('error') or (result.get('stdout', '') + '\n' + result.get('stderr', '')).strip()
+        return title + '\nปลายทาง: ' + result.get('destination', 'ตามแผน') + '\n' + detail[-5000:]
 
     def _base_tools(self):
         base = TOOL_DEFINITIONS + PROJECT_TOOLS
@@ -157,6 +277,7 @@ class AgentEngine:
             "state": state, "needs_verification": self._needs_verification,
             "failures": [[list(key), value] for key, value in self._tool_failures.items()],
             "uncertain": self._resume_uncertain,
+            "host_release_unknown": self._last_release_unknown,
             "staged": bool(self.sandbox.get_pending_changes()),
             "budget": {key: getattr(budget, key) for key in (
                 "total_input_tokens", "total_output_tokens", "total_cost", "tokens")},
@@ -213,13 +334,10 @@ class AgentEngine:
         restored._restored_session = True
         restored.messages = repair_tool_history(data['messages'])
         restored.context.restore_archives(data.get('context_archives', {}))
-        project_prompt = SANDBOX_PROJECT_PROMPT if restored.isolation else PROJECT_PROMPT
-        if restored.isolation:
-            restored.messages[0]["content"] = restored.messages[0]["content"].replace(PROJECT_PROMPT, '')
-        if project_prompt not in restored.messages[0]["content"]:
-            restored.messages[0]["content"] += project_prompt
-        if restored.isolation and SANDBOX_FIRST_PROMPT not in restored.messages[0]["content"]:
-            restored.messages[0]["content"] += SANDBOX_FIRST_PROMPT
+        # Use current routing policy; old transcripts may require magic DEPLOY tokens
+        # or forbid all host inspection and must not override the current runtime.
+        restored.messages[0]["content"] = restored.system_prompt
+        restored._last_release_unknown = data.get('host_release_unknown') is True
         restored._tool_failures = {tuple(key): value for key, value in data.get('failures', [])
                                    if key[0] not in PROJECT_NAMES}
         restored._needs_verification = bool(data.get('needs_verification')) or bool(pending)
@@ -454,9 +572,10 @@ class AgentEngine:
                     result = self.isolation.stop()
                 elif tool_name == 'sandbox_preview':
                     result = self.isolation.preview(**args)
+                elif tool_name == 'host_inspect':
+                    raise ValueError('Host inspection must pass the human-scope review in the interactive engine')
                 else:
                     result = self.isolation.prepare(**args, verified=self.project.complete)
-                    console.print(json.dumps(result, ensure_ascii=False, indent=2), markup=False)
                 result = json.dumps(result, ensure_ascii=False)
             elif self.isolation and tool_name == 'shell':
                 self.project.invalidate()
@@ -608,8 +727,8 @@ class AgentEngine:
 
     def delivery_response(self, response: str) -> str:
         """Do not relay an unverified model success claim as the final result."""
-        if response and response == getattr(self, "_deployment_response", None):
-            return response
+        if getattr(self, "_deployment_response", None):
+            return self._deployment_response
         state = self.autonomous.session
         if self.isolation and self.isolation.pending:
             plan = self.isolation.pending
@@ -618,7 +737,7 @@ class AgentEngine:
                          + "\nคำสั่ง: " + plan["command"]
                          + "\nโฟลเดอร์: " + plan["cwd"]
                          + "\nย้อนกลับ: " + plan["rollback"]
-                         + "\nพิมพ์ deploy แผนนี้ หรือ deploy ได้เลย เพื่อเริ่ม")
+                         + "\n" + (self._host_denial or "บอกได้ตามปกติ เช่น deploy ได้เลย หรือ deploy แผนนี้"))
             return response
         if state.status in {"failed", "unverified", "paused", "crashed"}:
             pending = ""
@@ -743,7 +862,7 @@ class AgentEngine:
         if self.isolation:
             allowed = FILE_TOOLS | SAFE_TOOLS | CONTROL_NAMES | PROJECT_NAMES | {'shell'}
             if tool_name not in allowed:
-                return "Sandbox-first blocks this host/external tool. Use sandbox_environment, sandbox shell and private files; production requires direct human DEPLOY approval."
+                return "Sandbox-first blocks this tool here. Use host_inspect for necessary real-machine status checks; use production_prepare for a deployment the user requested. Development stays in sandbox."
             if self.sandbox.is_active:
                 return "Legacy staging mode conflicts with sandbox-first. Disable /sandbox staging; the isolated workspace is already active."
             if tool_name in CONTROL_NAMES:
@@ -862,8 +981,11 @@ class AgentEngine:
         Manually trigger a continuation nudge.
         Called when user types /continue.
         """
+        if getattr(self, '_deployment_response', None):
+            console.print(self._deployment_response, markup=False)
+            return
         if self.isolation and self.isolation.pending:
-            console.print(self.delivery_response("รอการยืนยันแผน deploy จากคุณครับ"), markup=False)
+            console.print(self.delivery_response("รอคำสั่งจากคุณสำหรับแผนนี้ครับ"), markup=False)
             return
         if self._resume_uncertain:
             console.print(Text("Cannot continue: interrupted tool outcomes are unknown. Inspect state and send a new instruction.", style="yellow"))
@@ -1334,7 +1456,16 @@ class AgentEngine:
                 result = "Error executing tool: skipped because user stopped the batch"
             else:
                 self.save_transcript()
-                result = await asyncio.to_thread(self._execute_tool_safe, tc["name"], tc["args"])
+                if self.isolation and tc["name"] == 'host_inspect':
+                    result = await self._inspect_host(tc["args"])
+                else:
+                    result = await asyncio.to_thread(self._execute_tool_safe, tc["name"], tc["args"])
+                    if self.isolation and tc["name"] == 'production_prepare' and self.isolation.pending:
+                        deployed = await self._release_requested_plan()
+                        if deployed is not None:
+                            result = json.dumps(deployed, ensure_ascii=False)
+                            if self._deployment_response:
+                                console.print(self._deployment_response, markup=False)
             self.messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
             self.save_transcript()
             tool_results.append(result)
@@ -1444,20 +1575,37 @@ class AgentEngine:
         """Send a user message and handle streaming + tool calls."""
         self._deployment_response = None
         self._last_verification_notice = None
+        self._host_turn = trusted_user
+        self._host_denial = ''
+        if trusted_user:
+            self._human_requests.append(user_message)
         if self.isolation and self.isolation.is_approval(user_message) and (
                 self.isolation.pending or user_message.strip().startswith("DEPLOY ")):
             try:
+                if trusted_user and self.isolation.pending:
+                    self._last_release_unknown = True
+                    self.save_transcript()
                 result = await asyncio.to_thread(self.isolation.release, user_message, trusted_user, self.project.complete)
             except Exception as exc:
                 result = {"error": str(exc), "production": "locked"}
-            response = json.dumps(result, ensure_ascii=False)
+            self._last_release_epoch = len(self._human_requests)
+            self._last_release_unknown = result.get('outcome') == 'unknown'
+            self._inspected_after_release = False
+            response = self._format_deployment(result)
             self._deployment_response = response
             self.messages.extend([{"role": "user", "content": user_message}, {"role": "assistant", "content": response}])
             console.print(response, markup=False)
             self.save_transcript()
             return
-        if self.isolation and trusted_user:
-            # A new instruction supersedes the displayed plan, never silently approves it.
+        if self.isolation and trusted_user and self.isolation.pending:
+            result = await self._release_requested_plan(displayed=True)
+            if result is not None and result.get('review') != 'revise_action':
+                self.messages.extend([{'role': 'user', 'content': user_message},
+                                      {'role': 'assistant', 'content': self._deployment_response}])
+                console.print(self._deployment_response, markup=False)
+                self.save_transcript()
+                return
+            # A question, changed task or restriction must reach the normal agent.
             self.isolation.pending = None
         # A fresh request starts with the primary; /continue preserves the active expert.
         self.expert = ExpertRouting()

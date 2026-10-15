@@ -28,6 +28,7 @@ class ApiClient:
         max_tokens: int = MAX_TOKENS,
         temperature: float = TEMPERATURE,
         max_retries: int = 3,  # Increased from 2 to 3 for better resilience
+        reasoning_effort: Optional[str] = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -36,6 +37,7 @@ class ApiClient:
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.max_retries = max_retries
+        self.reasoning_effort = reasoning_effort
         self._client = httpx.AsyncClient(timeout=httpx.Timeout(300.0))
         self._has_fallback = False  # Track if we already fell back
 
@@ -79,6 +81,8 @@ class ApiClient:
         }
         if tools:
             payload["tools"] = tools
+        if self.reasoning_effort is not None:
+            payload["reasoning"] = {"effort": self.reasoning_effort}
 
         url = f"{self.base_url}/chat/completions"
         headers = self._build_headers()

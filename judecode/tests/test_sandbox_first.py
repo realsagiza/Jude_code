@@ -378,7 +378,7 @@ def test_prepared_plan_stops_model_and_skips_remaining_batch(engine):
     assert root.mapped('app.py').read_text() == 'original'
     assert len([m for m in engine.messages if m['role'] == 'tool']) == 2
     engine._finish_session()
-    assert 'deploy แผนนี้' in engine.delivery_response('')
+    assert 'คำสั่งของคุณ' in engine.delivery_response('')
     asyncio.run(engine.continue_task())
     assert len(engine.api.requests) == 1
     assert not root.mapped('release.txt').exists()
