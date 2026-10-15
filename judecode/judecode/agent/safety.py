@@ -140,7 +140,7 @@ class PermissionManager:
         self.permissions = permissions or dict(DEFAULT_PERMISSIONS)
         self._pending_approvals: dict[str, dict] = {}
 
-    def check_permission(self, tool_name: str, tool_params: dict) -> tuple[bool, str, str]:
+    def check_permission(self, tool_name: str, tool_params: dict, *, isolated: bool = False) -> tuple[bool, str, str]:
         """Check if a tool execution is allowed.
 
         Returns:
@@ -151,7 +151,7 @@ class PermissionManager:
         permission = self.permissions.get(category, "ask")
 
         # Special check for dangerous shell commands
-        if tool_name == "shell":
+        if tool_name == "shell" and not isolated:
             command = tool_params.get("command", "")
             for pattern in DANGEROUS_SHELL_PATTERNS:
                 if pattern.lower() in command.lower():

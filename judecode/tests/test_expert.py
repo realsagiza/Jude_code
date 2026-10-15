@@ -98,7 +98,7 @@ def test_mixed_handoff_batch_cannot_write(setup, tmp_path):
 
 def test_permissions_and_sandbox_apply_to_routing(setup):
     agent, _, _, _ = setup([], [])
-    agent.permissions.check_permission = lambda *args: (False, None, 'denied')
+    agent.permissions.check_permission = lambda *args, **kwargs: (False, None, 'denied')
     assert 'denied' in agent._execute_tool_safe('expert_help', BRIEF)
     assert not agent.expert.active
 
@@ -166,7 +166,7 @@ def test_expert_cannot_bypass_write_permission(setup, tmp_path):
     agent, _, _, _ = setup([calls(('expert_help', BRIEF)), response('Blocked')],
         [calls(('write', {'path': 'denied', 'content': 'bad'})), response('Write denied')])
     original = agent.permissions.check_permission
-    agent.permissions.check_permission = lambda name, args: (False, None, 'denied') if name == 'write' else original(name, args)
+    agent.permissions.check_permission = lambda name, args, **kwargs: (False, None, 'denied') if name == 'write' else original(name, args, **kwargs)
     asyncio.run(agent.chat('Fix'))
     assert not (tmp_path / 'denied').exists()
     assert agent.autonomous.session.status != 'completed'
@@ -194,3 +194,20 @@ def test_expert_http_request_uses_configured_model_and_preserves_reasoning(monke
     assert sent[0]['model'] == 'z-ai/glm-5.3'
     assert sent[0]['messages'][1]['reasoning_content'] == 'Preserved reasoning'
     assert sent[0]['max_tokens'] == mod.config.EXPERT_MAX_TOKENS
+
+
+def test_repair_handoff_changes_route_without_bypassing_pause(setup):
+    agent, _, _, _ = setup([], [])
+    agent.autonomous.session.original_goal = 'Repair the authorized sandbox application'
+    agent._repair_failures = 3
+    agent._stop_outcome = ('paused', 'User requested pause')
+    assert not agent._try_repair_handoff()
+    assert not agent.expert.active
+    agent._stop_outcome = ('blocked', 'Stopped a loop: identical failing command')
+    assert agent._try_repair_handoff()
+    assert agent.expert.active
+    assert agent._stop_outcome is None
+    assert agent._repair_failures == 0
+    assert 'deployment approval' in agent.messages[-1]['content']
+    agent._repair_failures = 3
+    assert not agent._try_repair_handoff()

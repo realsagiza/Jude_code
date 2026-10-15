@@ -12,6 +12,7 @@ with tempfile.TemporaryDirectory(prefix='jude-release-smoke-') as folder:
     sandbox = SandboxFirst(source)
     try:
         sandbox.start('python:3.12-slim', [])
+        assert sandbox.run('false | cat')['exit_code'] != 0, 'Pipeline masked a test failure'
         built = sandbox.run("python -c \"from pathlib import Path; Path('artifact.txt').write_text('built inside isolated Docker'); assert Path('artifact.txt').read_text() == 'built inside isolated Docker'\"")
         assert built['exit_code'] == 0, built
         plan = sandbox.prepare('cd /workspace && bash release.sh', str(target), 'remove disposable local target', True, required_commands=['bash', 'cp', 'cmp'])

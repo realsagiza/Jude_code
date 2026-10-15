@@ -472,3 +472,35 @@ def test_npm_lockfile_rejects_non_registry_sources(engine, monkeypatch):
     root.mapped('package-lock.json').write_text(json.dumps({'lockfileVersion':3,'packages':{'node_modules/bad':{'resolved':'http://10.0.0.1/private'}}}))
     with pytest.raises(ValueError,match='registry'):
         root.node_packages()
+
+
+def test_isolated_checks_not_blocked_by_host_command_substrings(engine):
+    args={'command': "printf 'QR format validation'"}
+    assert engine._pre_tool_hook('shell', args) is None
+    assert not engine.permissions.check_permission('shell', args)[0]
+    engine.permissions.set_permission('shell','deny')
+    assert engine._pre_tool_hook('shell', args) is not None
+
+
+def test_failed_repairs_switch_configured_expert_without_unlocking_host(engine, monkeypatch):
+    from judecode.agent import expert
+    monkeypatch.setattr(expert.config, 'EXPERT_ENABLED', True)
+    monkeypatch.setattr(expert.config, 'OPENROUTER_API_KEY', 'test-only')
+    engine._repair_failures=3
+    engine._tool_failures[('sandbox_exec','{}')]='test failed'
+    assert engine._try_repair_handoff()
+    assert engine.expert.active
+    assert engine.isolation is not None and engine.isolation.pending is None
+    assert engine._repair_failures == 0
+    assert not engine._try_repair_handoff()
+    assert 'Sandbox-first blocks' in engine._execute_tool_safe('web_fetch', {'url':'https://production'})
+
+
+def test_handoff_never_overrides_explicit_pause(engine, monkeypatch):
+    from judecode.agent import expert
+    monkeypatch.setattr(expert.config, 'EXPERT_ENABLED', True)
+    monkeypatch.setattr(expert.config, 'OPENROUTER_API_KEY', 'test-only')
+    engine._repair_failures=3
+    engine._stop_outcome=('paused','Stopped by user')
+    assert not engine._try_repair_handoff()
+    assert not engine.expert.active

@@ -1,6 +1,7 @@
 """Recoverable context reduction without a summarization API call."""
 
 import json
+import hashlib
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,25 @@ class ContextManager:
         self.last_input_tokens = 0
         self._excerpts: set[str] = set()
         self.archived_results: dict[str, str] = {}
+
+    def archive_references(self):
+        return {path: hashlib.sha256(content.encode()).hexdigest()
+                for path, content in self.archived_results.items()}
+
+    def restore_archives(self, references):
+        directory = (Path.home() / '.judecode' / 'context-results').resolve()
+        if not isinstance(references, dict) or len(references) > 1000:
+            return
+        for name, digest in references.items():
+            try:
+                path = Path(name)
+                if path.is_symlink() or path.resolve().parent != directory or path.suffix != '.txt' or path.stat().st_size > 2 * 1024 * 1024:
+                    continue
+                content = path.read_text()
+                if hashlib.sha256(content.encode()).hexdigest() == digest:
+                    self.archived_results[str(path)] = content
+            except (OSError, TypeError, ValueError):
+                continue
 
     def prune(self, messages: list[dict], tools: list[dict]) -> list[dict]:
         before = estimate_tokens(messages) + estimate_tokens(tools)

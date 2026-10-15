@@ -134,3 +134,23 @@ def test_long_engine_history_preserves_requirements_and_pairs(agent):
         m.get("tool_call_id") for m in original]
     assert agent.autonomous.budget.context_tokens_saved > 0
     assert "Estimated tokens" in agent.autonomous.budget.get_status()
+
+
+def test_archived_evidence_restores_only_registered_unchanged_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path)
+    manager=ContextManager()
+    manager.prune(history(), [])
+    refs=manager.archive_references()
+    restored=ContextManager()
+    restored.restore_archives(refs)
+    assert restored.archived_results == manager.archived_results
+    changed=Path(next(iter(refs)))
+    changed.write_text('tampered')
+    restored=ContextManager()
+    restored.restore_archives(refs)
+    assert str(changed) not in restored.archived_results
+    outside=tmp_path/'outside.txt'
+    outside.write_text('private')
+    import hashlib
+    restored.restore_archives({str(outside): hashlib.sha256(b'private').hexdigest()})
+    assert str(outside) not in restored.archived_results

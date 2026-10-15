@@ -78,7 +78,7 @@ def test_restore_keeps_contract_without_execution(agent, tmp_path):
 
 def test_verification_obeys_shell_permissions(agent, tmp_path, monkeypatch):
     agent._project_tool('project_plan', plan(tmp_path))
-    monkeypatch.setattr(agent.permissions, 'check_permission', lambda *a: (False, 'deny', 'blocked'))
+    monkeypatch.setattr(agent.permissions, 'check_permission', lambda *a, **kw: (False, 'deny', 'blocked'))
     agent._project_tool('project_verify', {})
     assert not agent.project.complete
     assert agent.project.state['features']['sale']['evidence'][0]['exit_code'] == -1

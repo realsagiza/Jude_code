@@ -128,6 +128,7 @@ class AgentEngine:
         self._restored_session = False
         self._verification_retries = 0
         self._repeated_results = {}
+        self._repair_failures = 0
         self._implementation_paths = set()
         self._project_required = False
 
@@ -150,6 +151,7 @@ class AgentEngine:
         TranscriptStore().save(session.session_id, {
             "sandbox_id": self.isolation.identifier if self.isolation and self.isolation.workspace.exists() else None,
             "cwd": str(Path.cwd().resolve()), "messages": self.messages,
+            "context_archives": self.context.archive_references(),
             "expert": self.expert.snapshot(), "project": self.project.state,
             "project_required": self._project_required,
             "state": state, "needs_verification": self._needs_verification,
@@ -210,6 +212,7 @@ class AgentEngine:
             restored.autonomous.evaluator.project_root = restored.project.state["root"]
         restored._restored_session = True
         restored.messages = repair_tool_history(data['messages'])
+        restored.context.restore_archives(data.get('context_archives', {}))
         project_prompt = SANDBOX_PROJECT_PROMPT if restored.isolation else PROJECT_PROMPT
         if restored.isolation:
             restored.messages[0]["content"] = restored.messages[0]["content"].replace(PROJECT_PROMPT, '')
@@ -489,6 +492,8 @@ class AgentEngine:
             self._tool_failures.pop(key, None)
         elif result.lstrip().lower().startswith("error executing tool") or result.startswith("❌"):
             self._tool_failures[key] = result
+            if tool_name in {'shell', 'sandbox_exec', 'write', 'edit', 'sandbox_python_packages', 'sandbox_node_packages'}:
+                self._repair_failures += 1
         else:
             self._tool_failures.pop(key, None)
         if tool_name not in {"project_pause"}:
@@ -500,6 +505,28 @@ class AgentEngine:
                 self._stop_outcome = ("unverified", f"Stopped a loop: {tool_name} repeated the same arguments/result {limit} times. "
                                       "Work is preserved; inspect the last tool result and change approach. No deployment was authorized by this stop.")
         return result
+
+    def _try_repair_handoff(self):
+        """Escalate repeated failed repairs through configured sequential expert routing."""
+        if self._repair_failures < 3 or not self.expert.available or self.expert.active:
+            return False
+        if self._stop_outcome and not self._stop_outcome[1].startswith('Stopped a loop:'):
+            return False
+        args = {'reason': 'Repeated implementation/test failures require a different diagnosis. ' +
+                         json.dumps(self._failure_records()[-3:], ensure_ascii=False),
+                'goal': self.project.state['goal'] if self.project.state else (self.autonomous.session.original_goal or 'Complete the current authorized task'),
+                'constraints': 'Preserve user scope, sandbox isolation and deployment approval. Never weaken acceptance tests or replay uncertain deployments.',
+                'acceptance_checks': self.project.summary()}
+        result = self.expert.execute('expert_help', args)
+        if result.startswith('Error'):
+            return False
+        self._repair_failures = 0
+        self._stop_outcome = None
+        self._repeated_results = {}
+        self.messages.append({'role': 'user', 'content': '[SYSTEM: Automatic repair handoff to the configured expert. ' + result + '\n' + json.dumps(args, ensure_ascii=False) + ']'})
+        console.print(Text('Repeated repairs failed; switching to configured expert: ' + self.expert.model, style='yellow'))
+        self.save_transcript()
+        return True
 
     def _failure_records(self):
         import hashlib
@@ -722,7 +749,7 @@ class AgentEngine:
             return None  # Verification commands separately pass the shell permission hook.
 
         # ── Permission check ──
-        allowed, level, reason = self.permissions.check_permission(tool_name, tool_params)
+        allowed, level, reason = self.permissions.check_permission(tool_name, tool_params, isolated=self.isolation is not None)
         if not allowed:
             return reason
 
@@ -859,6 +886,7 @@ class AgentEngine:
         self._turn_count = 0
         self._verification_retries = 0
         self._repeated_results = {}
+        self._repair_failures = 0
         self.project.idle_rounds = 0
         self.project.verify_rounds = 0
         if self.project.state:
@@ -1315,6 +1343,8 @@ class AgentEngine:
             return False  # Stop the loop
 
         # ── Autonomous Controller Hook (Phase 1 + Phase 5) ──
+        if self._try_repair_handoff():
+            return True
         if self._stop_outcome:
             return False
 
@@ -1434,6 +1464,7 @@ class AgentEngine:
         # ── Start autonomous session tracking ──
         self._verification_retries = 0
         self._repeated_results = {}
+        self._repair_failures = 0
         self.project.idle_rounds = 0
         self.project.verify_rounds = 0
         if self.project.state:

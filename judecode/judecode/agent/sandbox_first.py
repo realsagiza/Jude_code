@@ -36,6 +36,8 @@ Use normal read/write/edit/search in the private workspace. Start sandbox_enviro
 before shell/tests; use sandbox_status and sandbox_stop. To run servers use foreground
 commands in service specs or a background server in shell. sandbox_preview exposes
 an HTTP preview via a fixed upstream relay. All project_verify checks run in sandbox.
+Do not pipe tests through head/tail or hide failures with || true; tool output is already bounded.
+Sandbox commands use pipefail so an upstream failure cannot become a passing check.
 Passing checks is verification, not completion of a requested deployment. Resolve superseded
 tool failures via project_failures and project_resolve_failure(failure_id, reason),
 then continue preparing the release rather than ending with "ready to deploy".
@@ -295,7 +297,11 @@ class SandboxFirst:
             container_cwd = '/workspace/' + relative
         try:
             code, output = docker(['exec', '--workdir', container_cwd, target,
-                                  'sh', '-lc', command], timeout)
+                                  'sh', '-c',
+                                  'if command -v bash >/dev/null 2>&1; then exec bash -o pipefail -lc "$1"; '
+                                  'elif (set -o pipefail) 2>/dev/null; then set -o pipefail; eval "$1"; '
+                                  'else echo "Runtime needs bash or a shell supporting pipefail" >&2; exit 2; fi',
+                                  'jude-sandbox', command], timeout)
             return {'exit_code': code, 'stdout': output, 'stderr': ''}
         except subprocess.TimeoutExpired:
             # docker exec client timeout alone leaves the command alive. Stop environment.
