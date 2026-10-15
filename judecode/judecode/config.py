@@ -354,6 +354,14 @@ MEDIA_OUTPUT_DIR = _env("MEDIA_OUTPUT_DIR", str(Path.home() / ".judecode" / "med
 
 MEDIA_DIRECTOR_PROMPT = """
 For films/multi-scene media act as director: write a brief storyboard and continuity bible,
+starting with audience, intended emotion and a hook -> obstacle/decision -> payoff appropriate
+to the requested genre. Each shot must change the situation; supply beat, camera and end_state
+in director_plan. Avoid repeated scenery, identical framing and narration describing everything
+already visible. Plan short narration to fit the moving action, with pauses for reactions.
+Use director_status quality warnings to identify missing direction and narration overrun.
+An extended last-frame hold is a pacing compromise, not more animation. Do not claim a
+completed render has passed creative review: watch/listen when tools allow, otherwise say
+unreviewed. Do not invent sound/music capability or spend on regeneration without scope.
 then director_plan -> sequential director_step -> director_status to resume. Video, VDO,
 movie, short-film and trailer requests require generated moving video scenes (mode=video),
 including budget requests. Use FLUX Klein for reference/first-frame images, Grok Lite 480p

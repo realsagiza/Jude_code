@@ -1,6 +1,7 @@
 """Session-owned project contract; success requires executed acceptance checks."""
 import copy
 import json
+import re
 import time
 from pathlib import Path
 
@@ -16,7 +17,20 @@ one, echo/true, or mark a scaffold complete. project_verify runs in project root
 use explicit remote commands for remote deployments. Never execute outside user scope.
 Use project_pause with an honest reason only when blocked or needing user input.
 Use expert_help when repeated fixes do not progress. Final claims must match evidence.
+Before coding, map each requested user journey to observable acceptance behavior.
+Cover persistence/reload, invalid input and relevant permissions as well as the happy
+path. Implement one vertical slice through UI/API/storage before expanding it.
+Write checks from requirements, not by copying the implementation's assumptions.
+Before delivery, compare the original request against the contract for omitted scope;
+append missing features. A passing build or an empty test suite is not product proof.
+Report what was actually exercised and what remains untested; do not claim 100% quality.
 """
+
+
+def _empty_test_run(output):
+    # These are runner summaries, not arbitrary mentions of "0 tests" in logs.
+    return bool(re.search(r'(?m)^\s*(?:Ran 0 tests in [^\n]+|'
+                          r'No tests found[.!]?|=+ no tests ran in [^\n]+)\s*$', output))
 
 
 def definition(name, description, properties, required):
@@ -59,7 +73,7 @@ class ProjectContract:
                         not isinstance(feature.get('evidence'), list)):
                     raise ValueError('Invalid project feature snapshot')
                 if feature['passed'] and (len(feature['evidence']) != len(feature['checks']) or
-                        any(not isinstance(e, dict) or e.get('exit_code') != 0 or e.get('command') != c
+                        any(not isinstance(e, dict) or e.get('exit_code') != 0 or e.get('validation_error') or e.get('command') != c
                             for e, c in zip(feature['evidence'], feature['checks']))):
                     raise ValueError('Project success is missing execution evidence')
         self.state = copy.deepcopy(state)
@@ -128,10 +142,12 @@ class ProjectContract:
                 if cancelled() or time.monotonic() >= deadline:
                     return self.summary()
                 result = run(command, self.state['root'])
+                output = str(result.get('stdout', '')) + '\n' + str(result.get('stderr', ''))
                 evidence.append({'command': command, 'exit_code': result.get('exit_code'),
-                                 'output': (str(result.get('stdout', '')) + str(result.get('stderr', '')))[-2000:]})
+                                 'output': output[-2000:],
+                                 'validation_error': 'Test runner executed no tests' if _empty_test_run(output) else ''})
             f['evidence'] = evidence
-            f['passed'] = bool(evidence) and all(e['exit_code'] == 0 for e in evidence)
+            f['passed'] = bool(evidence) and all(e['exit_code'] == 0 and not e['validation_error'] for e in evidence)
         if sum(f["passed"] for f in self.state["features"].values()) > previous_passed:
             self.idle_rounds = 0
         return self.summary()

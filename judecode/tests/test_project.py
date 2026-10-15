@@ -196,3 +196,31 @@ def test_invalid_control_arguments_do_not_create_unresolvable_failure(agent, tmp
     assert not agent._tool_failures
     agent._finish_session()
     assert agent.autonomous.session.status == 'completed'
+
+
+def test_real_empty_unittest_suite_cannot_complete(tmp_path):
+    import subprocess
+    import sys
+    contract = ProjectContract()
+    args = plan(tmp_path)
+    args['features'] = [{'id': 'behavior', 'criteria': 'Requested behavior is tested',
+                         'checks': [f'{sys.executable} -m unittest discover']}]
+    contract.plan(**args)
+    def run(command, root):
+        result = subprocess.run(command, shell=True, cwd=root, capture_output=True, text=True)
+        return dict(exit_code=result.returncode, stdout=result.stdout, stderr=result.stderr)
+    contract.verify(run, lambda: False)
+    evidence = contract.state['features']['behavior']['evidence'][0]
+    assert evidence['exit_code'] == 0
+    assert evidence['validation_error'] == 'Test runner executed no tests'
+    assert not contract.complete
+    contract.state['features']['behavior']['passed'] = True
+    with pytest.raises(ValueError):
+        ProjectContract(contract.state)
+
+
+def test_non_test_checks_and_real_tests_still_pass(tmp_path):
+    contract = ProjectContract(); contract.plan(**plan(tmp_path))
+    for output in ['', 'Ran 2 tests in 0.002s\n\nOK', 'Expected text: No tests found']:
+        contract.verify(lambda *a: dict(exit_code=0, stdout=output), lambda: False)
+        assert contract.complete

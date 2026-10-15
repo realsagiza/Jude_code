@@ -174,3 +174,37 @@ def test_real_duration_and_continuity_frame(tmp_path):
     from PIL import Image
     with Image.open(d._last_frame(str(clip))) as frame:
         assert frame.size == (160, 120)
+
+
+def test_direction_survives_resume_and_reaches_generation(monkeypatch):
+    seen = []
+    pid = plan([dict(prompt='cat stops at river', beat='bridge collapses',
+                     camera='close-up reaction', end_state='cat stranded on bank')])
+    monkeypatch.setattr(m, 'media_image', lambda prompt, **kw: seen.append(prompt) or {'files': ['cat.png']})
+    d.director_step(pid)
+    assert all(value in seen[0] for value in ['bridge collapses', 'close-up reaction', 'cat stranded on bank'])
+    assert d.director_status(pid)['quality']['warnings'] == []
+    assert d.director_status(pid)['quality']['status'] == 'unreviewed'
+
+
+def test_overrun_reported_without_regeneration_or_truncating_voice(monkeypatch):
+    pid = plan([dict(prompt='cat walks', narration='long voice', duration=5)])
+    path = d._path(pid)
+    p = json.loads(path.read_text())
+    p['scenes'][0]['assets'] = dict(image={'files': ['cat.png']},
+        video={'files': ['cat.mp4']}, audio={'files': ['voice.mp3']})
+    m._receipt(p, path)
+    monkeypatch.setattr(d, '_audio_duration', lambda _: 12.25)
+    rendered = []
+    monkeypatch.setattr(m, 'media_movie', lambda scenes, **kw: rendered.append(scenes) or
+                        dict(files=['render.mp4'], duration_seconds=12.25))
+    result = d.director_step(pid)
+    warning = next(w for w in result['quality']['warnings'] if w['code'] == 'narration_overrun')
+    assert warning['extended_hold_seconds'] == 7.25
+    assert rendered[0][0]['duration'] == 12.25
+    assert d.director_status(pid)['quality'] == result['quality']
+
+
+def test_invalid_direction_rejected_before_spending():
+    with pytest.raises(m.MediaError, match='must be text'):
+        plan([dict(prompt='cat', camera=['bad'])])

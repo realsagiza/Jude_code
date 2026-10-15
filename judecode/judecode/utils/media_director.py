@@ -45,8 +45,11 @@ def director_plan(title: str, continuity: str, scenes: list[dict], aspect_ratio:
         narration = scene.get('narration', '')
         if not isinstance(narration, str):
             raise media.MediaError('Narration must be text')
+        direction = {key: scene.get(key, '') for key in ('beat', 'camera', 'end_state')}
+        if any(not isinstance(value, str) for value in direction.values()):
+            raise media.MediaError('beat, camera and end_state must be text')
         clean.append(dict(number=i + 1, prompt=prompt, duration=duration,
-                          mode=mode, link=link, narration=narration, assets={}))
+                          mode=mode, link=link, narration=narration, assets={}, **direction))
     project_id = uuid.uuid4().hex
     project = dict(id=project_id, title=title, continuity=continuity, scenes=clean,
                    aspect_ratio=aspect_ratio, models=dict(image=config.MEDIA_IMAGE_MODEL,
@@ -86,7 +89,23 @@ def _next(p):
 def director_status(project_id: str):
     p = json.loads(_path(project_id).read_text(encoding='utf-8'))
     return {**p, 'project_path': str(_path(project_id)), 'next': _next(p),
+            'quality': _quality(p),
             'cost_note': 'Receipts contain reported usage only; total excludes unreported audio/provider charges. No automatic upgrades or retries.'}
+
+
+def _quality(p):
+    """Deterministic editorial diagnostics, never a claim of visual inspection."""
+    warnings = []
+    for s in p['scenes']:
+        missing = [key for key in ('beat', 'camera', 'end_state') if not s.get(key, '').strip()]
+        if missing:
+            warnings.append(dict(scene=s['number'], code='missing_direction', fields=missing))
+        timing = s.get('timing', {})
+        if timing.get('extended_hold_seconds', 0) > 0.5:
+            warnings.append(dict(scene=s['number'], code='narration_overrun', **timing,
+                                 suggestion='Shorten narration or plan more moving shots; do not silently regenerate paid assets.'))
+    return dict(status='unreviewed', warnings=warnings,
+                note='Render completion only. Watch and listen to the final film for story, pacing, continuity and sound before claiming quality. Timing compares narration with planned shot length, not measured source motion.')
 
 
 def _last_frame(path):
@@ -127,6 +146,9 @@ def director_step(project_id: str):
         s = p['scenes'][i]
         a = s['assets']
         prompt = p['continuity'] + '\nScene: ' + s['prompt'] + '\nNo captions or written text. Preserve character identity, clothing, props and visual style from references.'
+        for key in ('beat', 'camera', 'end_state'):
+            if s.get(key):
+                prompt += '\n' + key + ': ' + s[key]
         refs = []
         if action == 'image' and i:
             master = p['scenes'][0]['assets']['image']['files'][0]
@@ -156,6 +178,8 @@ def director_step(project_id: str):
         elif action == 'render':
             narration = a.get('audio', {}).get('files', [''])[0]
             duration = max(s['duration'], _audio_duration(narration)) if narration else s['duration']
+            s['timing'] = dict(planned_seconds=s['duration'], rendered_seconds=duration,
+                              extended_hold_seconds=round(duration - s['duration'], 3))
             source = a['video' if s['mode'] == 'video' else 'image']['files'][0]
             width, height = {'16:9': (854, 480), '9:16': (480, 854), '1:1': (480, 480)}[p['aspect_ratio']]
             result = media.media_movie([dict(path=source, duration=duration)], narration=narration, width=width, height=height)
@@ -181,7 +205,11 @@ DIRECTOR_DEFINITIONS = [
         {'title': _STRING, 'continuity': _STRING, 'aspect_ratio': {'type': 'string', 'enum': ['16:9', '9:16', '1:1']},
          'allow_stills': {'type': 'boolean', 'default': False, 'description': 'True only when the user explicitly requests still images or a slideshow. Budget requests do not authorize this.'},
          'scenes': {'type': 'array', 'items': {'type': 'object', 'properties': {
-             'prompt': _STRING, 'narration': _STRING, 'duration': {'type': 'integer', 'minimum': 1, 'maximum': 15},
+             'prompt': _STRING, 'narration': _STRING,
+             'beat': {'type': 'string', 'description': 'What changes in this shot: hook, obstacle, decision, reveal or payoff. Show an event, not just scenery.'},
+             'camera': {'type': 'string', 'description': 'Framing and motivated camera movement; vary shot scale when the story needs it.'},
+             'end_state': {'type': 'string', 'description': 'Visible final action/position/emotion to carry into the next shot.'},
+             'duration': {'type': 'integer', 'minimum': 1, 'maximum': 15},
              'mode': {'type': 'string', 'enum': ['still', 'video'], 'default': 'video'}, 'link': {'type': 'string', 'enum': ['cut', 'continue']}}, 'required': ['prompt']}}}, ['title', 'continuity', 'scenes']),
     media._tool('director_status', 'Read saved storyboard, assets, receipts and next operation after restart. No generation or spending.', {'project_id': _STRING}, ['project_id']),
     media._tool('director_step', 'Perform exactly the next storyboard operation: image references -> video job/poll -> Thai narration -> scene render -> final movie. May spend credits. Call sequentially until done; wait 30 seconds between pending polls. Blocked means inspect receipts/Activity, never recreate the project to retry. Continuity is guided, not guaranteed; inspect outputs before claiming visual quality.', {'project_id': _STRING}, ['project_id']),
