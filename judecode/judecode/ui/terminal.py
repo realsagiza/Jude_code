@@ -441,7 +441,7 @@ async def run_agent_interactive() -> None:
                     console.print(str(agent.isolation.stop()))
                 else:
                     console.print(str(agent.isolation.status()))
-                    console.print("Sandbox-first is always active. /sandbox stop removes test services; production requires a prepared DEPLOY token.")
+                    console.print("Sandbox-first is always active. /sandbox stop removes test services; production requires a prepared plan and direct confirmation: deploy แผนนี้.")
                 continue
             if user_input.lower() == "/sandbox":
                 if agent.sandbox.is_active:

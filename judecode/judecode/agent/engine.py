@@ -423,6 +423,8 @@ class AgentEngine:
                     result = self.isolation.run(**args)
                     if result['exit_code']:
                         raise RuntimeError(json.dumps(result, ensure_ascii=False))
+                elif tool_name == 'production_context':
+                    result = self.isolation.deployment_context()
                 elif tool_name == 'sandbox_status':
                     result = self.isolation.status()
                 elif tool_name == 'sandbox_stop':
@@ -534,10 +536,12 @@ class AgentEngine:
 
     def delivery_response(self, response: str) -> str:
         """Do not relay an unverified model success claim as the final result."""
+        if response and response == getattr(self, "_deployment_response", None):
+            return response
         state = self.autonomous.session
         if self.isolation and self.isolation.pending:
             response += "\n\nแผนที่ยังไม่ได้ deploy (ตรวจคำสั่งก่อนอนุมัติ):\n" + json.dumps(self.isolation.pending, ensure_ascii=False, indent=2)
-            response += "\nอนุมัติครั้งเดียว: DEPLOY " + self.isolation.pending["token"]
+            response += "\nอนุมัติครั้งเดียว: พิมพ์ deploy แผนนี้ หรือ DEPLOY " + self.isolation.pending["token"]
         if state.status in {"failed", "unverified", "paused", "crashed"}:
             pending = ""
             if self.project.state:
@@ -1337,12 +1341,14 @@ class AgentEngine:
 
     async def chat(self, user_message: str, *, trusted_user: bool = False) -> None:
         """Send a user message and handle streaming + tool calls."""
-        if self.isolation and user_message.strip().startswith('DEPLOY '):
+        self._deployment_response = None
+        if self.isolation and self.isolation.is_approval(user_message):
             try:
                 result = await asyncio.to_thread(self.isolation.release, user_message, trusted_user, self.project.complete)
             except Exception as exc:
                 result = {"error": str(exc), "production": "locked"}
             response = json.dumps(result, ensure_ascii=False)
+            self._deployment_response = response
             self.messages.extend([{"role": "user", "content": user_message}, {"role": "assistant", "content": response}])
             console.print(response, markup=False)
             self.save_transcript()

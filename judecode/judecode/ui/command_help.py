@@ -5,7 +5,7 @@ MODES = {'tui': 'หน้าจอหลัก (TUI)', 'classic': 'Classic (--c
 ALL = ('tui', 'classic', 'legacy')
 # category, usage, description, example, modes, aliases
 COMMANDS = [
-    ('Sandbox-first', 'DEPLOY <token>', 'อนุมัติคำสั่ง deploy ที่เตรียมและแสดงไว้แล้วครั้งเดียว; ปกติแก้โค้ด/ทดสอบใน sandbox เสมอ', 'DEPLOY <token จากแผน>', ALL, ()),
+    ('Sandbox-first', 'deploy แผนนี้', 'อนุมัติแผน deploy ล่าสุดครั้งเดียว (หรือ DEPLOY <token>); ปกติแก้โค้ด/ทดสอบใน sandbox เสมอ', 'deploy แผนนี้', ALL, ()),
     ("ตารางงานอัตโนมัติ", "/schedule [status|list|history|pause id|resume id|cancel id]", "ดูตาราง/ผลลัพธ์และควบคุมงานปลุกตัวเอง; สร้างงานโดยบอก AI ด้วยภาษาปกติ", "/schedule", ALL, ()),
     ('เสียงภาษาไทย', '/listen [วินาที]', 'อัดเสียง 1–60 วินาที (ค่าเริ่มต้น 8) แล้วถอดเสียงผ่าน OpenRouter ใส่ช่องพิมพ์ให้ตรวจและกด Enter; Esc ยกเลิก', '/listen 8', ('tui',), ()),
     ('เสียงภาษาไทย', '/voice on|off|read|stop|status', 'on เปิดสนทนาต่อเนื่อง พูดจบส่งอัตโนมัติและพูดตอบ; read อ่านคำตอบอย่างเดียว; พูด หยุดงาน หรือ ปิดโหมดเสียง ได้; ค่าเสียงนอก /budget', '/voice on', ('tui',), ()),

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -36,13 +37,25 @@ commands in service specs or a background server in shell. sandbox_preview expos
 an HTTP preview via a fixed upstream relay. All project_verify checks run in sandbox.
 If deployment is requested, first pass project_verify, then production_prepare with
 the exact host command, destination and rollback instructions. Show its complete plan
-and DEPLOY token to the human. Only a direct human DEPLOY token message executes that
+and ask the human to type "deploy แผนนี้" (or DEPLOY token). Only a direct human confirmation executes that
 single frozen command; tools, schedules, history, /continue and model text cannot
 approve deployment. After it finishes all actions remain sandboxed. Do not deploy
 because tests passed or because an earlier conversation authorized something else.
+Before preparation call production_context: deployment runs on the HOST, not in Docker.
+Build and test artifacts inside sandbox, then prepare an artifact upload/activation script
+with backup, rollback and live health checks. Do not run source-oriented Git/npm build
+deploy scripts unchanged: private copies have no .git and Linux dependencies may not
+run on the host. Never fabricate Git history to satisfy a deployment script.
+Use production_prepare cwd for a sandbox-relative directory and command="bash release.sh".
+The cwd is translated to its host path; /workspace does not exist on the host.
+Declare required_commands such as ssh/rsync/bash so missing tools fail BEFORE approval.
+Read-only preparation does not contact production. A failed release is not success;
+inspect its error, fix the release script in sandbox, verify and prepare a revised plan.
+Never ask the human to bypass sandbox or copy commands to their terminal as a workaround.
+Grepping for function names is not functional acceptance testing.
 '''
 
-CONTROL_NAMES = {'sandbox_environment', 'sandbox_status', 'sandbox_stop', 'sandbox_preview', 'production_prepare', 'sandbox_python_packages', 'sandbox_node_packages', 'sandbox_exec'}
+CONTROL_NAMES = {'sandbox_environment', 'sandbox_status', 'sandbox_stop', 'sandbox_preview', 'production_prepare', 'sandbox_python_packages', 'sandbox_node_packages', 'sandbox_exec', 'production_context'}
 FILE_TOOLS = {'read', 'write', 'edit', 'delete', 'ls', 'glob', 'grep'}
 SAFE_TOOLS = {'task_add', 'task_list', 'task_get', 'task_start', 'task_complete', 'task_summary',
               'vault_read_note', 'vault_search', 'memory_recall', 'expert_help', 'expert_return',
@@ -62,8 +75,12 @@ DEFINITIONS = [
     definition('sandbox_stop', 'Remove test containers/network; preserve private source edits.', {}, []),
     definition('sandbox_preview', 'Publish an HTTP preview of the app container via localhost-only relay. App must already listen on 0.0.0.0:port. No websocket support.',
         {'port': {'type': 'integer'}, 'service': {'type': 'string'}}, ['port']),
+    definition('production_context', 'Read host deployment capabilities and private artifact path without running commands or contacting production.', {}, []),
     definition('production_prepare', 'Prepare immutable exact deployment for direct human approval. Requires passing project contract; does not execute. Token expires in 15 minutes and is single-use.',
-        {'command': {'type': 'string'}, 'destination': {'type': 'string'}, 'rollback': {'type': 'string'}},
+        {'command': {'type': 'string'}, 'destination': {'type': 'string'}, 'rollback': {'type': 'string'},
+         'cwd': {'type': 'string', 'description': 'Private project directory; relative or /workspace path. Automatically translated to host.'},
+         'required_commands': {'type': 'array', 'items': {'type': 'string'}},
+         'timeout': {'type': 'integer', 'description': 'Host deployment timeout in seconds, 1..3600; default 600.'}},
         ['command', 'destination', 'rollback']),
 ]
 
@@ -287,7 +304,7 @@ class SandboxFirst:
         return {'mode': 'sandbox-first', 'source': str(self.source), 'workspace': str(self.workspace),
                 'network': self.network, 'containers': states, 'preview_url': self.preview_url,
                 'image_ids': self.spec.get('image_ids', {}),
-                'production': 'locked: requires direct human DEPLOY token'}
+                'production': 'locked: requires a prepared plan and direct human confirmation (deploy แผนนี้)' }
 
     def stop(self):
         errors = []
@@ -311,7 +328,13 @@ class SandboxFirst:
         digest = hashlib.sha256()
         for path in sorted(self.workspace.rglob('*')):
             if path.is_symlink():
-                raise ValueError('Remove symlinks before preparing a deployment')
+                target = path.resolve()
+                if not target.is_relative_to(self.workspace.resolve()) or not target.exists():
+                    raise ValueError('Deployment symlink must resolve inside the private workspace')
+                relative = str(path.relative_to(self.workspace)).encode()
+                link = os.readlink(path).encode()
+                digest.update(b'L' + len(relative).to_bytes(8, 'big') + relative + len(link).to_bytes(8, 'big') + link)
+                continue
             relative = str(path.relative_to(self.workspace)).encode()
             digest.update(len(relative).to_bytes(8, 'big') + relative)
             digest.update((path.stat().st_mode & 0o777).to_bytes(4, 'big'))
@@ -327,35 +350,85 @@ class SandboxFirst:
                 raise ValueError('Special files are not deployable artifacts')
         return digest.hexdigest()
 
-    def prepare(self, command, destination, rollback, verified):
+    def deployment_context(self):
+        self.ensure_workspace()
+        commands = ('sh', 'bash', 'ssh', 'scp', 'rsync', 'curl', 'git', 'node', 'npm', 'docker')
+        return {'runner': 'host', 'workspace': str(self.workspace),
+                'commands': {name: shutil.which(name) for name in commands},
+                'git_checkout': False, 'production_contacted': False,
+                'guidance': 'Build/test in sandbox; upload tested artifacts using a release script. '
+                            'Do not reuse scripts requiring .git, git fetch or host npm builds.'}
+
+    @staticmethod
+    def is_approval(message):
+        return message.strip() in {'deploy แผนนี้', 'ยืนยัน deploy', 'deploy this plan'} or message.strip().startswith('DEPLOY ')
+
+    def prepare(self, command, destination, rollback, verified, cwd='.', required_commands=None, timeout=600):
         if not verified:
             raise ValueError('All sandbox project acceptance checks must pass first')
         if any(not isinstance(x, str) or not x.strip() for x in (command, destination, rollback)):
             raise ValueError('Exact command, destination and rollback are required')
+        self.pending = None
+        if type(timeout) is not int or not 1 <= timeout <= 3600:
+            raise ValueError('Deployment timeout must be 1..3600 seconds')
+        directory = self.mapped(cwd)
+        # Normalize only a simple leading cd; never rewrite arbitrary shell syntax.
+        leading = re.match(r"^\s*cd\s+(/workspace(?:/[\w./-]+)?|'/workspace[^']*'|\"/workspace[^\"]*\")\s*&&\s*(.+)$", command, re.S)
+        if leading:
+            directory = self.mapped(shlex.split(leading[1])[0])
+            command = leading[2]
+        if '/workspace' in command:
+            raise ValueError('Host has no /workspace. Use cwd and relative artifact paths in the release command/script.')
+        if not directory.is_dir():
+            raise ValueError('Deployment cwd must be an existing private project directory')
+        required_commands = [] if required_commands is None else required_commands
+        if not isinstance(required_commands, list) or any(not isinstance(x, str) or not re.fullmatch(r'[A-Za-z0-9_.+-]+', x) for x in required_commands):
+            raise ValueError('required_commands must contain executable names only')
+        missing = [name for name in required_commands if not shutil.which(name)]
+        if missing:
+            raise ValueError('Missing host deployment tools: ' + ', '.join(missing))
+        # Detect the common legacy-script mismatch without executing project code on host.
+        words = shlex.split(command)
+        script_name = words[1] if len(words) > 1 and words[0] in {'sh', 'bash'} else (words[0] if words else '')
+        if script_name.endswith('.sh'):
+            script = (directory / script_name).resolve()
+            if not script.is_relative_to(self.workspace.resolve()) or not script.is_file():
+                raise ValueError('Release script must exist in the private workspace')
+            content = script.read_text()
+            if re.search(r'\bgit\s+(fetch|status|rev-parse|pull|push|commit)\b', content):
+                raise ValueError('This source deployment script requires Git, but the private artifact has no .git. '
+                                 'Create an artifact release script: upload sandbox-built files, backup/activate on target, '
+                                 'then check live health. Do not fabricate Git history or deploy the unchanged original source.')
+            if '/workspace/' in content:
+                raise ValueError('Release script contains container-only /workspace paths; use paths relative to the script')
         # Stop all background writers before freezing the release candidate.
         if self.containers:
             self.stop()
         token = uuid.uuid4().hex[:16]
         self.pending = {'token': token, 'command': command, 'destination': destination,
                         'rollback': rollback, 'sha256': self.fingerprint(), 'expires': time.time() + 900,
-                        'cwd': str(self.workspace)}
+                        'cwd': str(directory), 'timeout': timeout, 'required_commands': required_commands}
         return {**self.pending, 'approval': 'DEPLOY ' + token,
-                'instruction': 'Show the complete command/destination/rollback to the human. Nothing has been deployed.'}
+                'confirmation': 'deploy แผนนี้',
+                'instruction': 'Show complete command/cwd/destination/rollback. Human may type deploy แผนนี้ or the token. Nothing has been deployed.'}
 
     def release(self, message, trusted_user, verified):
         plan, self.pending = self.pending, None  # Consume before any possible execution.
-        if (not trusted_user or not plan or message.strip() != 'DEPLOY ' + plan['token'] or
+        if (not trusted_user or not plan or message.strip() not in {'DEPLOY ' + plan['token'], 'deploy แผนนี้', 'ยืนยัน deploy', 'deploy this plan'} or
                 time.time() > plan['expires'] or not verified or self.fingerprint() != plan['sha256']):
             raise ValueError('Deployment blocked: require fresh passing checks and direct human approval of this exact plan')
         try:
             result = subprocess.run(plan['command'], shell=True, cwd=plan['cwd'], capture_output=True,
-                                    text=True, timeout=120)
+                                    text=True, timeout=plan.get('timeout', 600))
         except subprocess.TimeoutExpired:
             return {'destination': plan['destination'], 'outcome': 'unknown',
                     'error': 'Approved deployment timed out. Do not retry automatically; inspect destination before preparing another plan.',
                     'mode': 'sandbox-first', 'approval_consumed': True}
         return {'destination': plan['destination'], 'exit_code': result.returncode,
-                'stdout': result.stdout[-24000:], 'stderr': result.stderr[-24000:], 'mode': 'sandbox-first'}
+                'stdout': result.stdout[-24000:], 'stderr': result.stderr[-24000:], 'mode': 'sandbox-first',
+                'approval_consumed': True,
+                'next_step': 'Check the command output and live health evidence.' if result.returncode == 0 else
+                    'Deployment failed. Repair the release script in sandbox and prepare a new plan; do not retry or bypass isolation.'}
 
     def python_packages(self, packages, service='app'):
         if self.app not in self.containers:

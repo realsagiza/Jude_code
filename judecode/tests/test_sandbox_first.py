@@ -222,3 +222,115 @@ def test_remaining_service_cannot_trigger_host_file_fallback(engine, monkeypatch
     monkeypatch.setattr(engine.isolation, 'files', lambda *a: 'namespace-only')
     assert engine._execute_tool_safe('write', {'path':'app.py','content':'changed'}) == 'namespace-only'
     assert Path('app.py').read_text() == 'original'
+
+
+def test_container_cd_translated_and_artifact_released(engine, tmp_path):
+    """Regression: actual /workspace/hr-system command must work on host."""
+    root = engine.isolation
+    folder = root.mapped('hr-system')
+    folder.mkdir()
+    (folder / 'build.txt').write_text('tested artifact')
+    target = tmp_path / 'local-target'
+    import shlex
+    (folder / 'release.sh').write_text('set -eu\ncp build.txt ' + shlex.quote(str(target)) + '\n')
+    plan = root.prepare('cd /workspace/hr-system && bash release.sh', str(target), 'remove local test target', True)
+    assert plan['cwd'] == str(folder)
+    assert not target.exists()
+    result = root.release('deploy แผนนี้', True, True)
+    assert result['exit_code'] == 0, result
+    assert target.read_text() == 'tested artifact'
+    assert not (root.source / 'hr-system').exists()
+    with pytest.raises(ValueError):
+        root.release('deploy แผนนี้', True, True)
+
+
+def test_thai_space_directory_release(engine):
+    root = engine.isolation
+    root.mapped('ระบบ HR').mkdir()
+    plan = root.prepare("cd '/workspace/ระบบ HR' && printf ok > result", 'local test', 'delete result', True)
+    assert root.release(plan['approval'], True, True)['exit_code'] == 0
+    assert root.mapped('ระบบ HR/result').read_text() == 'ok'
+
+
+def test_git_script_rejected_before_stopping_preview(engine, monkeypatch):
+    root = engine.isolation
+    root.mapped('deploy.sh').write_text('git fetch origin\ngit rev-parse HEAD\n')
+    root.containers = [root.app]
+    monkeypatch.setattr(root, 'stop', lambda: pytest.fail('preview stopped before preflight'))
+    with pytest.raises(ValueError, match='artifact release script'):
+        root.prepare('bash deploy.sh', 'production', 'restore', True)
+    assert root.pending is None
+
+
+def test_missing_host_tool_preflight_never_executes_code(engine, monkeypatch):
+    from judecode.agent import sandbox_first as module
+    monkeypatch.setattr(module.shutil, 'which', lambda name: None)
+    monkeypatch.setattr(module.subprocess, 'run', lambda *a, **kw: pytest.fail('host command ran'))
+    context = engine.isolation.deployment_context()
+    assert not context['production_contacted']
+    assert context['commands']['ssh'] is None
+    with pytest.raises(ValueError, match='Missing host'):
+        engine.isolation.prepare('ssh production deploy', 'production', 'restore', True, required_commands=['ssh'])
+
+
+@pytest.mark.parametrize('command', ['rsync /workspace/build prod:app', 'cd /workspace/hr; bash deploy.sh'])
+def test_ambiguous_container_paths_rejected(engine, command):
+    with pytest.raises(ValueError, match='Host has no /workspace'):
+        engine.isolation.prepare(command, 'production', 'restore', True)
+
+
+@pytest.mark.parametrize('message', ['deploy แผนนี้', 'ยืนยัน deploy', 'deploy this plan'])
+def test_simple_confirmation_still_requires_direct_human(engine, message):
+    prepare(engine)
+    asyncio.run(engine.chat(message))
+    assert 'locked' in engine.messages[-1]['content']
+    assert not engine.isolation.mapped('release.txt').exists()
+
+
+def test_simple_confirmation_engine_dispatch(engine):
+    root = engine.isolation
+    root.ensure_workspace()
+    engine.project.plan('test', str(root.workspace), [{'id':'test','criteria':'passed','checks':['check']}])
+    engine.project.verify(lambda *a: {'exit_code':0,'stdout':'assertion passed'}, lambda:False)
+    prepare(engine)
+    asyncio.run(engine.chat('deploy แผนนี้', trusted_user=True))
+    assert root.mapped('release.txt').read_text() == 'approved'
+
+
+@pytest.mark.parametrize('message', ['อย่า deploy แผนนี้', 'deploy แผนนี้ได้ไหม', 'continue', 'tests passed'])
+def test_questions_negations_and_continuation_are_not_approval(message):
+    assert not SandboxFirst.is_approval(message)
+
+
+def test_internal_npm_symlink_allowed_but_external_rejected(engine, tmp_path):
+    root = engine.isolation
+    root.mapped('node_modules/.bin').mkdir(parents=True)
+    root.mapped('node_modules/cli.js').write_text('script')
+    link = root.workspace / 'node_modules/.bin/cli'
+    link.symlink_to('../cli.js')
+    before = root.fingerprint()
+    root.mapped('node_modules/cli.js').write_text('changed')
+    assert before != root.fingerprint()
+    link.unlink()
+    link.symlink_to(tmp_path)
+    with pytest.raises(ValueError, match='symlink'):
+        root.fingerprint()
+
+
+def test_failure_is_reported_without_automatic_retry(engine):
+    root = engine.isolation
+    root.prepare('echo failed >&2; exit 9', 'local test', 'none', True)
+    result = root.release('deploy แผนนี้', True, True)
+    assert result['exit_code'] == 9
+    assert 'failed' in result['stderr']
+    assert 'Repair' in result['next_step']
+    assert root.pending is None
+
+
+def test_deployment_result_not_hidden_by_prior_session_failure(engine):
+    prepare(engine)
+    engine.autonomous.session.status = 'failed'
+    asyncio.run(engine.chat('deploy แผนนี้', trusted_user=True))
+    result = engine.messages[-1]['content']
+    # Even blocked approval must report its actual cause to Telegram.
+    assert engine.delivery_response(result) == result

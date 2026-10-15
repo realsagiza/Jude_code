@@ -67,12 +67,13 @@ scheduled workers) ใช้ sandbox-first เป็นค่าเริ่ม�
 Jude ต้องแสดงแผนเต็มให้ผู้ใช้ตรวจ จากนั้นผู้ใช้พิมพ์:
 
 ```text
-DEPLOY <รหัสจากแผน>
+deploy แผนนี้
 ```
 
 - คำสั่งนี้ใช้ได้โดยตรงใน chat input ของ Terminal/TUI/Telegram ไม่มี slash ข้างหน้า
 - รันเฉพาะคำสั่งที่เตรียมไว้ ด้วย cwd เป็นสำเนา sandbox ที่ทดสอบแล้ว
-- ต้องผ่าน checks, รหัสตรง, ไม่หมดอายุ (15 นาที), และ source fingerprint ยังตรง
+- ใช้ `DEPLOY <รหัสจากแผน>` ได้เช่นเดิม หรือ `ยืนยัน deploy` / `deploy this plan`
+- ต้องผ่าน checks, ยืนยันแผนปัจจุบัน, ไม่หมดอายุ (15 นาที), และ source fingerprint ยังตรง
 - ใช้ครั้งเดียวและลบทิ้งก่อนเริ่มรัน; ข้อความโมเดล/tool/scheduler/ประวัติ/resume
   ไม่สามารถอนุมัติได้ และ authorization ไม่ถูกบันทึกเพื่อ restore
 - คำสั่ง deploy ทำงานบน host ด้วยสิทธิ์บัญชี Jude Code **เฉพาะการอนุมัตินี้**
@@ -131,3 +132,43 @@ script นี้สร้าง MongoDB ใหม่พร้อม test data, �
 ด้วย runtime แยกกันและ private source mount; downloader ไม่รัน install scripts
 
 ตัวอย่าง full-stack แบบ opt-in: `python scripts/verify_sandbox_fullstack.py`
+
+
+## แก้เส้นทาง deployment (15 ตุลาคม 2026)
+
+`production_context` บอก private workspace บน host และเครื่องมือที่ติดตั้ง เช่น
+ssh/rsync/bash โดยไม่รัน project code และไม่เชื่อมต่อ production
+`production_prepare` รับ `cwd`, `required_commands`, `timeout` (ค่าเริ่มต้น 600 วินาที;
+สูงสุด 3600) ตรวจเครื่องมือที่ระบุและพาธก่อนหยุด preview/ขออนุมัติ
+
+ตัวอย่างเมื่อมี `hr-system/release-artifact.sh` ที่ทดสอบแล้ว:
+
+```json
+{
+  "command": "bash release-artifact.sh",
+  "cwd": "/workspace/hr-system",
+  "destination": "server:/application",
+  "rollback": "restore the backup created by release-artifact.sh",
+  "required_commands": ["bash", "ssh", "rsync", "curl"]
+}
+```
+
+แปลง cwd ไปยัง private workspace บน host ให้เอง รองรับชื่อภาษาไทยและช่องว่าง
+และรองรับรูปแบบเดิม `cd /workspace/subdir && bash release-artifact.sh`
+ไม่แปลง shell syntax ซับซ้อนหรือพาธที่ฝังในสคริปต์โดยเดา
+
+ต้อง build/test ใน sandbox แล้วส่ง artifact ที่ตรวจแล้ว สคริปต์เดิมที่ใช้
+`git fetch/status/rev-parse` จะถูกแจ้งให้ปรับก่อนอนุมัติ เพราะสำเนาไม่มี `.git`
+Jude ต้องเขียนสคริปต์ส่ง artifact พร้อม backup/activate/health check ให้ตรงระบบ
+ไม่สร้าง Git ปลอม ไม่ใช้ source ต้นฉบับที่ยังไม่มีงานแก้ และไม่ให้ผู้ใช้หลบไป
+รันคำสั่งเองใน terminal เป็นวิธีแก้ปัญหา
+การตรวจสคริปต์เป็นการตรวจเบื้องต้น ไม่ใช่การวิเคราะห์ shell/dependencies ทุกชนิด
+
+รองรับ symlink ภายใน workspace เช่น npm `.bin` โดย hash ทั้งลิงก์และไฟล์เป้าหมาย
+ยังปฏิเสธลิงก์ออกนอกพื้นที่หรือปลายทางไม่มีอยู่จริง
+ผลล้มเหลวแสดง exit code/stderr และแนวทางซ่อมแผน ไม่ retry production อัตโนมัติ
+
+ผลตรวจหลังแก้ deployment: 462 tests ผ่านบน clean HEAD + patch ของงานนี้
+และ Docker build → ยืนยันแผน → ส่ง artifact ไปปลายทาง local จริง ผ่าน
+รันทดลองซ้ำได้ด้วย `python scripts/verify_sandbox_release.py`
+ยังไม่ได้ deploy หรือยืนยันความพร้อมของระบบ HR จริง
