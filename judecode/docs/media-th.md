@@ -1,5 +1,9 @@
 # สร้างภาพ เสียง คลิป และหนังด้วย Jude Code
 
+> **เอกสาร legacy:** flow นี้ใช้ OpenRouter และ `media_*`/`director_*` เดิม ซึ่งไม่ถูกเปิด
+> ให้ Film Director ใหม่แล้ว งานหนังใหม่ให้ใช้ [`film-runpod-agent-th.md`](film-runpod-agent-th.md)
+> แทน; generation ใหม่เลือก Hugging Face model และรันบน disposable Runpod Pod.
+
 รีสตาร์ต Jude Code เพื่อโหลดเครื่องมือใหม่ ใช้คีย์ OpenRouter เดิม:
 `JUDECODE_OPENROUTER_API_KEY` หรือ `OPENROUTER_API_KEY` ไม่ต้องเปลี่ยนโมเดลหลักที่ใช้เขียนโค้ด
 

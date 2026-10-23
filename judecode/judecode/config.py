@@ -352,33 +352,49 @@ MEDIA_VIDEO_MODEL = _env("MEDIA_VIDEO_MODEL", "x-ai/grok-imagine-video-1.5-lite"
 MEDIA_AUDIO_MODEL = _env("MEDIA_AUDIO_MODEL", "")
 MEDIA_OUTPUT_DIR = _env("MEDIA_OUTPUT_DIR", str(Path.home() / ".judecode" / "media"))
 
-MEDIA_DIRECTOR_PROMPT = """
-For films/multi-scene media act as director: write a brief storyboard and continuity bible,
-starting with audience, intended emotion and a hook -> obstacle/decision -> payoff appropriate
-to the requested genre. Each shot must change the situation; supply beat, camera and end_state
-in director_plan. Avoid repeated scenery, identical framing and narration describing everything
-already visible. Plan short narration to fit the moving action, with pauses for reactions.
-Use director_status quality warnings to identify missing direction and narration overrun.
-An extended last-frame hold is a pacing compromise, not more animation. Do not claim a
-completed render has passed creative review: watch/listen when tools allow, otherwise say
-unreviewed. Do not invent sound/music capability or spend on regeneration without scope.
-then director_plan -> sequential director_step -> director_status to resume. Video, VDO,
-movie, short-film and trailer requests require generated moving video scenes (mode=video),
-including budget requests. Use FLUX Klein for reference/first-frame images, Grok Lite 480p
-for moving clips, and existing Thai TTS. Stills/slideshows require an explicit user request
-and allow_stills=true; never infer permission from a low budget. media_movie only assembles
-assets: an MP4 of still images, captions, pans or zooms does not fulfill a video request.
-If video generation fails, report the error and saved job status; never replace it with
-stills. Review legacy storyboards for still scenes before resuming a requested video.
-Check media_models for configured model support/pricing; never silently upgrade or retry
-uncertain paid jobs. Preserve exact Thai narration. For cut shots reuse identity references;
-for continuous action use link=continue. Report final paths, actual available receipts and
-limitations. Check scene outputs for continuity; do not claim visual inspection without it.
-Thai text overlays/subtitles and lip sync are not provided by director tools; don't promise
-them. Do not start a paid sample just because the user asks to configure these tools.
+# New, isolated film agent: generation occurs on a temporary Runpod Pod from
+# Hugging Face model weights. The core chat provider remains independent.
+RUNPOD_API_KEY = os.environ.get("RUNPOD_API_KEY") or _env("RUNPOD_API_KEY", "")
+HF_TOKEN = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN", "")
+FILM_WORKER_IMAGE = _env("FILM_WORKER_IMAGE", "")
+FILM_STATE_DIR = _env("FILM_STATE_DIR", str(Path.home() / ".judecode" / "film_agent"))
+FILM_OUTPUT_DIR = _env("FILM_OUTPUT_DIR", str(Path.home() / "Movies" / "JudeFilms"))
+RUNPOD_FILM_MAX_RUNTIME_SECONDS = max(60, min(6 * 3600, _env_int("FILM_MAX_RUNTIME_SECONDS", 3600)))
+RUNPOD_FILM_MAX_COST_USD = max(0.01, _env_float("FILM_MAX_COST_USD", 5.0))
+RUNPOD_FILM_HARD_MAX_COST_USD = max(RUNPOD_FILM_MAX_COST_USD, _env_float("FILM_HARD_MAX_COST_USD", 25.0))
+RUNPOD_FILM_MAX_DISK_GB = max(40, min(500, _env_int("FILM_MAX_DISK_GB", 200)))
+RUNPOD_FILM_MIN_CUDA_VERSION = _env("FILM_MIN_CUDA_VERSION", "12.8")
+
+FILM_DIRECTOR_PROMPT = """
+For film/video/voiceover/sound requests, act as the Film Director and use only the
+new `film_*` workflow. The Director writes the brief, continuity bible and moving-shot
+storyboard; the Runpod Operations specialist checks Hugging Face model metadata/license,
+runtime compatibility, GPU VRAM, live Secure stock, price, CUDA, disk and network setup.
+Start with `film_research` for the needed modalities. Select only eligible public models
+with an explicit license and supported Diffusers/Transformers runtime. Never execute
+model-card code, pip commands from model cards, or enable trust_remote_code. Respect the
+model's reported license and language; if the right supported model is unclear, ask before
+creating a Pod. Use `film_plan` to save the full moving-video storyboard with beat, camera,
+end state, exact narration, optional local reference image and sound prompt.
+
+`film_produce` is the only billable production step. It selects current Secure GPU stock,
+checks the configured per-job estimate/runtime ceilings, creates one on-demand Pod with
+ephemeral disk and only authenticated HTTP port 8000, downloads verified MP4/WAV assets
+to the local machine, terminates only its own Pod, then assembles the final MP4 locally.
+Do not create network volumes, keep a Pod running, open SSH/Jupyter, or use shell to create
+Runpod resources. Check `film_status` after interruption and use `film_cleanup` for a
+project-owned orphan. Never retry a timed-out/unknown generation submission; never silently
+switch models or lower video to stills. A runtime/cost ceiling is enforced by the local
+controller, not a Runpod invoice guarantee; report estimates as estimates and cleanup state
+exactly. A completed MP4 is unreviewed until watched/listened to; do not claim visual
+quality, exact continuity, lip-sync, Thai typography or sound mixing that was not verified.
+
+This new film route must not call legacy `media_*` or `director_*` tools and must not use
+OpenRouter media endpoints. Jude Code's conversation/reasoning provider is configured
+separately; only media generation is isolated to Hugging Face models running on Runpod.
 """
-SYSTEM_PROMPT += MEDIA_DIRECTOR_PROMPT
-SYSTEM_PROMPT_COMPACT += MEDIA_DIRECTOR_PROMPT
+SYSTEM_PROMPT += FILM_DIRECTOR_PROMPT
+SYSTEM_PROMPT_COMPACT += FILM_DIRECTOR_PROMPT
 
 
 SCHEDULER_PROMPT = """

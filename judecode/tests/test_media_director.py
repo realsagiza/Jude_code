@@ -146,10 +146,11 @@ def test_plan_validation(scene):
 def test_registration():
     from judecode.agent.tools import TOOL_DEFINITIONS, execute_tool
     names = [t['function']['name'] for t in TOOL_DEFINITIONS]
-    assert all(names.count(n) == 1 for n in d.DIRECTOR_FUNCTIONS)
-    assert 'Error executing tool' in execute_tool('director_status', {'project_id': '../escape'})
-    assert 'director_plan' in config.SYSTEM_PROMPT
-    assert 'director_plan' in config.SYSTEM_PROMPT_COMPACT
+    assert not set(d.DIRECTOR_FUNCTIONS).intersection(names)
+    from judecode.film.director import FILM_FUNCTIONS
+    assert all(names.count(name) == 1 for name in FILM_FUNCTIONS)
+    assert 'film_plan' in config.SYSTEM_PROMPT
+    assert 'film_plan' in config.SYSTEM_PROMPT_COMPACT
 
 
 def test_project_lock_blocks_concurrent_generation(monkeypatch):

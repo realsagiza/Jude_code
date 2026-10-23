@@ -161,10 +161,11 @@ def test_movie_invalid(params):
 def test_tool_registration_and_dispatch(monkeypatch):
     from judecode.agent.tools import TOOL_DEFINITIONS, execute_tool
     names = [t['function']['name'] for t in TOOL_DEFINITIONS]
-    for name in media.MEDIA_FUNCTIONS:
-        assert names.count(name) == 1
-    monkeypatch.setitem(media.MEDIA_FUNCTIONS, 'media_models', lambda **kw: {'models': []})
-    assert json.loads(execute_tool('media_models', {'kind': 'image'})) == {'models': []}
+    assert not set(media.MEDIA_FUNCTIONS).intersection(names)
+    from judecode.film.director import FILM_FUNCTIONS
+    assert all(names.count(name) == 1 for name in FILM_FUNCTIONS)
+    monkeypatch.setitem(FILM_FUNCTIONS, 'film_status', lambda **kw: {'status': 'planned'})
+    assert json.loads(execute_tool('film_status', {'project_id': 'a' * 32})) == {'status': 'planned'}
 
 
 def test_real_movie_still_clip_and_narration(tmp_path):

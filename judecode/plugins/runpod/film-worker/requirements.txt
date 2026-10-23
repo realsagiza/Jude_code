@@ -1,0 +1,15 @@
+# PyTorch/CUDA are supplied by the pinned official Runpod base image.
+fastapi==0.161.1
+uvicorn==0.54.0
+python-multipart==0.0.32
+pydantic==2.14.1
+diffusers==0.41.0
+transformers==5.20.2
+accelerate==1.15.0
+huggingface-hub==2.2.0
+safetensors==0.8.0
+imageio==2.38.1
+imageio-ffmpeg==0.6.0
+soundfile==0.14.0
+numpy==1.26.4
+Pillow==11.3.0

@@ -13,8 +13,7 @@ from judecode.utils.file_ops import read_file, write_file, edit_file, delete_fil
 from judecode.utils.shell import execute_shell
 from judecode.utils.search_tools import glob_search, grep_search
 from judecode.utils.web_tools import web_fetch, web_search
-from judecode.utils.media_director import DIRECTOR_DEFINITIONS, DIRECTOR_FUNCTIONS, execute_director_tool
-from judecode.utils.media_tools import MEDIA_TOOL_DEFINITIONS, MEDIA_FUNCTIONS, execute_media_tool
+from judecode.film.director import FILM_TOOL_DEFINITIONS, FILM_FUNCTIONS, execute_film_tool
 
 # ── Task Management Tools ──
 from judecode.utils.task_tools import execute_task_tool, TASK_TOOL_FUNCTIONS
@@ -1335,8 +1334,7 @@ from judecode.agent.dev_preview import DEFINITIONS as PREVIEW_DEFINITIONS, FUNCT
 TOOL_DEFINITIONS.extend(PREVIEW_DEFINITIONS)
 TOOL_DEFINITIONS.extend(DEV_SANDBOX_DEFINITIONS)
 TOOL_DEFINITIONS.extend(SCHEDULE_DEFINITIONS)
-TOOL_DEFINITIONS.extend(MEDIA_TOOL_DEFINITIONS)
-TOOL_DEFINITIONS.extend(DIRECTOR_DEFINITIONS)
+TOOL_DEFINITIONS.extend(FILM_TOOL_DEFINITIONS)
 
 def execute_tool(
     tool_name: str,
@@ -1353,10 +1351,8 @@ def execute_tool(
             return output if result["passed"] else f"{TOOL_ERROR_PREFIX} 'dev_sandbox_run': {output}"
         if tool_name in SCHEDULE_NAMES:
             return execute_schedule_tool(tool_name, tool_params)
-        if tool_name in DIRECTOR_FUNCTIONS:
-            return execute_director_tool(tool_name, tool_params)
-        if tool_name in MEDIA_FUNCTIONS:
-            return execute_media_tool(tool_name, tool_params)
+        if tool_name in FILM_FUNCTIONS:
+            return execute_film_tool(tool_name, tool_params)
 
         if tool_name == "shell":
             result = execute_shell(tool_params["command"])

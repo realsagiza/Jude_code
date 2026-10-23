@@ -1,0 +1,14 @@
+.git
+.venv
+__pycache__
+*.py[cod]
+.env
+.env.*
+*.mp4
+*.wav
+*.png
+*.jpg
+*.webp
+hf-cache
+outputs
+logs
