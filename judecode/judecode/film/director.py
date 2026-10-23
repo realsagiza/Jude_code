@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import copy
 import json
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from judecode import config
-from judecode.film.assembler import assemble
+from judecode.film.assembler import _ffmpeg, assemble
 from judecode.film.errors import FilmError
 from judecode.film.models import HuggingFaceCatalog, MODEL_ID
 from judecode.film.operations import RunpodOperationsAgent
@@ -222,6 +223,14 @@ def film_produce(project_id: str, max_runtime_seconds: int | None = None,
                     image.verify()
             except (ImportError, OSError, ValueError):
                 raise FilmError(f"Scene {scene['number']} reference file is not a valid PNG/JPEG/WebP image") from None
+
+    # Do not allocate a billable GPU Pod if the local machine cannot assemble or save it.
+    _ffmpeg()
+    try:
+        with tempfile.TemporaryFile(dir=store.asset_dir(project_id)):
+            pass
+    except OSError:
+        raise FilmError("Local film output storage is not writable; no Runpod Pod was created") from None
 
     operations = RunpodOperationsAgent(store=store)
     try:
